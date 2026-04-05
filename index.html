@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fuel & Run — Nutrition Companion</title>
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Fuel & Run" />
+<meta name="theme-color" content="#2d6a4f" />
+<link rel="manifest" href="manifest.json" />
+<style>
+  /* ---- Reset & Base ---- */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #f5f2ec;
+    --surface:  #ffffff;
+    --surface2: #eee9de;
+    --border:   #d6cfc2;
+    --accent:   #2d6a4f;
+    --accent2:  #52b788;
+    --danger:   #c0392b;
+    --warn:     #e67e22;
+    --text:     #1a1a18;
+    --muted:    #6b6659;
+    --font-head: 'Playfair Display', Georgia, serif;
+    --font-body: 'DM Sans', system-ui, sans-serif;
+    --radius:   6px;
+  }
+  html { font-size: 15px; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  a { color: var(--accent); }
+
+  /* ---- Layout ---- */
+  #app { display: flex; flex-direction: column; min-height: 100vh; }
+  header {
+    background: var(--accent);
+    color: #fff;
+    padding: 1rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+  header h1 { font-family: var(--font-head); font-size: 1.5rem; font-weight: 700; letter-spacing: .02em; }
+  header span { font-size: .82rem; opacity: .75; }
+  nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+  }
+  nav button {
+    background: none; border: none; cursor: pointer;
+    padding: .65rem 1.4rem;
+    font-family: var(--font-body); font-size: .88rem; font-weight: 500;
+    color: var(--muted); border-bottom: 3px solid transparent;
+    transition: color .15s, border-color .15s;
+    white-space: nowrap;
+  }
+  nav button.active, nav button:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  main { flex: 1; padding: 1.5rem 2rem; max-width: 1100px; width: 100%; margin: 0 auto; }
+  footer { text-align: center; font-size: .75rem; color: var(--muted); padding: 1.2rem; border-top: 1px solid var(--border); }
+
+  /* ---- Sections ---- */
+  .section { display: none; animation: fadeIn .2s; }
+  .section.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ---- Cards ---- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .card-title { font-family: var(--font-head); font-size: 1.05rem; font-weight: 600; margin-bottom: .75rem; }
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
+
+  /* ---- Upload zone ---- */
+  #upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    background: var(--surface2);
+  }
+  #upload-zone:hover, #upload-zone.drag-over { border-color: var(--accent); background: #eaf4ee; }
+  #upload-zone input { display: none; }
+  #upload-zone .icon { font-size: 2.5rem; margin-bottom: .5rem; }
+  #upload-zone p { color: var(--muted); font-size: .88rem; }
+  #upload-zone strong { color: var(--accent); }
+
+  /* ---- Week grid ---- */
+  .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: .5rem; }
+  .day-cell {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: .6rem .5rem;
+    min-height: 120px;
+    font-size: .78rem;
+  }
+  .day-cell .day-name { font-weight: 700; font-size: .7rem; color: var(--muted); text-transform: uppercase; margin-bottom: .3rem; }
+  .day-cell .day-date { font-weight: 700; font-size: 1rem; margin-bottom: .3rem; }
+  .workout-tag {
+    display: inline-block;
+    padding: .15rem .45rem;
+    border-radius: 3px;
+    font-size: .72rem;
+    font-weight: 600;
+    margin-bottom: .2rem;
+  }
+  .tag-run    { background: #d4edda; color: #155724; }
+  .tag-bike   { background: #cce5ff; color: #004085; }
+  .tag-swim   { background: #d1ecf1; color: #0c5460; }
+  .tag-strength { background: #fff3cd; color: #856404; }
+  .tag-rest   { background: #f8f9fa; color: #6c757d; }
+  .tag-other  { background: #e2d9f3; color: #432874; }
+
+  /* ---- Macro bars ---- */
+  .macro-bar-wrap { margin: .4rem 0; }
+  .macro-label { display: flex; justify-content: space-between; font-size: .78rem; margin-bottom: .15rem; }
+  .macro-bar { height: 7px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+  .macro-fill { height: 100%; border-radius: 4px; transition: width .4s; }
+  .fill-carb  { background: #52b788; }
+  .fill-prot  { background: #2d6a4f; }
+  .fill-fat   { background: #e9c46a; }
+  .fill-kcal  { background: #f4a261; }
+
+  /* ---- Nutrition targets ---- */
+  .targets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
+  .target-card {
+    background: var(--surface2);
+    border-radius: var(--radius);
+    padding: .9rem 1rem;
+    border-left: 4px solid var(--accent);
+  }
+  .target-card.warn { border-left-color: var(--warn); }
+  .target-card.danger { border-left-color: var(--danger); }
+  .target-val { font-family: var(--font-head); font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+  .target-card.warn .target-val { color: var(--warn); }
+  .target-card.danger .target-val { color: var(--danger); }
+  .target-label { font-size: .75rem; color: var(--muted); margin-top: .1rem; }
+
+  /* ---- Products ---- */
+  .product-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+  .product-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    position: relative;
+  }
+  .product-card .pname { font-weight: 700; font-size: .95rem; margin-bottom: .2rem; }
+  .product-card .pbrand { font-size: .78rem; color: var(--muted); margin-bottom: .5rem; }
+  .product-card .ptag {
+    display: inline-block; font-size: .7rem; font-weight: 600;
+    background: var(--surface2); border-radius: 3px; padding: .1rem .4rem; margin-right: .3rem; margin-bottom: .3rem;
+  }
+  .product-card .pbtn-del {
+    position: absolute; top: .6rem; right: .6rem;
+    background: none; border: none; cursor: pointer; color: var(--muted); font-size: 1rem;
+  }
+  .product-card .pbtn-del:hover { color: var(--danger); }
+  .nutrient-row { display: flex; justify-content: space-between; font-size: .78rem; border-top: 1px solid var(--border); padding: .2rem 0; }
+  .nutrient-row:first-of-type { margin-top: .4rem; }
+
+  /* ---- Forms ---- */
+  .form-row { margin-bottom: .9rem; }
+  .form-row label { display: block; font-size: .82rem; font-weight: 600; margin-bottom: .3rem; color: var(--muted); }
+  .form-row input, .form-row select, .form-row textarea {
+    width: 100%; padding: .55rem .75rem;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    font-family: var(--font-body); font-size: .9rem; background: var(--surface);
+    color: var(--text); transition: border-color .15s;
+  }
+  .form-row input:focus, .form-row select:focus, .form-row textarea:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .form-inline { display: flex; gap: .75rem; flex-wrap: wrap; }
+  .form-inline .form-row { flex: 1; min-width: 140px; }
+
+  /* ---- Buttons ---- */
+  .btn {
+    display: inline-block; padding: .55rem 1.2rem;
+    border: none; border-radius: var(--radius);
+    font-family: var(--font-body); font-size: .88rem; font-weight: 600;
+    cursor: pointer; transition: background .15s, transform .1s;
+  }
+  .btn:active { transform: scale(.98); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #235c42; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-sm { padding: .32rem .75rem; font-size: .78rem; }
+
+  /* ---- Recommendations ---- */
+  .rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+  .rec-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+  }
+  .rec-card .rec-emoji { font-size: 1.5rem; margin-bottom: .3rem; }
+  .rec-card .rec-name { font-weight: 700; font-size: .95rem; }
+  .rec-card .rec-why { font-size: .8rem; color: var(--muted); margin: .3rem 0; }
+  .rec-card .rec-where { font-size: .78rem; color: var(--accent); }
+
+  /* ---- Profile ---- */
+  .profile-avatar {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: var(--accent2); display: flex; align-items: center; justify-content: center;
+    font-size: 2rem; margin-bottom: 1rem;
+  }
+
+  /* ---- Badges ---- */
+  .badge {
+    display: inline-block; font-size: .7rem; font-weight: 700;
+    padding: .1rem .5rem; border-radius: 20px; text-transform: uppercase;
+  }
+  .badge-green  { background: #d4edda; color: #155724; }
+  .badge-amber  { background: #fff3cd; color: #856404; }
+  .badge-red    { background: #f8d7da; color: #721c24; }
+  .badge-blue   { background: #cce5ff; color: #004085; }
+
+  /* ---- Scanner Modal ---- */
+  #scanner-modal {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,.75); align-items: center; justify-content: center;
+  }
+  #scanner-modal.open { display: flex; }
+  #scanner-box {
+    background: var(--surface); border-radius: var(--radius);
+    padding: 1.25rem; width: min(94vw, 420px); position: relative;
+  }
+  #scanner-box h3 { font-family: var(--font-head); font-size: 1.05rem; margin-bottom: .75rem; }
+  #reader { width: 100%; border-radius: 4px; overflow: hidden; }
+  #scanner-status { font-size: .82rem; color: var(--muted); margin-top: .6rem; min-height: 1.2em; }
+  #scanner-close {
+    position: absolute; top: .7rem; right: .9rem;
+    background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--muted);
+  }
+  #scanner-close:hover { color: var(--danger); }
+
+  /* ---- Toast ---- */
+  #toast {
+    position: fixed; bottom: 1.5rem; right: 1.5rem;
+    background: var(--accent); color: #fff;
+    padding: .7rem 1.2rem; border-radius: var(--radius);
+    font-size: .85rem; font-weight: 500;
+    opacity: 0; pointer-events: none;
+    transition: opacity .3s;
+    z-index: 999;
+  }
+  #toast.show { opacity: 1; }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 640px) {
+    main { padding: 1rem; }
+    .week-grid { grid-template-columns: repeat(2, 1fr); }
+    header { padding: .8rem 1rem; }
+  }
+</style>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🌿 Fuel &amp; Run</h1>
+    <span>Nutrition Companion for Active Lifestyles</span>
+  </header>
+  <nav id="main-nav">
+    <button class="active" data-tab="dashboard">Dashboard</button>
+    <button data-tab="training">Training Week</button>
+    <button data-tab="nutrition">Daily Targets</button>
+    <button data-tab="products">My Products</button>
+    <button data-tab="recommendations">AU Food Ideas</button>
+    <button data-tab="profile">Profile</button>
+  </nav>
+  <main>
+
+    <!-- DASHBOARD -->
+    <section id="tab-dashboard" class="section active">
+      <div class="card">
+        <div class="card-title">Weekly Overview</div>
+        <div id="dash-summary" class="targets-grid"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">This Week's Nutrition Guide</div>
+        <div id="dash-guide"></div>
+      </div>
+      <div class="card" id="dash-tip-card">
+        <div class="card-title">💡 Dietitian Tip</div>
+        <div id="dash-tip" style="font-size:.9rem; color: var(--muted);"></div>
+      </div>
+    </section>
+
+    <!-- TRAINING WEEK -->
+    <section id="tab-training" class="section">
+      <div class="card">
+        <div class="card-title">Import TrainingPeaks Calendar (.ics)</div>
+        <div id="upload-zone" onclick="document.getElementById('ics-input').click()">
+          <div class="icon">📅</div>
+          <p><strong>Click to upload</strong> or drag &amp; drop your .ics file</p>
+          <p style="margin-top:.3rem;">Export from TrainingPeaks → Settings → Integrations → Calendar Sync</p>
+          <input type="file" id="ics-input" accept=".ics" />
+        </div>
+        <div style="margin-top:1rem; display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" id="btn-demo">Load Demo Week</button>
+          <button class="btn btn-secondary btn-sm" id="btn-clear-training">Clear Schedule</button>
+          <span id="ics-filename" style="font-size:.8rem; color:var(--muted);"></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Week Schedule</div>
+        <div class="week-grid" id="week-grid"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Add / Edit Session Manually</div>
+        <div class="form-inline">
+          <div class="form-row">
+            <label>Day</label>
+            <select id="man-day">
+              <option>Monday</option><option>Tuesday</option><option>Wednesday</option>
+              <option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Type</label>
+            <select id="man-type">
+              <option value="run">Run</option>
+              <option value="bike">Bike</option>
+              <option value="swim">Swim</option>
+              <option value="strength">Strength</option>
+              <option value="rest">Rest</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Distance (km)</label>
+            <input type="number" id="man-dist" min="0" step="0.5" placeholder="e.g. 12" />
+          </div>
+          <div class="form-row">
+            <label>Duration (min)</label>
+            <input type="number" id="man-dur" min="0" step="5" placeholder="e.g. 60" />
+          </div>
+          <div class="form-row">
+            <label>Intensity</label>
+            <select id="man-int">
+              <option value="easy">Easy</option>
+              <option value="moderate">Moderate</option>
+              <option value="hard">Hard / Tempo</option>
+              <option value="race">Race / Max</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-add-session">Add Session</button>
+      </div>
+    </section>
+
+    <!-- NUTRITION TARGETS -->
+    <section id="tab-nutrition" class="section">
+      <div class="card">
+        <div class="card-title">Daily Nutrition Targets by Training Load</div>
+        <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">Based on your profile (72 kg, running goal: lose 2–3 kg) and this week's sessions. Hard training days are fully fuelled; the deficit is applied on easy/rest days.</p>
+        <div id="nutrition-table"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Key Micronutrients to Watch</div>
+        <div id="micro-table"></div>
+      </div>
+    </section>
+
+    <!-- MY PRODUCTS -->
+    <section id="tab-products" class="section">
+      <div class="card">
+        <div class="card-title">Add a Product</div>
+        <form id="product-form" onsubmit="return false;">
+          <div class="form-inline">
+            <div class="form-row" style="flex:2; min-width:200px;">
+              <label>Product Name</label>
+              <input type="text" id="p-name" placeholder="e.g. Chobani Greek Yoghurt" required />
+            </div>
+            <div class="form-row" style="flex:1;">
+              <label>Brand</label>
+              <input type="text" id="p-brand" placeholder="e.g. Chobani" />
+            </div>
+            <div class="form-row" style="flex:1;">
+              <label>Category</label>
+              <select id="p-cat">
+                <option>Dairy</option><option>Protein</option><option>Carbs</option>
+                <option>Fruit &amp; Veg</option><option>Snack</option><option>Drink</option>
+                <option>Supplement</option><option>Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-inline">
+            <div class="form-row"><label>Serving size (g/ml)</label><input type="number" id="p-serve" min="1" placeholder="100" /></div>
+            <div class="form-row"><label>Calories (kcal)</label><input type="number" id="p-kcal" min="0" /></div>
+            <div class="form-row"><label>Protein (g)</label><input type="number" id="p-prot" min="0" step=".1" /></div>
+            <div class="form-row"><label>Carbs (g)</label><input type="number" id="p-carb" min="0" step=".1" /></div>
+            <div class="form-row"><label>Fat (g)</label><input type="number" id="p-fat" min="0" step=".1" /></div>
+          </div>
+          <div class="form-row">
+            <label>Notes (timing, usage)</label>
+            <input type="text" id="p-notes" placeholder="e.g. Post-run recovery snack" />
+          </div>
+          <div class="form-row">
+            <label>Product URL (optional)</label>
+            <input type="url" id="p-url" placeholder="https://www.woolworths.com.au/..." />
+          </div>
+          <button class="btn btn-primary" type="submit" id="btn-save-product">Save Product</button>
+          <button class="btn btn-secondary" type="button" id="btn-scan-barcode">📷 Scan Barcode</button>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-title">My Product Pantry</div>
+        <div class="product-list" id="product-list"></div>
+        <p id="no-products" style="color:var(--muted); font-size:.85rem;">No products saved yet. Add your first product above.</p>
+      </div>
+    </section>
+
+    <!-- RECOMMENDATIONS -->
+    <section id="tab-recommendations" class="section">
+      <div class="card">
+        <div class="card-title">Australian Food Recommendations for Runners</div>
+        <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">Widely available in Woolworths, Coles, or IGA. Selected for nutritional value, convenience, and suitability for an active plant-forward lifestyle.</p>
+        <div class="rec-grid" id="rec-grid"></div>
+      </div>
+    </section>
+
+    <!-- PROFILE -->
+    <section id="tab-profile" class="section">
+      <div class="card">
+        <div class="profile-avatar">🏃</div>
+        <div class="card-title">My Profile</div>
+        <div class="form-inline">
+          <div class="form-row"><label>Name</label><input type="text" id="prof-name" placeholder="Your name" /></div>
+          <div class="form-row"><label>Age</label><input type="number" id="prof-age" min="18" max="80" /></div>
+          <div class="form-row">
+            <label>Sex</label>
+            <select id="prof-sex">
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other/Prefer not to say</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-inline">
+          <div class="form-row"><label>Current Weight (kg)</label><input type="number" id="prof-weight" value="72" /></div>
+          <div class="form-row"><label>Goal Weight (kg)</label><input type="number" id="prof-goal" value="69.5" /></div>
+          <div class="form-row"><label>Height (cm)</label><input type="number" id="prof-height" placeholder="e.g. 175" /></div>
+        </div>
+        <div class="form-inline">
+          <div class="form-row"><label>Avg weekly run (km)</label><input type="number" id="prof-km" value="75" /></div>
+          <div class="form-row">
+            <label>Diet style</label>
+            <select id="prof-diet">
+              <option value="plantforward">Mostly plant-based (dairy, fish, eggs, occ. meat)</option>
+              <option value="vegetarian">Vegetarian (dairy &amp; eggs)</option>
+              <option value="vegan">Vegan</option>
+              <option value="omnivore">Omnivore</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>Health notes / conditions</label>
+          <textarea id="prof-notes" rows="3" placeholder="e.g. Iron-deficient, lactose tolerant, no nut allergy"></textarea>
+        </div>
+        <button class="btn btn-primary" id="btn-save-profile">Save Profile</button>
+      </div>
+      <div class="card" id="red-s-card" style="border-left: 4px solid var(--warn); display:none;">
+        <div class="card-title">⚠️ RED-S Awareness</div>
+        <p style="font-size:.85rem;">Relative Energy Deficiency in Sport (RED-S) can occur in high-volume runners on a calorie deficit. Watch for: persistent fatigue, poor recovery, disrupted sleep, mood changes, or stress fractures. If you notice these, increase fuelling and consult a sports dietitian or GP.</p>
+      </div>
+      <div class="card" style="background: #eaf4ee;">
+        <div class="card-title">📋 Your Nutritional Defaults</div>
+        <div id="prof-summary" style="font-size:.88rem; color:var(--muted);"></div>
+      </div>
+    </section>
+
+  </main>
+  <footer>Fuel &amp; Run — personalised nutrition for active lifestyles · Data stored locally in your browser only</footer>
+</div>
+
+<!-- Barcode Scanner Modal -->
+<div id="scanner-modal">
+  <div id="scanner-box">
+    <button id="scanner-close" title="Close">✕</button>
+    <h3>📷 Scan Product Barcode</h3>
+    <div id="reader"></div>
+    <div id="scanner-status">Point camera at the barcode on your product packaging.</div>
+    <button class="btn btn-secondary btn-sm" id="scanner-stop-btn" style="margin-top:.75rem;">Cancel</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  profile: {
+    name: '', age: '', sex: 'male', weight: 72, goalWeight: 69.5,
+    height: 175, weeklyKm: 75, diet: 'plantforward', notes: ''
+  },
+  sessions: [], // {day:0-6, type, dist, dur, intensity, title}
+  products: []  // {id, name, brand, cat, serve, kcal, prot, carb, fat, notes, url}
+};
+
+// ============================================================
+// PERSIST
+// ============================================================
+function save() { localStorage.setItem('fuelrun', JSON.stringify(state)); }
+function load() {
+  try {
+    const d = localStorage.getItem('fuelrun');
+    if (d) state = { ...state, ...JSON.parse(d) };
+  } catch(e) {}
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+document.querySelectorAll('#main-nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#main-nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    renderAll();
+  });
+});
+
+// ============================================================
+// TOAST
+// ============================================================
+function toast(msg, duration = 2800) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ============================================================
+// ICS PARSER
+// ============================================================
+function parseICS(text) {
+  const events = [];
+  const vevents = text.split('BEGIN:VEVENT');
+  vevents.shift();
+  for (const block of vevents) {
+    const get = key => {
+      const m = block.match(new RegExp(key + '[^:]*:([^\\r\\n]+)'));
+      return m ? m[1].trim() : '';
+    };
+    const dtstart = get('DTSTART');
+    const summary = get('SUMMARY');
+    const description = get('DESCRIPTION');
+    if (!dtstart) continue;
+    // Parse date
+    const y = +dtstart.substring(0,4), mo = +dtstart.substring(4,6)-1, d = +dtstart.substring(6,8);
+    const date = new Date(y, mo, d);
+    const dayOfWeek = date.getDay(); // 0=Sun
+    const monday0 = (dayOfWeek + 6) % 7; // Mon=0
+    // Classify workout from summary
+    const text2 = (summary + ' ' + description).toLowerCase();
+    let type = 'other', dist = 0, dur = 0, intensity = 'easy';
+    if (/\brun\b|running/.test(text2)) type = 'run';
+    else if (/\bbike\b|cycling|cycle/.test(text2)) type = 'bike';
+    else if (/\bswim\b/.test(text2)) type = 'swim';
+    else if (/strength|gym|weights|lift/.test(text2)) type = 'strength';
+    else if (/rest|recovery|off/.test(text2)) type = 'rest';
+    // Try to extract distance
+    const distM = text2.match(/(\d+(?:\.\d+)?)\s*km/);
+    if (distM) dist = parseFloat(distM[1]);
+    // Try to extract duration
+    const durM = text2.match(/(\d+)\s*min/);
+    if (durM) dur = parseInt(durM[1]);
+    // Intensity
+    if (/tempo|threshold|interval|hard|race/.test(text2)) intensity = 'hard';
+    else if (/moderate|medium|mp|marathon pace/.test(text2)) intensity = 'moderate';
+    events.push({ day: monday0, type, dist, dur, intensity, title: summary || type });
+  }
+  return events;
+}
+
+// ============================================================
+// FILE UPLOAD
+// ============================================================
+const icsInput = document.getElementById('ics-input');
+const uploadZone = document.getElementById('upload-zone');
+
+icsInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    state.sessions = parseICS(evt.target.result);
+    document.getElementById('ics-filename').textContent = '✅ ' + file.name;
+    save(); renderAll();
+    toast('Calendar imported — ' + state.sessions.length + ' session(s) found');
+  };
+  reader.readAsText(file);
+});
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    state.sessions = parseICS(evt.target.result);
+    document.getElementById('ics-filename').textContent = '✅ ' + file.name;
+    save(); renderAll();
+    toast('Calendar imported — ' + state.sessions.length + ' session(s) found');
+  };
+  reader.readAsText(file);
+});
+
+// Demo week
+document.getElementById('btn-demo').addEventListener('click', () => {
+  state.sessions = [
+    { day:0, type:'run', dist:10, dur:55, intensity:'easy', title:'Easy Run' },
+    { day:1, type:'run', dist:12, dur:65, intensity:'moderate', title:'Steady State Run' },
+    { day:2, type:'strength', dist:0, dur:50, intensity:'moderate', title:'Strength & Conditioning' },
+    { day:3, type:'run', dist:14, dur:70, intensity:'hard', title:'Tempo Run' },
+    { day:4, type:'rest', dist:0, dur:0, intensity:'easy', title:'Active Recovery' },
+    { day:5, type:'run', dist:22, dur:120, intensity:'moderate', title:'Long Run' },
+    { day:6, type:'run', dist:8, dur:45, intensity:'easy', title:'Easy Recovery Run' },
+  ];
+  document.getElementById('ics-filename').textContent = '✅ Demo week loaded';
+  save(); renderAll();
+  toast('Demo training week loaded');
+});
+
+document.getElementById('btn-clear-training').addEventListener('click', () => {
+  state.sessions = [];
+  document.getElementById('ics-filename').textContent = '';
+  save(); renderAll();
+  toast('Schedule cleared');
+});
+
+// ============================================================
+// MANUAL SESSION
+// ============================================================
+document.getElementById('btn-add-session').addEventListener('click', () => {
+  const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  const dayName = document.getElementById('man-day').value;
+  const dayIdx = days.indexOf(dayName);
+  const type = document.getElementById('man-type').value;
+  const dist = parseFloat(document.getElementById('man-dist').value) || 0;
+  const dur  = parseInt(document.getElementById('man-dur').value) || 0;
+  const intensity = document.getElementById('man-int').value;
+  // Remove existing session for this day
+  state.sessions = state.sessions.filter(s => s.day !== dayIdx);
+  state.sessions.push({ day: dayIdx, type, dist, dur, intensity, title: type.charAt(0).toUpperCase()+type.slice(1) });
+  save(); renderAll();
+  toast('Session saved for ' + dayName);
+});
+
+// ============================================================
+// NUTRITION ENGINE
+// ============================================================
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const ABBR = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+function sessionForDay(dayIdx) {
+  return state.sessions.find(s => s.day === dayIdx) || null;
+}
+
+function intensityMult(intensity) {
+  return { easy: 0.7, moderate: 1.0, hard: 1.3, race: 1.5 }[intensity] || 1.0;
+}
+
+// Estimate kcal burned from running (approx: ~1 kcal/kg/km, + 5 MET * (dur/60) * weight)
+function estimateBurn(session) {
+  if (!session || session.type === 'rest') return 0;
+  const w = state.profile.weight || 72;
+  if (session.type === 'run') {
+    const byDist = session.dist > 0 ? session.dist * w * 1.0 : 0;
+    const byDur  = session.dur  > 0 ? (session.dur / 60) * w * ({ easy:8.5, moderate:10, hard:12, race:14 }[session.intensity] || 10) : 0;
+    return Math.round(Math.max(byDist, byDur));
+  }
+  if (session.type === 'bike') return Math.round((session.dur / 60) * w * 8);
+  if (session.type === 'swim') return Math.round((session.dur / 60) * w * 9);
+  if (session.type === 'strength') return Math.round((session.dur / 60) * w * 5);
+  return Math.round((session.dur / 60) * w * 5);
+}
+
+function dailyTargets(dayIdx) {
+  const w = state.profile.weight || 72;
+  const s = sessionForDay(dayIdx);
+  const burn = estimateBurn(s);
+  const isHard = s && (s.intensity === 'hard' || s.intensity === 'race');
+  const isRest = !s || s.type === 'rest';
+
+  // BMR (Mifflin-St Jeor, male default unless female set)
+  const isFemale = state.profile.sex === 'female';
+  const h = state.profile.height || 175;
+  const age = state.profile.age || 35;
+  const bmr = isFemale
+    ? (10 * w + 6.25 * h - 5 * age - 161)
+    : (10 * w + 6.25 * h - 5 * age + 5);
+  const tdee = Math.round(bmr * 1.4 + burn); // sedentary NEAT * 1.4 + exercise
+  // Deficit strategy: 200–300 kcal on easy/rest, 0 on hard
+  const deficit = isHard ? 0 : (isRest ? 300 : 200);
+  const kcal = tdee - deficit;
+
+  // Carb: 5–8 g/kg based on load
+  const carbPerKg = isHard ? 7.5 : (isRest ? 4.5 : 6.0);
+  const carb = Math.round(carbPerKg * w);
+  // Protein: 1.8 g/kg
+  const prot = Math.round(1.8 * w);
+  // Fat: remainder
+  const fat = Math.round((kcal - carb * 4 - prot * 4) / 9);
+  return { kcal, carb, prot, fat: Math.max(fat, 40), tdee, burn, deficit };
+}
+
+// ============================================================
+// RENDER WEEK GRID
+// ============================================================
+function renderWeekGrid() {
+  const today = new Date();
+  const todayMon0 = (today.getDay() + 6) % 7;
+  const grid = document.getElementById('week-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  for (let d = 0; d < 7; d++) {
+    const s = sessionForDay(d);
+    const t = dailyTargets(d);
+    const isToday = d === todayMon0;
+    const cell = document.createElement('div');
+    cell.className = 'day-cell';
+    if (isToday) cell.style.borderColor = 'var(--accent)';
+    const tagClass = s ? `tag-${s.type}` : 'tag-rest';
+    const tagLabel = s ? (s.type.charAt(0).toUpperCase() + s.type.slice(1)) : 'Rest';
+    const distInfo = s && s.dist ? `${s.dist}km` : '';
+    const durInfo = s && s.dur ? `${s.dur}min` : '';
+    cell.innerHTML = `
+      <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
+      <div class="day-date">${d+1}</div>
+      <span class="workout-tag ${tagClass}">${tagLabel}</span>
+      ${distInfo ? `<div style="font-size:.72rem; color:var(--muted);">${distInfo} ${durInfo}</div>` : ''}
+      ${s && s.intensity !== 'easy' ? `<div><span class="badge ${s.intensity==='hard'||s.intensity==='race'?'badge-red':'badge-amber'}">${s.intensity}</span></div>` : ''}
+      <div style="margin-top:.4rem; font-size:.72rem; color:var(--muted);">${t.kcal} kcal</div>
+      <div style="font-size:.7rem; color:var(--muted);">${t.carb}g C · ${t.prot}g P · ${t.fat}g F</div>
+    `;
+    grid.appendChild(cell);
+  }
+}
+
+// ============================================================
+// RENDER NUTRITION TABLE
+// ============================================================
+function renderNutritionTable() {
+  const el = document.getElementById('nutrition-table');
+  if (!el) return;
+  let html = `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:.85rem;">
+    <thead><tr style="background:var(--surface2); text-align:left;">
+      <th style="padding:.5rem .75rem;">Day</th>
+      <th>Session</th>
+      <th>Burn</th>
+      <th>Target kcal</th>
+      <th>Carbs</th>
+      <th>Protein</th>
+      <th>Fat</th>
+      <th>Notes</th>
+    </tr></thead><tbody>`;
+  for (let d = 0; d < 7; d++) {
+    const s = sessionForDay(d);
+    const t = dailyTargets(d);
+    const sessionLabel = s ? `${s.type} ${s.dist?s.dist+'km':''} ${s.dur?s.dur+'min':''}` : 'Rest';
+    const isHard = s && (s.intensity === 'hard' || s.intensity === 'race');
+    const noteStyle = t.deficit === 0 ? 'color:var(--accent); font-weight:600;' : 'color:var(--muted);';
+    const note = isHard ? '🔋 Full fuel — no deficit' : (t.deficit === 300 ? '💤 Rest day: –300 kcal deficit' : '🚶 Easy day: –200 kcal deficit');
+    html += `<tr style="border-top:1px solid var(--border);">
+      <td style="padding:.45rem .75rem; font-weight:600;">${DAYS[d]}</td>
+      <td>${sessionLabel}</td>
+      <td>${t.burn ? t.burn+' kcal' : '—'}</td>
+      <td style="font-weight:700;">${t.kcal}</td>
+      <td>${t.carb}g</td>
+      <td>${t.prot}g</td>
+      <td>${t.fat}g</td>
+      <td style="font-size:.76rem; ${noteStyle}">${note}</td>
+    </tr>`;
+  }
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+
+  // Micronutrients
+  const micro = document.getElementById('micro-table');
+  if (micro) {
+    const items = [
+      { n:'Iron', why:'Higher loss in runners (foot strike, sweat)', sources:'Lentils + vitamin C, spinach, pumpkin seeds, sardines', risk:'medium' },
+      { n:'Calcium', why:'Bone health, especially in calorie deficit', sources:'Greek yoghurt, milk, fortified plant milk, tofu, almonds', risk:'low' },
+      { n:'Vitamin D', why:'Widespread deficiency; bone & immune health', sources:'Oily fish, eggs, fortified foods; supplement May–Aug', risk: 'medium' },
+      { n:'Vitamin B12', why:'Mostly animal-sourced; nerve & red blood cell health', sources:'Eggs, dairy, fish; consider supplement if intake is low', risk:'low' },
+      { n:'Omega-3', why:'Anti-inflammatory; recovery & joint health', sources:'Salmon, sardines, mackerel, walnuts, flaxseed, chia', risk:'low' },
+      { n:'Magnesium', why:'Muscle function, sleep quality, cramp prevention', sources:'Pumpkin seeds, dark chocolate, leafy greens, legumes', risk:'low' },
+      { n:'Zinc', why:'Immune function, muscle repair', sources:'Legumes, pumpkin seeds, wholegrains, dairy', risk:'low' },
+      { n:'Iodine', why:'Thyroid & metabolism regulation', sources:'Dairy, fish, eggs, iodised salt', risk:'low' },
+    ];
+    micro.innerHTML = `<div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:.83rem;">
+      <thead><tr style="background:var(--surface2); text-align:left;">
+        <th style="padding:.5rem .75rem;">Nutrient</th><th>Why it matters for runners</th><th>Best sources</th><th>Priority</th>
+      </tr></thead><tbody>${items.map(i=>`<tr style="border-top:1px solid var(--border);">
+        <td style="padding:.45rem .75rem; font-weight:700;">${i.n}</td>
+        <td>${i.why}</td>
+        <td style="color:var(--accent);">${i.sources}</td>
+        <td><span class="badge ${i.risk==='medium'?'badge-amber':'badge-green'}">${i.risk}</span></td>
+      </tr>`).join('')}</tbody></table></div>`;
+  }
+}
+
+// ============================================================
+// RENDER PRODUCTS
+// ============================================================
+function renderProducts() {
+  const list = document.getElementById('product-list');
+  const none = document.getElementById('no-products');
+  if (!list) return;
+  if (!state.products.length) {
+    list.innerHTML = ''; none.style.display = '';
+    return;
+  }
+  none.style.display = 'none';
+  list.innerHTML = state.products.map(p => `
+    <div class="product-card">
+      <button class="pbtn-del" onclick="deleteProduct('${p.id}')">✕</button>
+      <div class="pname">${p.name}</div>
+      <div class="pbrand">${p.brand || ''} <span class="ptag">${p.cat}</span></div>
+      ${p.notes ? `<div style="font-size:.78rem; color:var(--muted); margin-bottom:.3rem;">${p.notes}</div>` : ''}
+      <div class="nutrient-row"><span>Serving</span><span>${p.serve || '—'}g/ml</span></div>
+      <div class="nutrient-row"><span>Calories</span><span><b>${p.kcal || '—'}</b> kcal</span></div>
+      <div class="nutrient-row"><span>Protein</span><span>${p.prot || '—'}g</span></div>
+      <div class="nutrient-row"><span>Carbohydrate</span><span>${p.carb || '—'}g</span></div>
+      <div class="nutrient-row"><span>Fat</span><span>${p.fat || '—'}g</span></div>
+      ${p.url ? `<div style="margin-top:.5rem;"><a href="${p.url}" target="_blank" style="font-size:.76rem;">View product ↗</a></div>` : ''}
+    </div>
+  `).join('');
+}
+
+window.deleteProduct = id => {
+  state.products = state.products.filter(p => p.id !== id);
+  save(); renderProducts();
+  toast('Product removed');
+};
+
+document.getElementById('product-form').addEventListener('submit', () => {
+  const name = document.getElementById('p-name').value.trim();
+  if (!name) return;
+  const product = {
+    id: Date.now().toString(),
+    name, brand: document.getElementById('p-brand').value.trim(),
+    cat: document.getElementById('p-cat').value,
+    serve: +document.getElementById('p-serve').value || null,
+    kcal: +document.getElementById('p-kcal').value || null,
+    prot: +document.getElementById('p-prot').value || null,
+    carb: +document.getElementById('p-carb').value || null,
+    fat:  +document.getElementById('p-fat').value || null,
+    notes: document.getElementById('p-notes').value.trim(),
+    url:   document.getElementById('p-url').value.trim(),
+  };
+  state.products.unshift(product);
+  save(); renderProducts();
+  document.getElementById('product-form').reset();
+  toast('Product saved: ' + name);
+});
+
+// ============================================================
+// RECOMMENDATIONS
+// ============================================================
+const AU_RECS = [
+  { emoji:'🫙', name:'Chobani Greek Yoghurt (170g)', cat:'Dairy', why:'~17g protein per serve, calcium, probiotics — perfect post-run recovery', where:'Woolworths, Coles, IGA' },
+  { emoji:'🐟', name:'John West Tuna in Springwater (95g)', cat:'Protein', why:'25g protein, omega-3, portable — great lunchbox protein hit', where:'Woolworths, Coles, petrol stations' },
+  { emoji:'🥚', name:'Free-range eggs (dozen)', cat:'Protein', why:'6g protein + B12, vitamin D, choline — eat daily, versatile', where:'All supermarkets — look for Pace Farm Free Range' },
+  { emoji:'🌱', name:'Macro Organic Red Lentils (500g)', cat:'Carbs & Protein', why:'Plant iron + protein, cheap, 20g protein / 100g dry — post-run dahl or soups', where:'Woolworths (own brand)' },
+  { emoji:'🐟', name:'Safcol Salmon in Springwater (415g)', cat:'Protein', why:'Omega-3 EPA+DHA, 30g+ protein, calcium from soft bones', where:'Woolworths, Coles' },
+  { emoji:'🥜', name:'Mayver\'s Natural Peanut Butter (375g)', cat:'Fats & Protein', why:'No added sugar/oil, 25g protein/100g, healthy fats, magnesium', where:'Woolworths, Coles, health food stores' },
+  { emoji:'🍌', name:'Bananas', cat:'Carbs', why:'Fast carbs + potassium — ideal pre-run snack; ~90 kcal each', where:'All supermarkets — Cavendish variety standard' },
+  { emoji:'🌾', name:'Uncle Tobys Traditional Oats (1kg)', cat:'Carbs', why:'Complex carbs, beta-glucan, low GI — best pre-run breakfast foundation', where:'Woolworths, Coles' },
+  { emoji:'🥑', name:'Odd Bunch Avocados', cat:'Fats', why:'Monounsaturated fat, potassium, vitamin K — reduce inflammation', where:'Woolworths (Odd Bunch range, cheaper)' },
+  { emoji:'🫐', name:'Lindt 85% Dark Chocolate', cat:'Snack', why:'Magnesium, antioxidants, small daily square supports mood & muscle relaxation', where:'Woolworths, Coles, Aldi' },
+  { emoji:'🥬', name:'Baby Spinach (120g bag)', cat:'Fruit & Veg', why:'Non-haem iron + vitamin C (when paired), folate, easy to add anywhere', where:'Woolworths, Coles' },
+  { emoji:'🫘', name:'Edgell Chickpeas in Brine (400g)', cat:'Carbs & Protein', why:'Fibre, plant iron, protein — roasted as snack or in salads', where:'Woolworths, Coles' },
+  { emoji:'🐟', name:'Tassal Tasmanian Salmon Fillets (fresh)', cat:'Protein', why:'Highest quality domestic omega-3 source; 2 serves/week target', where:'Woolworths fish section' },
+  { emoji:'🍫', name:'Sanitarium Weet-Bix (750g)', cat:'Carbs', why:'Iron-fortified, low sugar, wholegrain — runs on iron are real; great start', where:'All supermarkets' },
+  { emoji:'🥛', name:'Bonsoy Organic Soy Milk (1L)', cat:'Dairy alt', why:'Closest to dairy in protein (8g/250ml), calcium-fortified, B12 fortified', where:'Woolworths, health food stores, Aldi' },
+  { emoji:'🌰', name:'Aldi Almonds (500g)', cat:'Fats & Protein', why:'Calcium, vitamin E, magnesium — 30g handful as daily snack', where:'Aldi (best price)' },
+  { emoji:'🍠', name:'Sweet potato (loose)', cat:'Carbs', why:'Beta-carotene, complex carbs, potassium — excellent post-run dinner base', where:'All supermarkets' },
+  { emoji:'💊', name:'Blackmores Vitamin D3 1000IU', cat:'Supplement', why:'Widely deficient in Australians despite sun — especially runners with limited midday exposure', where:'Chemist Warehouse, Woolworths pharmacy' },
+];
+
+function renderRecommendations() {
+  const grid = document.getElementById('rec-grid');
+  if (!grid) return;
+  grid.innerHTML = AU_RECS.map(r => `
+    <div class="rec-card">
+      <div class="rec-emoji">${r.emoji}</div>
+      <div class="rec-name">${r.name}</div>
+      <span class="ptag">${r.cat}</span>
+      <div class="rec-why">${r.why}</div>
+      <div class="rec-where">📍 ${r.where}</div>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+const TIPS = [
+  'On your long run day, aim for 60g of carbs per hour after the first 60 minutes — bananas, medjool dates, or homemade rice balls all work well.',
+  'Iron absorption doubles when you pair plant iron sources (lentils, spinach) with vitamin C-rich foods like capsicum or a squeeze of lemon.',
+  'Your most important post-run nutrition window is within 30–60 minutes: 20–40g protein + carbohydrates. Greek yoghurt + banana + a handful of oats is a perfect combo.',
+  'On rest and easy days, slightly lower your carb intake — this is where your 200–300 kcal daily deficit fits most naturally without impacting training quality.',
+  'Consistent protein spread matters: aim for at least 25–35g per meal across 4 meals rather than loading most protein at dinner.',
+  'Hydration tip: if your urine is pale yellow before a run, you\'re well hydrated. Dark yellow = drink more. Clear = possibly over-hydrated.',
+  'Omega-3s from oily fish (salmon, sardines, mackerel) help reduce post-run muscle soreness. A 2-serve-per-week habit is worth building.',
+  'Magnesium-rich foods like pumpkin seeds, dark chocolate, and leafy greens can improve sleep quality — crucial for recovery.',
+];
+
+function renderDashboard() {
+  const summary = document.getElementById('dash-summary');
+  const guide = document.getElementById('dash-guide');
+  const tipEl = document.getElementById('dash-tip');
+  if (!summary) return;
+
+  const totalKm = state.sessions.reduce((a,s) => a + (s.type==='run' ? s.dist : 0), 0);
+  const totalBurn = state.sessions.reduce((a,s) => a + estimateBurn(s), 0);
+  const avgKcal = Math.round([0,1,2,3,4,5,6].reduce((a,d) => a + dailyTargets(d).kcal, 0) / 7);
+  const hardDays = state.sessions.filter(s => s.intensity === 'hard' || s.intensity === 'race').length;
+  const w = state.profile.weight || 72;
+  const goal = state.profile.goalWeight || 69.5;
+  const toGo = Math.max(0, w - goal).toFixed(1);
+
+  summary.innerHTML = `
+    <div class="target-card"><div class="target-val">${totalKm.toFixed(0)}</div><div class="target-label">km planned this week</div></div>
+    <div class="target-card"><div class="target-val">${totalBurn.toLocaleString()}</div><div class="target-label">kcal exercise burn</div></div>
+    <div class="target-card"><div class="target-val">${avgKcal.toLocaleString()}</div><div class="target-label">avg daily target kcal</div></div>
+    <div class="target-card warn"><div class="target-val">${hardDays}</div><div class="target-label">hard/race days (full fuel)</div></div>
+    <div class="target-card"><div class="target-val">${toGo}kg</div><div class="target-label">to goal weight (${goal}kg)</div></div>
+    <div class="target-card"><div class="target-val">${state.products.length}</div><div class="target-label">products in your pantry</div></div>
+  `;
+
+  // Weekly guide text
+  const weeklyCarb = Math.round(totalKm * 1.5 * (w / 70));
+  guide.innerHTML = `
+    <div style="font-size:.88rem; line-height:1.8;">
+      <p>This week you have <strong>${totalKm.toFixed(0)} km</strong> of running planned across <strong>${state.sessions.filter(s=>s.type==='run').length} sessions</strong>.</p>
+      <p style="margin-top:.6rem;"><strong>Protein:</strong> Aim for ~${Math.round(1.8*(state.profile.weight||72))}g/day spread over 4+ meals to support muscle repair.</p>
+      <p style="margin-top:.4rem;"><strong>Carbohydrates:</strong> Increase on long run / hard days (up to ${Math.round(7.5*(state.profile.weight||72))}g/day). Reduce on rest days (${Math.round(4.5*(state.profile.weight||72))}g/day).</p>
+      <p style="margin-top:.4rem;"><strong>Hydration:</strong> Add ~500–750ml water per hour of running on top of baseline 2–2.5L/day.</p>
+      ${hardDays > 2 ? '<p style="margin-top:.4rem; color:var(--warn);"><strong>⚠️ Busy week:</strong> '+hardDays+' hard sessions — ensure you nail pre-run fuelling and post-run recovery nutrition every time.</p>' : ''}
+    </div>
+  `;
+
+  // Rotating tip
+  if (tipEl) tipEl.textContent = TIPS[Math.floor(Date.now() / 86400000) % TIPS.length];
+}
+
+// ============================================================
+// PROFILE
+// ============================================================
+document.getElementById('btn-save-profile').addEventListener('click', () => {
+  state.profile = {
+    name:      document.getElementById('prof-name').value.trim(),
+    age:       +document.getElementById('prof-age').value || 35,
+    sex:       document.getElementById('prof-sex').value,
+    weight:    +document.getElementById('prof-weight').value || 72,
+    goalWeight:+document.getElementById('prof-goal').value || 69.5,
+    height:    +document.getElementById('prof-height').value || 175,
+    weeklyKm:  +document.getElementById('prof-km').value || 75,
+    diet:      document.getElementById('prof-diet').value,
+    notes:     document.getElementById('prof-notes').value.trim(),
+  };
+  save(); renderAll();
+  toast('Profile saved');
+});
+
+function loadProfileForm() {
+  const p = state.profile;
+  document.getElementById('prof-name').value = p.name || '';
+  document.getElementById('prof-age').value = p.age || '';
+  document.getElementById('prof-sex').value = p.sex || 'male';
+  document.getElementById('prof-weight').value = p.weight || 72;
+  document.getElementById('prof-goal').value = p.goalWeight || 69.5;
+  document.getElementById('prof-height').value = p.height || '';
+  document.getElementById('prof-km').value = p.weeklyKm || 75;
+  document.getElementById('prof-diet').value = p.diet || 'plantforward';
+  document.getElementById('prof-notes').value = p.notes || '';
+}
+
+function renderProfileSummary() {
+  const p = state.profile;
+  const el = document.getElementById('prof-summary');
+  if (!el) return;
+  const bmi = p.height ? (p.weight / Math.pow(p.height/100, 2)).toFixed(1) : '—';
+  el.innerHTML = `
+    <p><strong>BMI:</strong> ${bmi} · <strong>Target protein:</strong> ${Math.round(1.8*(p.weight||72))}g/day · <strong>Weekly km:</strong> ${p.weeklyKm||75}km</p>
+    <p style="margin-top:.3rem;"><strong>Diet style:</strong> ${p.diet} · <strong>Goal:</strong> ${p.weight||72}kg → ${p.goalWeight||69.5}kg (${Math.max(0,((p.weight||72)-(p.goalWeight||69.5))).toFixed(1)}kg over ~${Math.ceil(Math.max(0,((p.weight||72)-(p.goalWeight||69.5)))*1000/250)} weeks at 250g/week)</p>
+    ${p.notes ? `<p style="margin-top:.3rem;"><strong>Notes:</strong> ${p.notes}</p>` : ''}
+  `;
+  // Show RED-S warning if deficit >3kg or very high volume
+  const reds = document.getElementById('red-s-card');
+  if (reds) reds.style.display = ((p.weight - p.goalWeight) > 4 || p.weeklyKm > 90) ? '' : 'none';
+}
+
+// ============================================================
+// RENDER ALL
+// ============================================================
+function renderAll() {
+  renderDashboard();
+  renderWeekGrid();
+  renderNutritionTable();
+  renderProducts();
+  renderRecommendations();
+  loadProfileForm();
+  renderProfileSummary();
+}
+
+// ============================================================
+// BARCODE SCANNER
+// ============================================================
+let html5QrCode = null;
+
+function openScanner() {
+  document.getElementById('scanner-modal').classList.add('open');
+  document.getElementById('scanner-status').textContent = 'Starting camera…';
+  html5QrCode = new Html5Qrcode('reader');
+  html5QrCode.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 260, height: 120 } },
+    onBarcodeScanned,
+    () => {}
+  ).then(() => {
+    document.getElementById('scanner-status').textContent = 'Point camera at the barcode on your product packaging.';
+  }).catch(err => {
+    document.getElementById('scanner-status').textContent = 'Camera error: ' + err + '. Try allowing camera access in your browser settings.';
+  });
+}
+
+async function onBarcodeScanned(barcode) {
+  document.getElementById('scanner-status').textContent = '🔍 Looking up barcode ' + barcode + '…';
+  await stopScanner();
+  try {
+    // Try Australian Open Food Facts first, fall back to global
+    let data = null;
+    for (const base of ['https://au.openfoodfacts.org', 'https://world.openfoodfacts.org']) {
+      const res = await fetch(`${base}/api/v2/product/${barcode}.json?fields=product_name,brands,nutriments,serving_size,categories_tags`);
+      const json = await res.json();
+      if (json.status === 1 && json.product) { data = json.product; break; }
+    }
+    if (!data) {
+      document.getElementById('scanner-status').textContent = '⚠️ Product not found for barcode ' + barcode + '. Try adding it manually.';
+      return;
+    }
+    // Pre-fill the product form
+    const n = data.nutriments || {};
+    const serving = parseFloat(data.serving_size) || 100;
+    const scale = serving / 100;
+    document.getElementById('p-name').value  = data.product_name || '';
+    document.getElementById('p-brand').value = data.brands || '';
+    document.getElementById('p-serve').value = Math.round(serving);
+    document.getElementById('p-kcal').value  = n['energy-kcal_serving'] ? Math.round(n['energy-kcal_serving']) : (n['energy-kcal_100g'] ? Math.round(n['energy-kcal_100g'] * scale) : '');
+    document.getElementById('p-prot').value  = n['proteins_serving']   ? n['proteins_serving'].toFixed(1)   : (n['proteins_100g']   ? (n['proteins_100g']   * scale).toFixed(1) : '');
+    document.getElementById('p-carb').value  = n['carbohydrates_serving'] ? n['carbohydrates_serving'].toFixed(1) : (n['carbohydrates_100g'] ? (n['carbohydrates_100g'] * scale).toFixed(1) : '');
+    document.getElementById('p-fat').value   = n['fat_serving']        ? n['fat_serving'].toFixed(1)        : (n['fat_100g']        ? (n['fat_100g']        * scale).toFixed(1) : '');
+    // Guess category from tags
+    const tags = (data.categories_tags || []).join(' ');
+    const catMap = [['dairy','Dairy'],['yogurt','Dairy'],['fish','Protein'],['meat','Protein'],['legume','Carbs'],['cereal','Carbs'],['bread','Carbs'],['fruit','Fruit & Veg'],['vegetable','Fruit & Veg'],['snack','Snack'],['beverage','Drink'],['supplement','Supplement']];
+    const matched = catMap.find(([k]) => tags.includes(k));
+    if (matched) document.getElementById('p-cat').value = matched[1];
+    closeScanner();
+    toast('✅ ' + (data.product_name || 'Product') + ' found — check details and save');
+  } catch(e) {
+    document.getElementById('scanner-status').textContent = '⚠️ Lookup failed. Check your internet connection.';
+  }
+}
+
+async function stopScanner() {
+  if (html5QrCode) {
+    try { await html5QrCode.stop(); } catch(e) {}
+    try { html5QrCode.clear(); } catch(e) {}
+    html5QrCode = null;
+  }
+}
+
+function closeScanner() {
+  stopScanner();
+  document.getElementById('scanner-modal').classList.remove('open');
+}
+
+document.getElementById('btn-scan-barcode').addEventListener('click', openScanner);
+document.getElementById('scanner-close').addEventListener('click', closeScanner);
+document.getElementById('scanner-stop-btn').addEventListener('click', closeScanner);
+document.getElementById('scanner-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('scanner-modal')) closeScanner();
+});
+
+// ============================================================
+// INIT
+// ============================================================
+load();
+renderAll();
+</script>
+</body>
+</html>

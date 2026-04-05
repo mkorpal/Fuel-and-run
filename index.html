@@ -1766,7 +1766,7 @@ function aggregateCalorieData(log, days) {
     for (let i = days-1; i >= 0; i--) {
       const d = new Date(today); d.setDate(d.getDate() - i);
       const ds = dateStr(d);
-      labels.push(ds.slice(5)); // MM-DD
+      labels.push(ds.slice(8) + '/' + ds.slice(5,7)); // DD/MM
       const e = log.find(l => l.date === ds);
       consumed.push(e != null ? e.consumed : null);
       used.push(e != null ? e.tdee : null);
@@ -1781,7 +1781,7 @@ function aggregateCalorieData(log, days) {
       const ds = dateStr(d);
       const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay()+6)%7));
       const wk = dateStr(mon);
-      if (!buckets.has(wk)) buckets.set(wk, { consumed: [], used: [], label: wk.slice(5) });
+      if (!buckets.has(wk)) buckets.set(wk, { consumed: [], used: [], label: wk.slice(8) + '/' + wk.slice(5,7) });
       const e = log.find(l => l.date === ds);
       if (e) { buckets.get(wk).consumed.push(e.consumed); buckets.get(wk).used.push(e.tdee); }
     }
@@ -1798,7 +1798,8 @@ function aggregateCalorieData(log, days) {
     const d = new Date(today); d.setDate(d.getDate() - i);
     const ds = dateStr(d);
     const mo = ds.slice(0,7);
-    if (!buckets.has(mo)) buckets.set(mo, { consumed: [], used: [], label: mo.slice(5) });
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    if (!buckets.has(mo)) buckets.set(mo, { consumed: [], used: [], label: MONTHS[parseInt(mo.slice(5,7),10)-1] });
     const e = log.find(l => l.date === ds);
     if (e) { buckets.get(mo).consumed.push(e.consumed); buckets.get(mo).used.push(e.tdee); }
   }

@@ -933,13 +933,21 @@ function setSyncKey(passphrase) {
 let syncKey = getSyncKey();
 
 async function pushToCloud() {
+  if (!syncKey) return;
   try {
-    await sb.from('fuelrun_data').upsert({
+    const { error } = await sb.from('fuelrun_data').upsert({
       sync_key: syncKey,
       data: state,
       updated_at: new Date().toISOString()
     });
-  } catch(e) { /* silent — local save already done */ }
+    if (error) {
+      console.error('Push failed:', error.message);
+      setSyncStatus('⚠️ Push failed: ' + error.message);
+    }
+  } catch(e) {
+    console.error('Push exception:', e);
+    setSyncStatus('⚠️ Push error — check connection');
+  }
 }
 
 async function pullFromCloud(key) {
@@ -948,9 +956,16 @@ async function pullFromCloud(key) {
       .select('data')
       .eq('sync_key', key)
       .single();
-    if (error || !data) return null;
-    return data.data;
-  } catch(e) { return null; }
+    if (error) {
+      // PGRST116 = no rows, which is fine for first-time setup
+      if (error.code !== 'PGRST116') console.warn('Pull issue:', error.message);
+      return null;
+    }
+    return data?.data || null;
+  } catch(e) {
+    console.error('Pull exception:', e);
+    return null;
+  }
 }
 
 // ============================================================
@@ -1071,16 +1086,17 @@ function load() {
   } catch(e) {}
   if (syncKey) {
     setSyncStatus('⏳ Checking cloud…');
-    pullFromCloud(syncKey).then(remote => {
+    pullFromCloud(syncKey).then(async remote => {
       if (remote) {
         const merged = mergeStates(state, remote);
         applyParsed(merged);
         localStorage.setItem('fuelrun', JSON.stringify(state));
-        pushToCloud();
+        await pushToCloud();
         renderAll();
         setSyncStatus('✔ Synced · ' + new Date().toLocaleTimeString());
       } else {
-        pushToCloud().then(() => setSyncStatus('✔ Ready · ' + new Date().toLocaleTimeString()));
+        await pushToCloud();
+        setSyncStatus('✔ Ready · ' + new Date().toLocaleTimeString());
       }
     }).catch(() => setSyncStatus('⚠️ Cloud unavailable — using local data'));
   } else {
@@ -1099,17 +1115,14 @@ async function doAutoSync() {
     const remote = await pullFromCloud(syncKey);
     if (remote) {
       const merged = mergeStates(state, remote);
-      // Use sorted stringify for reliable comparison
-      const sortedStringify = o => JSON.stringify(o, Object.keys(o).sort());
-      if (sortedStringify(merged) !== sortedStringify(state)) {
-        applyParsed(merged);
-        localStorage.setItem('fuelrun', JSON.stringify(state));
-        await pushToCloud();
-        renderAll();
-        setSyncStatus('✔ Updated · ' + new Date().toLocaleTimeString());
-      }
+      // Always apply merge — merge is idempotent so this is safe
+      applyParsed(merged);
+      localStorage.setItem('fuelrun', JSON.stringify(state));
+      await pushToCloud();
+      renderAll();
+      setSyncStatus('✔ Synced · ' + new Date().toLocaleTimeString());
     }
-  } catch(e) {}
+  } catch(e) { console.error('Auto-sync error:', e); }
   _syncBusy = false;
 }
 
@@ -1329,6 +1342,7 @@ document.getElementById('fit-input').addEventListener('change', async (e) => {
     const ap = activeProfile();
     if (!ap.weekSessions) ap.weekSessions = {};
     let imported = 0;
+    const importedWeekKeys = new Set();
 
     for (const file of files) {
       const arrayBuf = await file.arrayBuffer();
@@ -1337,13 +1351,36 @@ document.getElementById('fit-input').addEventListener('change', async (e) => {
         parser.parse(arrayBuf, (err, d) => err ? reject(err) : resolve(d));
       });
 
+      // Extract Garmin device timezone offset from activity record
+      let garminOffsetMs = null;
+      if (data.activities && data.activities.length > 0) {
+        const act = data.activities[0];
+        if (act.local_timestamp && act.timestamp) {
+          garminOffsetMs = new Date(act.local_timestamp).getTime() - new Date(act.timestamp).getTime();
+        }
+      }
+
       const sessions = data.sessions || [];
       for (const s of sessions) {
-        const startDate = new Date(s.start_time || s.timestamp);
-        if (isNaN(startDate.getTime())) continue;
-        const dayMon0 = (startDate.getDay() + 6) % 7; // 0=Mon
-        const monday = new Date(startDate);
-        monday.setDate(startDate.getDate() - dayMon0);
+        const startUtc = new Date(s.start_time || s.timestamp);
+        if (isNaN(startUtc.getTime())) continue;
+
+        // Determine local date using Garmin device timezone, fallback to browser TZ
+        let localYear, localMonth, localDay;
+        if (garminOffsetMs !== null) {
+          const garminLocal = new Date(startUtc.getTime() + garminOffsetMs);
+          localYear = garminLocal.getUTCFullYear();
+          localMonth = garminLocal.getUTCMonth();
+          localDay = garminLocal.getUTCDate();
+        } else {
+          localYear = startUtc.getFullYear();
+          localMonth = startUtc.getMonth();
+          localDay = startUtc.getDate();
+        }
+        const localDate = new Date(localYear, localMonth, localDay);
+        const dayMon0 = (localDate.getDay() + 6) % 7; // 0=Mon
+        const monday = new Date(localDate);
+        monday.setDate(localDate.getDate() - dayMon0);
         monday.setHours(0, 0, 0, 0);
         const weekKey = isoWeekKey(monday);
 
@@ -1372,7 +1409,25 @@ document.getElementById('fit-input').addEventListener('change', async (e) => {
         if (!ap.weekSessions[weekKey]) ap.weekSessions[weekKey] = [];
         ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(x => x.day !== dayMon0);
         ap.weekSessions[weekKey].push(session);
+        importedWeekKeys.add(weekKey);
         imported++;
+      }
+    }
+
+    // Navigate to the week of the last imported session
+    if (imported > 0 && importedWeekKeys.size > 0) {
+      const sortedImported = [...importedWeekKeys].sort();
+      const thisMonday = mondayOfOffset(0);
+      const thisWeekKey = isoWeekKey(thisMonday);
+      const targetKey = sortedImported[sortedImported.length - 1];
+      if (targetKey < thisWeekKey) {
+        const diff = Math.round((thisMonday - mondayFromWeekKey(targetKey)) / (7 * 86400000));
+        weekOffset = -diff;
+      } else if (targetKey > thisWeekKey) {
+        const diff = Math.round((mondayFromWeekKey(targetKey) - thisMonday) / (7 * 86400000));
+        weekOffset = diff;
+      } else {
+        weekOffset = 0;
       }
     }
 
@@ -1381,7 +1436,7 @@ document.getElementById('fit-input').addEventListener('change', async (e) => {
     if (ap.weekSessions[curWk]) ap.sessions = ap.weekSessions[curWk];
 
     save(); renderAll();
-    toast('✅ Imported ' + imported + ' Garmin session(s)');
+    toast('✅ Imported ' + imported + ' Garmin session(s)' + (imported > 0 ? ' — navigated to that week' : ''));
   } catch (err) {
     console.error('FIT parse error:', err);
     toast('❌ Failed to parse .fit file — check console');
@@ -1495,6 +1550,20 @@ function mondayOfOffset(offset) {
   monday.setDate(today.getDate() - todayMon0 + offset * 7);
   monday.setHours(0, 0, 0, 0);
   return monday;
+}
+
+// Returns Monday Date from an ISO week key like "2026-W14"
+function mondayFromWeekKey(wk) {
+  const [y, w] = wk.split('-W').map(Number);
+  // Jan 4 is always in ISO week 1
+  const jan4 = new Date(y, 0, 4);
+  const jan4Mon0 = (jan4.getDay() + 6) % 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setDate(jan4.getDate() - jan4Mon0);
+  const result = new Date(week1Monday);
+  result.setDate(week1Monday.getDate() + (w - 1) * 7);
+  result.setHours(0, 0, 0, 0);
+  return result;
 }
 
 function weekRangeLabel(monday) {

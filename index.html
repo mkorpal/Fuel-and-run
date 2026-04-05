@@ -1243,6 +1243,10 @@ function dailyTargets(dayIdx) {
 function renderWeekGrid() {
   const today = new Date();
   const todayMon0 = (today.getDay() + 6) % 7;
+  // Find Monday of the current week
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - todayMon0);
+  monday.setHours(0, 0, 0, 0);
   const grid = document.getElementById('week-grid');
   if (!grid) return;
   grid.innerHTML = '';
@@ -1250,6 +1254,9 @@ function renderWeekGrid() {
     const s = sessionForDay(d);
     const t = dailyTargets(d);
     const isToday = d === todayMon0;
+    const cellDate = new Date(monday);
+    cellDate.setDate(monday.getDate() + d);
+    const dateLabel = cellDate.getDate() + '/' + String(cellDate.getMonth() + 1).padStart(2, '0');
     const cell = document.createElement('div');
     cell.className = 'day-cell';
     if (isToday) cell.style.borderColor = 'var(--accent)';
@@ -1259,7 +1266,7 @@ function renderWeekGrid() {
     const durInfo = s && s.dur ? `${s.dur}min` : '';
     cell.innerHTML = `
       <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
-      <div class="day-date">${d+1}</div>
+      <div class="day-date">${dateLabel}</div>
       <span class="workout-tag ${tagClass}">${tagLabel}</span>
       ${distInfo ? `<div style="font-size:.72rem; color:var(--muted);">${distInfo} ${durInfo}</div>` : ''}
       ${s && s.intensity !== 'easy' ? `<div><span class="badge ${s.intensity==='hard'||s.intensity==='race'?'badge-red':'badge-amber'}">${s.intensity}</span></div>` : ''}

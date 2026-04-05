@@ -892,7 +892,7 @@ window.deleteProduct = id => {
   toast('Product removed');
 };
 
-document.getElementById('product-form').addEventListener('submit', () => {
+function saveProductFromForm() {
   const name = document.getElementById('p-name').value.trim();
   if (!name) return;
   const product = {
@@ -910,7 +910,15 @@ document.getElementById('product-form').addEventListener('submit', () => {
   state.products.unshift(product);
   save(); renderProducts();
   document.getElementById('product-form').reset();
+  // Scroll product list into view so user can see the saved card
+  const list = document.getElementById('product-list');
+  if (list) list.scrollIntoView({ behavior: 'smooth', block: 'start' });
   toast('Product saved: ' + name);
+}
+
+document.getElementById('product-form').addEventListener('submit', e => {
+  e.preventDefault();
+  saveProductFromForm();
 });
 
 // ============================================================
@@ -1168,7 +1176,9 @@ async function onBarcodeScanned(barcode) {
     const matched = catMap.find(([k]) => tags.includes(k));
     if (matched) document.getElementById('p-cat').value = matched[1];
     closeScanner();
-    toast('✅ ' + (data.product_name || 'Product') + ' found — check details and save');
+    // Auto-save the product immediately — don't rely on user finding and tapping the form on mobile
+    saveProductFromForm();
+    toast('✅ ' + (data.product_name || 'Product') + ' saved to pantry');
   } catch(e) {
     document.getElementById('scanner-status').textContent = '⚠️ Lookup failed. Check your internet connection.';
   }

@@ -202,7 +202,6 @@
   }
   .product-chip:hover, .product-chip.active { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
   .product-chip .pchip-name { font-weight: 600; }
-  .product-chip .pchip-kcal { font-size: .7rem; color: var(--muted); }
   .product-chip .pchip-del {
     background: none; border: none; cursor: pointer; color: var(--muted); font-size: .7rem; padding: 0; margin-left: .1rem;
   }
@@ -1702,7 +1701,6 @@ function renderProducts() {
          onclick="toggleProductCard('${p.id}', event)"
          draggable="true" ondragstart="startDrag(event,'product','${p.id}')">
       <span class="pchip-name">${p.nickname || p.name}</span>
-      ${p.kcal ? `<span class="pchip-kcal">${p.kcal}kcal</span>` : ''}
       <button class="pchip-log" onclick="event.stopPropagation(); openQtyModal('product','${p.id}')">＋</button>
       <button class="pchip-del" onclick="event.stopPropagation(); deleteProduct('${p.id}')" title="Delete">✕</button>
       <div class="product-detail-pop" onclick="event.stopPropagation()">

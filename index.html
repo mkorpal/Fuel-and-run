@@ -200,7 +200,20 @@
   .plog-btn:hover { opacity: .85; }
 
   /* ---- Today's Plate ---- */
-  .plate-panel { position: sticky; top: 1rem; min-width: 240px; width: 260px; flex-shrink: 0; }
+  .plate-panel { min-width: 220px; width: 240px; flex-shrink: 0; }
+  @media (min-width: 640px) {
+    .plate-panel { position: sticky; top: 1rem; }
+  }
+  .pantry-layout {
+    display: grid;
+    grid-template-columns: 1fr 240px;
+    gap: 1rem;
+    align-items: start;
+  }
+  @media (max-width: 639px) {
+    .pantry-layout { grid-template-columns: 1fr; }
+    .pantry-layout .plate-panel { order: -1; }
+  }
   .plate-zone {
     position: relative;
     border: 2.5px dashed var(--border); border-radius: 50%;
@@ -583,15 +596,15 @@
           <button class="btn btn-secondary" type="button" id="btn-scan-barcode">📷 Scan Barcode</button>
         </form>
       </div>
-      <div style="display:flex; gap:1rem; align-items:start; flex-wrap:wrap;">
-        <div class="card" style="flex:1; min-width:260px;">
+      <div class="pantry-layout">
+        <div class="card">
           <div class="card-title">My Product Pantry</div>
           <p style="font-size:.8rem; color:var(--muted); margin-bottom:.75rem;">Click a card to see nutrition. <strong>Drag</strong> it onto the plate (or tap <strong>＋</strong>) to log it for today.</p>
           <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap:.6rem;" id="product-list"></div>
           <p id="no-products" style="color:var(--muted); font-size:.85rem;">No products saved yet. Add your first product above.</p>
         </div>
         <div class="card plate-panel" id="plate-products-wrap">
-          <div class="card-title" style="text-align:center;">🍽️ Today's Plate</div>
+          <div class="card-title" style="text-align:center;">🍽️ Today’s Plate</div>
           <div class="plate-zone" id="plate-zone-products"
                ondragover="event.preventDefault(); document.getElementById('plate-zone-products').classList.add('drag-over')"
                ondragleave="document.getElementById('plate-zone-products').classList.remove('drag-over')"
@@ -616,8 +629,8 @@
 
     <!-- MY MEALS -->
     <section id="tab-meals" class="section">
-      <div style="display:flex; gap:1rem; align-items:start; flex-wrap:wrap;">
-        <div class="card" style="flex:1; min-width:260px;">
+      <div class="pantry-layout">
+        <div class="card">
           <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
             <span>🍽️ My Meals</span>
             <button class="btn btn-primary btn-sm" id="btn-new-meal">+ Create Meal</button>

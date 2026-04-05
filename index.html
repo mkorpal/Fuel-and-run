@@ -776,6 +776,7 @@
             <button class="btn btn-secondary btn-sm" id="btn-change-passphrase" style="font-size:.75rem; padding:.2rem .5rem;">Change</button>
           </div>
           <span id="sync-status" style="font-size:.8rem; color:var(--muted);"></span>
+          <button class="btn btn-secondary btn-sm" id="btn-sync-now" style="font-size:.72rem; padding:.15rem .45rem; margin-left:.5rem;">🔄 Sync Now</button>
         </div>
         <!-- Setup state (shown when no passphrase set, or changing) -->
         <div id="sync-setup-state">
@@ -1109,6 +1110,18 @@ function startAutoSync() {
   if (_autoSyncTimer) clearInterval(_autoSyncTimer);
   if (syncKey) _autoSyncTimer = setInterval(doAutoSync, 30000);
 }
+
+// Manual sync trigger
+document.getElementById('btn-sync-now').addEventListener('click', () => {
+  if (!syncKey) { toast('Set a passphrase first'); return; }
+  setSyncStatus('⏳ Syncing…');
+  doAutoSync().then(() => {
+    pushToCloud().then(() => {
+      setSyncStatus('✔ Synced · ' + new Date().toLocaleTimeString());
+      toast('Sync complete');
+    });
+  });
+});
 
 function setSyncStatus(msg) {
   // Write to whichever status element is currently visible
@@ -1772,7 +1785,8 @@ function renderProducts() {
   const list = document.getElementById('product-list');
   const none = document.getElementById('no-products');
   if (!list) return;
-  if (!state.products.length) {
+  const activeProducts = state.products.filter(p => !p.deletedAt);
+  if (!activeProducts.length) {
     list.innerHTML = ''; none.style.display = '';
     return;
   }
@@ -1780,7 +1794,7 @@ function renderProducts() {
 
   // Group products by category
   const groups = {};
-  state.products.forEach(p => {
+  activeProducts.forEach(p => {
     const cat = p.cat || 'Other';
     if (!groups[cat]) groups[cat] = [];
     groups[cat].push(p);
@@ -1838,7 +1852,8 @@ document.addEventListener('click', e => {
 });
 
 window.deleteProduct = id => {
-  state.products = state.products.filter(p => p.id !== id);
+  const p = state.products.find(x => x.id === id);
+  if (p) { p.deletedAt = new Date().toISOString(); p.updatedAt = new Date().toISOString(); }
   save(); renderProducts();
   toast('Product removed');
 };
@@ -2088,7 +2103,8 @@ document.getElementById('btn-save-meal').addEventListener('click', () => {
 
 // ---- Delete meal ----
 window.deleteMeal = id => {
-  state.meals = state.meals.filter(m => m.id !== id);
+  const m = state.meals.find(x => x.id === id);
+  if (m) { m.deletedAt = new Date().toISOString(); m.updatedAt = new Date().toISOString(); }
   save(); renderMeals();
   toast('Meal removed');
 };
@@ -2110,7 +2126,7 @@ function renderMeals() {
   const none = document.getElementById('no-meals');
   if (!grid) return;
 
-  const filtered = state.meals.filter(m => mealFilter === 'all' || m.type === mealFilter);
+  const filtered = state.meals.filter(m => !m.deletedAt && (mealFilter === 'all' || m.type === mealFilter));
   if (!filtered.length) {
     grid.innerHTML = '';
     none.style.display = '';

@@ -619,6 +619,7 @@
         <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.75rem;">
           <div style="background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:.4rem .9rem; font-family:monospace; font-size:.95rem; font-weight:700; letter-spacing:.05em;" id="sync-code-display">…loading</div>
           <button class="btn btn-secondary btn-sm" id="btn-copy-sync-code">📋 Copy</button>
+          <button class="btn btn-primary btn-sm" id="btn-push-now">↗️ Push my data</button>
           <span id="sync-status" style="font-size:.8rem; color:var(--muted);"></span>
         </div>
         <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
@@ -794,14 +795,19 @@ function load() {
     const d = localStorage.getItem('fuelrun');
     if (d) applyParsed(JSON.parse(d));
   } catch(e) {}
-  // Async pull from cloud to catch changes made on other devices
+  // Async cloud sync: pull latest, or push local data if cloud is empty
+  setSyncStatus('⏳ Checking cloud…');
   pullFromCloud(syncKey).then(remote => {
-    if (!remote) return;
-    applyParsed(remote);
-    localStorage.setItem('fuelrun', JSON.stringify(state));
-    renderAll();
-    setSyncStatus('✔ Synced from cloud');
-  });
+    if (remote) {
+      applyParsed(remote);
+      localStorage.setItem('fuelrun', JSON.stringify(state));
+      renderAll();
+      setSyncStatus('✔ Synced from cloud');
+    } else {
+      // Nothing in cloud for this key yet — push local data up so other devices can find it
+      pushToCloud().then(() => setSyncStatus('✔ Data pushed to cloud'));
+    }
+  }).catch(() => setSyncStatus('⚠️ Cloud unavailable — using local data'));
 }
 
 function setSyncStatus(msg) {
@@ -1733,6 +1739,13 @@ function renderSyncCode() {
 
 document.getElementById('btn-copy-sync-code').addEventListener('click', () => {
   navigator.clipboard.writeText(syncKey).then(() => toast('Sync code copied'));
+});
+
+document.getElementById('btn-push-now').addEventListener('click', async () => {
+  setSyncStatus('⏳ Pushing…');
+  await pushToCloud();
+  setSyncStatus('✔ Data pushed — other devices can now connect');
+  toast('✅ Data pushed to cloud');
 });
 
 document.getElementById('btn-join-sync').addEventListener('click', async () => {

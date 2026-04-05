@@ -615,19 +615,20 @@
       </div>
       <div class="card" style="border-left: 4px solid var(--accent2);">
         <div class="card-title">☁️ Cloud Sync</div>
-        <p style="font-size:.85rem; color:var(--muted); margin-bottom:.75rem;">Your data syncs automatically across all your devices. Share your <strong>Sync Code</strong> on any other device to connect them.</p>
-        <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.75rem;">
-          <div style="background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:.4rem .9rem; font-family:monospace; font-size:.95rem; font-weight:700; letter-spacing:.05em;" id="sync-code-display">…loading</div>
-          <button class="btn btn-secondary btn-sm" id="btn-copy-sync-code">📋 Copy</button>
-          <button class="btn btn-primary btn-sm" id="btn-push-now">↗️ Push my data</button>
-          <span id="sync-status" style="font-size:.8rem; color:var(--muted);"></span>
+        <p style="font-size:.85rem; color:var(--muted); margin-bottom:.75rem;">
+          Choose a passphrase and use the <strong>same passphrase on all your devices</strong>. Data syncs automatically whenever you save and checks for updates every 30 seconds.
+        </p>
+        <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.6rem;">
+          <input type="text" id="sync-passphrase-input" placeholder="e.g. marysia-runner-2024"
+                 autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
+                 style="flex:1; min-width:200px; padding:.45rem .75rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.88rem;" />
+          <button class="btn btn-primary btn-sm" id="btn-set-passphrase">Set & Sync</button>
         </div>
-        <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
-          <input type="text" id="sync-code-input" placeholder="Enter code from another device" style="flex:1; min-width:200px; padding:.45rem .75rem; border:1px solid var(--border); border-radius:var(--radius); font-family:monospace; font-size:.88rem;" />
-          <button class="btn btn-primary btn-sm" id="btn-join-sync">Connect</button>
+        <div style="font-size:.82rem; color:var(--muted); display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
+          <span>Current: <strong id="sync-key-shown">—</strong></span>
+          <span id="sync-status"></span>
         </div>
-        <p style="font-size:.75rem; color:var(--muted); margin-top:.6rem;">ℹ️ Connecting will merge both devices' data together — everything from both is kept.</p>
-        <!-- Keep export/import as backup -->
+        <!-- Manual backup -->
         <div style="margin-top:.75rem; padding-top:.75rem; border-top:1px solid var(--border); display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">
           <span style="font-size:.78rem; color:var(--muted);">Manual backup:</span>
           <button class="btn btn-secondary btn-sm" id="btn-export-data">⬇️ Export JSON</button>
@@ -735,16 +736,17 @@ const SUPABASE_URL  = 'https://etoyshpywiidfrejvggg.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_m5xRuLVUCZvidriDLN3H0A_TYn8RjqF';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-// Generate or retrieve the local sync key
+// Passphrase-based sync key: user sets a memorable word/phrase, same on all devices
+function normalisePassphrase(raw) {
+  return raw.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\-_]/g, '');
+}
 function getSyncKey() {
-  let key = localStorage.getItem('fuelrun_sync_key');
-  if (!key) {
-    // Generate a short human-friendly code
-    key = Math.random().toString(36).slice(2,6).toUpperCase() +
-          '-' +
-          Math.random().toString(36).slice(2,6).toUpperCase();
-    localStorage.setItem('fuelrun_sync_key', key);
-  }
+  return localStorage.getItem('fuelrun_sync_key') || '';
+}
+function setSyncKey(passphrase) {
+  const key = 'fr-' + normalisePassphrase(passphrase);
+  localStorage.setItem('fuelrun_sync_key', key);
+  syncKey = key;
   return key;
 }
 
@@ -844,21 +846,51 @@ function load() {
     const d = localStorage.getItem('fuelrun');
     if (d) applyParsed(JSON.parse(d));
   } catch(e) {}
-  // Async cloud sync: merge with cloud, or push local data if cloud is empty
-  setSyncStatus('⏳ Checking cloud…');
-  pullFromCloud(syncKey).then(remote => {
+  if (syncKey) {
+    setSyncStatus('⏳ Checking cloud…');
+    pullFromCloud(syncKey).then(remote => {
+      if (remote) {
+        const merged = mergeStates(state, remote);
+        applyParsed(merged);
+        localStorage.setItem('fuelrun', JSON.stringify(state));
+        pushToCloud();
+        renderAll();
+        setSyncStatus('✔ Synced · ' + new Date().toLocaleTimeString());
+      } else {
+        pushToCloud().then(() => setSyncStatus('✔ Ready · ' + new Date().toLocaleTimeString()));
+      }
+    }).catch(() => setSyncStatus('⚠️ Cloud unavailable — using local data'));
+  } else {
+    setSyncStatus('No passphrase set — enter one below to enable sync');
+  }
+  startAutoSync();
+}
+
+let _autoSyncTimer = null;
+let _syncBusy = false;
+
+async function doAutoSync() {
+  if (!syncKey || _syncBusy) return;
+  _syncBusy = true;
+  try {
+    const remote = await pullFromCloud(syncKey);
     if (remote) {
       const merged = mergeStates(state, remote);
-      applyParsed(merged);
-      localStorage.setItem('fuelrun', JSON.stringify(state));
-      pushToCloud(); // push merged data back so cloud stays up to date
-      renderAll();
-      setSyncStatus('✔ Synced from cloud');
-    } else {
-      // Nothing in cloud for this key yet — push local data up so other devices can find it
-      pushToCloud().then(() => setSyncStatus('✔ Data pushed to cloud'));
+      if (JSON.stringify(merged) !== JSON.stringify(state)) {
+        applyParsed(merged);
+        localStorage.setItem('fuelrun', JSON.stringify(state));
+        pushToCloud();
+        renderAll();
+        setSyncStatus('✔ Updated · ' + new Date().toLocaleTimeString());
+      }
     }
-  }).catch(() => setSyncStatus('⚠️ Cloud unavailable — using local data'));
+  } catch(e) {}
+  _syncBusy = false;
+}
+
+function startAutoSync() {
+  if (_autoSyncTimer) clearInterval(_autoSyncTimer);
+  if (syncKey) _autoSyncTimer = setInterval(doAutoSync, 30000);
 }
 
 function setSyncStatus(msg) {
@@ -1787,41 +1819,34 @@ window.deleteProfile = id => {
 // CLOUD SYNC UI
 // ============================================================
 function renderSyncCode() {
-  const el = document.getElementById('sync-code-display');
-  if (el) el.textContent = syncKey;
+  const el = document.getElementById('sync-key-shown');
+  if (el) el.textContent = syncKey ? syncKey.replace(/^fr-/, '') : '(none)';
+  const input = document.getElementById('sync-passphrase-input');
+  if (input && syncKey) input.placeholder = syncKey.replace(/^fr-/, '');
 }
 
-document.getElementById('btn-copy-sync-code').addEventListener('click', () => {
-  navigator.clipboard.writeText(syncKey).then(() => toast('Sync code copied'));
-});
-
-document.getElementById('btn-push-now').addEventListener('click', async () => {
-  setSyncStatus('⏳ Pushing…');
-  await pushToCloud();
-  setSyncStatus('✔ Data pushed — other devices can now connect');
-  toast('✅ Data pushed to cloud');
-});
-
-document.getElementById('btn-join-sync').addEventListener('click', async () => {
-  const input = document.getElementById('sync-code-input').value.trim().toUpperCase();
-  if (!input) { toast('Enter a sync code first'); return; }
-  setSyncStatus('⏳ Connecting…');
-  const remote = await pullFromCloud(input);
-  if (!remote) {
-    setSyncStatus('⚠️ Code not found — check and try again');
-    toast('⚠️ No data found for that code');
-    return;
-  }
-  const merged = mergeStates(state, remote);
-  syncKey = input;
-  localStorage.setItem('fuelrun_sync_key', syncKey);
-  applyParsed(merged);
-  save();
-  renderAll();
+document.getElementById('btn-set-passphrase').addEventListener('click', async () => {
+  const raw = document.getElementById('sync-passphrase-input').value.trim();
+  if (!raw) { toast('Please enter a passphrase'); return; }
+  const newKey = setSyncKey(raw);
+  document.getElementById('sync-passphrase-input').value = '';
   renderSyncCode();
-  document.getElementById('sync-code-input').value = '';
-  setSyncStatus('✔ Merged and synced');
-  toast('✅ Data merged from both devices');
+  setSyncStatus('⏳ Connecting…');
+  const remote = await pullFromCloud(newKey);
+  if (remote) {
+    const merged = mergeStates(state, remote);
+    applyParsed(merged);
+    localStorage.setItem('fuelrun', JSON.stringify(state));
+    pushToCloud();
+    renderAll();
+    setSyncStatus('✔ Synced · ' + new Date().toLocaleTimeString());
+    toast('✅ Connected — data merged from cloud');
+  } else {
+    await pushToCloud();
+    setSyncStatus('✔ Passphrase set · ' + new Date().toLocaleTimeString());
+    toast('✅ Passphrase set — use the same one on your other devices');
+  }
+  startAutoSync();
 });
 
 // EXPORT / IMPORT (manual backup)

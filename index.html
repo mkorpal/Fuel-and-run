@@ -441,7 +441,7 @@
   </header>
   <nav id="main-nav">
     <button class="active" data-tab="dashboard">Dashboard</button>
-    <button data-tab="training">Your Week</button>
+    <button data-tab="training">My Week</button>
     <button data-tab="nutrition">Daily Targets</button>
     <button data-tab="products">My Products</button>
     <button data-tab="meals">My Meals</button>
@@ -504,32 +504,25 @@
       </div>
     </section>
 
-    <!-- YOUR WEEK -->
+    <!-- MY WEEK -->
     <section id="tab-training" class="section">
 
-      <!-- ── Training Plan ─────────────────────────────── -->
       <div class="card">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem;">
-          <span>🏃 Training Plan &amp; Log</span>
+          <span>📅 My Week</span>
           <button class="btn btn-secondary btn-sm" id="btn-import-fit" onclick="document.getElementById('fit-input').click()" style="font-size:.72rem;">⌚ Import Garmin .fit</button>
           <input type="file" id="fit-input" accept=".fit" multiple style="display:none" />
         </div>
         <div class="week-nav">
-          <button class="week-nav-btn" id="training-prev">← Prev</button>
-          <span class="week-nav-label" id="training-week-label"></span>
-          <button class="week-nav-btn" id="training-next">Next →</button>
+          <button class="week-nav-btn" id="week-prev">← Prev</button>
+          <span class="week-nav-label" id="week-label"></span>
+          <button class="week-nav-btn" id="week-next">Next →</button>
         </div>
-        <div class="week-grid" id="week-grid"></div>
-      </div>
 
-      <!-- ── Meal Plan ──────────────────────────────────── -->
-      <div class="card">
-        <div class="card-title">🍽️ Meal Plan &amp; Log</div>
-        <div class="week-nav">
-          <button class="week-nav-btn" id="meal-prev">← Prev</button>
-          <span class="week-nav-label" id="meal-week-label"></span>
-          <button class="week-nav-btn" id="meal-next">Next →</button>
-        </div>
+        <div style="font-size:.78rem; font-weight:600; color:var(--muted); margin:.6rem 0 .3rem; text-transform:uppercase; letter-spacing:.04em;">🏃 Training</div>
+        <div class="week-grid" id="week-grid"></div>
+
+        <div style="font-size:.78rem; font-weight:600; color:var(--muted); margin:.8rem 0 .3rem; text-transform:uppercase; letter-spacing:.04em;">🍽️ Meals &amp; Nutrition</div>
         <div class="week-grid" id="meal-week-grid"></div>
       </div>
 
@@ -1248,7 +1241,7 @@ document.getElementById('btn-demo').addEventListener('click', () => {
   const ap = activeProfile();
   ap.sessions = demoSess;
   if (!ap.weekSessions) ap.weekSessions = {};
-  ap.weekSessions[isoWeekKey(mondayOfOffset(trainingWeekOffset))] = demoSess;
+  ap.weekSessions[isoWeekKey(mondayOfOffset(weekOffset))] = demoSess;
   document.getElementById('ics-filename').textContent = '✅ Demo week loaded';
   save(); renderAll();
   toast('Demo training week loaded');
@@ -1257,9 +1250,9 @@ document.getElementById('btn-demo').addEventListener('click', () => {
 document.getElementById('btn-clear-training').addEventListener('click', () => {
   const ap = activeProfile();
   if (!ap.weekSessions) ap.weekSessions = {};
-  const wk = isoWeekKey(mondayOfOffset(trainingWeekOffset));
+  const wk = isoWeekKey(mondayOfOffset(weekOffset));
   ap.weekSessions[wk] = [];
-  if (trainingWeekOffset === 0) ap.sessions = [];
+  if (weekOffset === 0) ap.sessions = [];
   document.getElementById('ics-filename').textContent = '';
   save(); renderAll();
   toast('Schedule cleared');
@@ -1380,11 +1373,11 @@ document.getElementById('btn-add-session').addEventListener('click', () => {
   const intensity = document.getElementById('man-int').value;
   const ap = activeProfile();
   if (!ap.weekSessions) ap.weekSessions = {};
-  const wk = isoWeekKey(mondayOfOffset(trainingWeekOffset));
+  const wk = isoWeekKey(mondayOfOffset(weekOffset));
   if (!ap.weekSessions[wk]) ap.weekSessions[wk] = [];
   ap.weekSessions[wk] = ap.weekSessions[wk].filter(s => s.day !== dayIdx);
   ap.weekSessions[wk].push({ day: dayIdx, type, dist, dur, intensity, title: type.charAt(0).toUpperCase()+type.slice(1), updatedAt: new Date().toISOString() });
-  if (trainingWeekOffset === 0) ap.sessions = ap.weekSessions[wk]; // keep legacy array in sync
+  if (weekOffset === 0) ap.sessions = ap.weekSessions[wk]; // keep legacy array in sync
   save(); renderAll();
   toast('Session saved for ' + dayName);
 });
@@ -1397,7 +1390,7 @@ const ABBR = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 function sessionForDay(dayIdx) {
   const ap = activeProfile();
-  const wk = isoWeekKey(mondayOfOffset(trainingWeekOffset));
+  const wk = isoWeekKey(mondayOfOffset(weekOffset));
   const sessions = (ap.weekSessions && ap.weekSessions[wk]) || ap.sessions || [];
   return sessions.find(s => s.day === dayIdx) || null;
 }
@@ -1494,8 +1487,7 @@ function migrateSessions() {
   }
 }
 
-let trainingWeekOffset = 0;
-let mealWeekOffset = 0;
+let weekOffset = 0;
 
 // ============================================================
 // RENDER WEEK GRID
@@ -1509,12 +1501,12 @@ function sessionForWeekDay(weekKey, dayIdx) {
 function renderWeekGrid() {
   const today = new Date();
   const todayMon0 = (today.getDay() + 6) % 7;
-  const monday = mondayOfOffset(trainingWeekOffset);
+  const monday = mondayOfOffset(weekOffset);
   const weekKey = isoWeekKey(monday);
 
-  const labelEl = document.getElementById('training-week-label');
+  const labelEl = document.getElementById('week-label');
   if (labelEl) {
-    const suffix = trainingWeekOffset === 0 ? ' (this week)' : trainingWeekOffset < 0 ? ' (past)' : ' (upcoming)';
+    const suffix = weekOffset === 0 ? ' (this week)' : weekOffset < 0 ? ' (past)' : ' (upcoming)';
     labelEl.textContent = weekRangeLabel(monday) + suffix;
   }
 
@@ -1526,7 +1518,7 @@ function renderWeekGrid() {
     const s = sessionForWeekDay(weekKey, d);
     const t = dailyTargets(d);
     const cellDate = new Date(monday); cellDate.setDate(monday.getDate() + d);
-    const isToday = trainingWeekOffset === 0 && d === todayMon0;
+    const isToday = weekOffset === 0 && d === todayMon0;
     const dateLabel = cellDate.getDate() + '/' + String(cellDate.getMonth() + 1).padStart(2, '0');
     const cell = document.createElement('div');
     cell.className = 'day-cell';
@@ -1555,10 +1547,8 @@ function renderWeekGrid() {
 // ============================================================
 // WEEK NAV BUTTONS
 // ============================================================
-document.getElementById('training-prev').addEventListener('click', () => { trainingWeekOffset--; renderWeekGrid(); });
-document.getElementById('training-next').addEventListener('click', () => { trainingWeekOffset++; renderWeekGrid(); });
-document.getElementById('meal-prev').addEventListener('click',     () => { mealWeekOffset--;     renderMealGrid(); });
-document.getElementById('meal-next').addEventListener('click',     () => { mealWeekOffset++;     renderMealGrid(); });
+document.getElementById('week-prev').addEventListener('click', () => { weekOffset--; renderWeekGrid(); renderMealGrid(); });
+document.getElementById('week-next').addEventListener('click', () => { weekOffset++; renderWeekGrid(); renderMealGrid(); });
 
 // ============================================================
 // MEAL WEEK GRID
@@ -1568,17 +1558,11 @@ const MEAL_SLOTS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
 function renderMealGrid() {
   const today = new Date();
   const todayMon0 = (today.getDay() + 6) % 7;
-  const monday = mondayOfOffset(mealWeekOffset);
+  const monday = mondayOfOffset(weekOffset);
   const weekKey = isoWeekKey(monday);
   const ap = activeProfile();
   if (!ap.weekMeals) ap.weekMeals = {};
   const weekData = ap.weekMeals[weekKey] || {};
-
-  const labelEl = document.getElementById('meal-week-label');
-  if (labelEl) {
-    const suffix = mealWeekOffset === 0 ? ' (this week)' : mealWeekOffset < 0 ? ' (past)' : ' (upcoming)';
-    labelEl.textContent = weekRangeLabel(monday) + suffix;
-  }
 
   const grid = document.getElementById('meal-week-grid');
   if (!grid) return;
@@ -1587,7 +1571,7 @@ function renderMealGrid() {
   for (let d = 0; d < 7; d++) {
     const cellDate = new Date(monday); cellDate.setDate(monday.getDate() + d);
     const dateKey = dateStr(cellDate);
-    const isToday = mealWeekOffset === 0 && d === todayMon0;
+    const isToday = weekOffset === 0 && d === todayMon0;
     const dateLabel = cellDate.getDate() + '/' + String(cellDate.getMonth() + 1).padStart(2, '0');
 
     // Get calorie data from dailyLog
@@ -1697,7 +1681,7 @@ window.addMealEntry = function(weekKey, dayIdx, slot) {
   save();
   renderMealGrid();
   // Re-open the detail if overlay is open
-  const dateObj = mondayOfOffset(mealWeekOffset);
+  const dateObj = mondayOfOffset(weekOffset);
   dateObj.setDate(dateObj.getDate() + dayIdx);
   const dk = dateStr(dateObj);
   const dl = dateObj.getDate() + '/' + String(dateObj.getMonth()+1).padStart(2,'0');
@@ -1711,7 +1695,7 @@ window.removeMealEntry = function(weekKey, dayIdx, slot, idx) {
   save();
   renderMealGrid();
   // Re-open detail
-  const dateObj = mondayOfOffset(mealWeekOffset);
+  const dateObj = mondayOfOffset(weekOffset);
   dateObj.setDate(dateObj.getDate() + dayIdx);
   const dk = dateStr(dateObj);
   const dl = dateObj.getDate() + '/' + String(dateObj.getMonth()+1).padStart(2,'0');

@@ -509,7 +509,11 @@
 
       <!-- ── Training Plan ─────────────────────────────── -->
       <div class="card">
-        <div class="card-title">🏃 Training Plan &amp; Log</div>
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem;">
+          <span>🏃 Training Plan &amp; Log</span>
+          <button class="btn btn-secondary btn-sm" id="btn-import-fit" onclick="document.getElementById('fit-input').click()" style="font-size:.72rem;">⌚ Import Garmin .fit</button>
+          <input type="file" id="fit-input" accept=".fit" multiple style="display:none" />
+        </div>
         <div class="week-nav">
           <button class="week-nav-btn" id="training-prev">← Prev</button>
           <span class="week-nav-label" id="training-week-label"></span>
@@ -1262,6 +1266,108 @@ document.getElementById('btn-clear-training').addEventListener('click', () => {
 });
 
 // ============================================================
+// GARMIN .FIT FILE IMPORT
+// ============================================================
+let _fitParserModule = null;
+async function loadFitParser() {
+  if (_fitParserModule) return _fitParserModule;
+  _fitParserModule = (await import('https://esm.sh/fit-file-parser@1.17.3')).default;
+  return _fitParserModule;
+}
+
+function fitSportToType(sport) {
+  const map = { running: 'run', cycling: 'bike', swimming: 'swim',
+    training: 'strength', fitness_equipment: 'strength',
+    walking: 'run', hiking: 'run', trail_running: 'run' };
+  return map[sport] || 'cross';
+}
+
+function fitIntensity(avgHr, maxHr, userMaxHr) {
+  if (!avgHr) return 'moderate';
+  const pct = avgHr / (userMaxHr || 190);
+  if (pct < 0.72) return 'easy';
+  if (pct < 0.85) return 'moderate';
+  return 'hard';
+}
+
+function formatPace(speedMps) {
+  if (!speedMps || speedMps <= 0) return null;
+  const secPerKm = 1000 / speedMps;
+  const m = Math.floor(secPerKm / 60);
+  const s = Math.round(secPerKm % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+document.getElementById('fit-input').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+  toast('Parsing ' + files.length + ' .fit file(s)…');
+  try {
+    const FitParser = await loadFitParser();
+    const ap = activeProfile();
+    if (!ap.weekSessions) ap.weekSessions = {};
+    let imported = 0;
+
+    for (const file of files) {
+      const arrayBuf = await file.arrayBuffer();
+      const parser = new FitParser({ force: true, speedUnit: 'm/s', lengthUnit: 'm', mode: 'list' });
+      const data = await new Promise((resolve, reject) => {
+        parser.parse(arrayBuf, (err, d) => err ? reject(err) : resolve(d));
+      });
+
+      const sessions = data.sessions || [];
+      for (const s of sessions) {
+        const startDate = new Date(s.start_time || s.timestamp);
+        if (isNaN(startDate.getTime())) continue;
+        const dayMon0 = (startDate.getDay() + 6) % 7; // 0=Mon
+        const monday = new Date(startDate);
+        monday.setDate(startDate.getDate() - dayMon0);
+        monday.setHours(0, 0, 0, 0);
+        const weekKey = isoWeekKey(monday);
+
+        const distKm = s.total_distance ? +(s.total_distance / 1000).toFixed(2) : 0;
+        const durMin = s.total_elapsed_time ? Math.round(s.total_elapsed_time / 60) : 0;
+        const sport = fitSportToType(s.sport || 'running');
+        const avgHr = s.avg_heart_rate || s.average_heart_rate || null;
+        const maxHrVal = s.max_heart_rate || null;
+        const calories = s.total_calories || null;
+        const speedMps = s.enhanced_avg_speed || s.avg_speed || null;
+
+        const session = {
+          day: dayMon0,
+          type: sport,
+          dist: distKm,
+          dur: durMin,
+          intensity: fitIntensity(avgHr, maxHrVal, 190),
+          title: (s.sport || 'Activity').charAt(0).toUpperCase() + (s.sport || 'activity').slice(1),
+          calories,
+          avgHr,
+          maxHr: maxHrVal,
+          pace: formatPace(speedMps),
+          updatedAt: new Date().toISOString()
+        };
+
+        if (!ap.weekSessions[weekKey]) ap.weekSessions[weekKey] = [];
+        ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(x => x.day !== dayMon0);
+        ap.weekSessions[weekKey].push(session);
+        imported++;
+      }
+    }
+
+    // Keep legacy sessions in sync for current week
+    const curWk = isoWeekKey(mondayOfOffset(0));
+    if (ap.weekSessions[curWk]) ap.sessions = ap.weekSessions[curWk];
+
+    save(); renderAll();
+    toast('✅ Imported ' + imported + ' Garmin session(s)');
+  } catch (err) {
+    console.error('FIT parse error:', err);
+    toast('❌ Failed to parse .fit file — check console');
+  }
+  e.target.value = ''; // reset so same file can be re-imported
+});
+
+// ============================================================
 // MANUAL SESSION
 // ============================================================
 document.getElementById('btn-add-session').addEventListener('click', () => {
@@ -1300,9 +1406,10 @@ function intensityMult(intensity) {
   return { easy: 0.7, moderate: 1.0, hard: 1.3, race: 1.5 }[intensity] || 1.0;
 }
 
-// Estimate kcal burned from running (approx: ~1 kcal/kg/km, + 5 MET * (dur/60) * weight)
+// Use Garmin calories if imported, else estimate
 function estimateBurn(session) {
   if (!session || session.type === 'rest') return 0;
+  if (session.calories) return session.calories;
   const w = activeProfile().weight || 72;
   if (session.type === 'run') {
     const byDist = session.dist > 0 ? session.dist * w * 1.0 : 0;
@@ -1428,13 +1535,17 @@ function renderWeekGrid() {
     const tagLabel = s ? (s.type.charAt(0).toUpperCase() + s.type.slice(1)) : 'Rest';
     const distInfo = s && s.dist ? `${s.dist}km` : '';
     const durInfo = s && s.dur ? `${s.dur}min` : '';
+    const garminCal = s && s.calories ? `<div style="font-size:.7rem; color:var(--accent); font-weight:600;">🔥 ${s.calories} kcal burned</div>` : '';
+    const garminHr = s && s.avgHr ? `<div style="font-size:.7rem; color:#e05050;">❤️ ${s.avgHr} avg · ${s.maxHr || '—'} max</div>` : '';
+    const garminPace = s && s.pace ? `<div style="font-size:.7rem; color:var(--muted);">⏱ ${s.pace}/km</div>` : '';
     cell.innerHTML = `
       <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
       <div class="day-date">${dateLabel}</div>
       <span class="workout-tag ${tagClass}">${tagLabel}</span>
       ${distInfo ? `<div style="font-size:.72rem; color:var(--muted);">${distInfo} ${durInfo}</div>` : ''}
       ${s && s.intensity !== 'easy' ? `<div><span class="badge ${s.intensity==='hard'||s.intensity==='race'?'badge-red':'badge-amber'}">${s.intensity}</span></div>` : ''}
-      <div style="margin-top:.4rem; font-size:.72rem; color:var(--muted);">${t.kcal} kcal</div>
+      ${garminCal}${garminHr}${garminPace}
+      <div style="margin-top:.4rem; font-size:.72rem; color:var(--muted);">${t.kcal} kcal target</div>
       <div style="font-size:.7rem; color:var(--muted);">${t.carb}g C · ${t.prot}g P · ${t.fat}g F</div>
     `;
     grid.appendChild(cell);

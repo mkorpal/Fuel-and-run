@@ -104,6 +104,12 @@
   #upload-zone p { color: var(--muted); font-size: .88rem; }
   #upload-zone strong { color: var(--accent); }
 
+  /* ---- Week navigation ---- */
+  .week-nav { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.75rem; flex-wrap:wrap; }
+  .week-nav-label { font-weight:700; font-size:.95rem; flex:1; text-align:center; }
+  .week-nav-btn { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:.3rem .8rem; cursor:pointer; font-size:.85rem; }
+  .week-nav-btn:hover { background:var(--accent); color:#fff; }
+
   /* ---- Week grid ---- */
   .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: .5rem; }
   .day-cell {
@@ -130,6 +136,30 @@
   .tag-strength { background: #fff3cd; color: #856404; }
   .tag-rest   { background: #f8f9fa; color: #6c757d; }
   .tag-other  { background: #e2d9f3; color: #432874; }
+
+  /* ---- Meal week grid ---- */
+  .meal-day-cell { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:.6rem .5rem; min-height:120px; font-size:.78rem; cursor:pointer; transition:box-shadow .15s; }
+  .meal-day-cell:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+  .meal-day-cell.today-cell { border-color: var(--accent); }
+  .meal-day-cell .kcal-consumed { font-size:1rem; font-weight:700; color:var(--accent); margin:.3rem 0 .15rem; }
+  .meal-day-cell .kcal-target { font-size:.72rem; color:var(--muted); }
+  .meal-day-cell .kcal-bar { height:6px; background:var(--surface2); border-radius:3px; overflow:hidden; margin:.3rem 0; }
+  .meal-day-cell .kcal-bar-fill { height:100%; border-radius:3px; background:var(--accent); transition:width .3s; }
+  .meal-day-cell .kcal-bar-fill.over { background:#e76f51; }
+  .meal-day-cell .meal-items-preview { font-size:.7rem; color:var(--muted); line-height:1.4; }
+  /* Expanded detail overlay */
+  .meal-detail-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:600; justify-content:center; align-items:center; }
+  .meal-detail-overlay.open { display:flex; }
+  .meal-detail-card { background:#fff; border-radius:var(--radius); padding:1.5rem; max-width:420px; width:92%; max-height:80vh; overflow-y:auto; box-shadow:0 8px 30px rgba(0,0,0,.18); }
+  .meal-detail-card h3 { margin:0 0 .75rem; font-size:1.05rem; }
+  .meal-detail-card .detail-slot-label { font-size:.75rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin:.6rem 0 .2rem; }
+  .meal-detail-card .detail-item { display:flex; justify-content:space-between; padding:.25rem 0; font-size:.85rem; border-bottom:1px solid var(--surface2); }
+  .meal-detail-card .detail-item:last-child { border-bottom:none; }
+  .meal-detail-card .detail-total { font-weight:700; margin-top:.6rem; padding-top:.4rem; border-top:2px solid var(--border); font-size:.9rem; display:flex; justify-content:space-between; }
+  .meal-detail-add-btn { background:none; border:1px dashed var(--border); border-radius:4px; width:100%; padding:.3rem; font-size:.78rem; color:var(--muted); cursor:pointer; margin-top:.15rem; }
+  .meal-detail-add-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .meal-slot-del { background:none; border:none; cursor:pointer; color:var(--muted); font-size:.75rem; padding:0 0 0 .4rem; flex-shrink:0; }
+  .meal-slot-del:hover { color:#c0392b; }
 
   /* ---- Macro bars ---- */
   .macro-bar-wrap { margin: .4rem 0; }
@@ -411,7 +441,7 @@
   </header>
   <nav id="main-nav">
     <button class="active" data-tab="dashboard">Dashboard</button>
-    <button data-tab="training">Training Week</button>
+    <button data-tab="training">Your Week</button>
     <button data-tab="nutrition">Daily Targets</button>
     <button data-tab="products">My Products</button>
     <button data-tab="meals">My Meals</button>
@@ -474,8 +504,32 @@
       </div>
     </section>
 
-    <!-- TRAINING WEEK -->
+    <!-- YOUR WEEK -->
     <section id="tab-training" class="section">
+
+      <!-- ── Training Plan ─────────────────────────────── -->
+      <div class="card">
+        <div class="card-title">🏃 Training Plan &amp; Log</div>
+        <div class="week-nav">
+          <button class="week-nav-btn" id="training-prev">← Prev</button>
+          <span class="week-nav-label" id="training-week-label"></span>
+          <button class="week-nav-btn" id="training-next">Next →</button>
+        </div>
+        <div class="week-grid" id="week-grid"></div>
+      </div>
+
+      <!-- ── Meal Plan ──────────────────────────────────── -->
+      <div class="card">
+        <div class="card-title">🍽️ Meal Plan &amp; Log</div>
+        <div class="week-nav">
+          <button class="week-nav-btn" id="meal-prev">← Prev</button>
+          <span class="week-nav-label" id="meal-week-label"></span>
+          <button class="week-nav-btn" id="meal-next">Next →</button>
+        </div>
+        <div class="week-grid" id="meal-week-grid"></div>
+      </div>
+
+      <!-- ── Import &amp; Add Session ──────────────────────── -->
       <div class="card">
         <div class="card-title">Import TrainingPeaks Calendar (.ics)</div>
         <div id="upload-zone" onclick="document.getElementById('ics-input').click()">
@@ -489,10 +543,6 @@
           <button class="btn btn-secondary btn-sm" id="btn-clear-training">Clear Schedule</button>
           <span id="ics-filename" style="font-size:.8rem; color:var(--muted);"></span>
         </div>
-      </div>
-      <div class="card">
-        <div class="card-title">Week Schedule</div>
-        <div class="week-grid" id="week-grid"></div>
       </div>
       <div class="card">
         <div class="card-title">Add / Edit Session Manually</div>
@@ -536,6 +586,11 @@
         <button class="btn btn-primary" id="btn-add-session">Add Session</button>
       </div>
     </section>
+
+    <!-- Meal Day Detail Overlay -->
+    <div class="meal-detail-overlay" id="meal-detail-overlay">
+      <div class="meal-detail-card" id="meal-detail-card"></div>
+    </div>
 
     <!-- NUTRITION TARGETS -->
     <section id="tab-nutrition" class="section">
@@ -841,7 +896,8 @@
 // ============================================================
 function newProfile(id, name) {
   return { id, name: name||'Runner '+(id), age: '', sex: 'male', weight: 72,
-    goalWeight: 69.5, height: 175, weeklyKm: 75, diet: 'plantforward', notes: '', sessions: [], dailyLog: [] };
+    goalWeight: 69.5, height: 175, weeklyKm: 75, diet: 'plantforward', notes: '', sessions: [], dailyLog: [],
+    weekSessions: {}, weekMeals: {} };
 }
 
 let state = {
@@ -914,7 +970,11 @@ function applyParsed(parsed) {
   } else {
     state = { ...state, ...parsed };
     if (!state.meals) state.meals = [];
-    state.profiles.forEach(p => { if (!p.dailyLog) p.dailyLog = []; });
+    state.profiles.forEach(p => {
+      if (!p.dailyLog) p.dailyLog = [];
+      if (!p.weekSessions) p.weekSessions = {};
+      if (!p.weekMeals) p.weekMeals = {};
+    });
   }
 }
 
@@ -961,10 +1021,35 @@ function mergeStates(local, remote) {
       });
       // Profile settings: newer updatedAt wins
       const newer = ((p.updatedAt || '') > (base.updatedAt || '')) ? p : base;
+      // weekSessions: merge week keys, within each key merge per-day via updatedAt
+      const ws = {};
+      [base.weekSessions || {}, p.weekSessions || {}].forEach(obj => {
+        Object.entries(obj).forEach(([wk, arr]) => {
+          if (!ws[wk]) ws[wk] = {};
+          (arr || []).forEach(s => {
+            const ex = ws[wk][s.day];
+            if (!ex || (s.updatedAt || '') > (ex.updatedAt || '')) ws[wk][s.day] = s;
+          });
+        });
+      });
+      const weekSessionsMerged = {};
+      Object.entries(ws).forEach(([wk, dayMap]) => { weekSessionsMerged[wk] = Object.values(dayMap); });
+      // weekMeals: merge week keys, last-write wins per day+slot (simple union)
+      const wm = {};
+      [base.weekMeals || {}, p.weekMeals || {}].forEach(obj => {
+        Object.entries(obj).forEach(([wk, days]) => {
+          if (!wm[wk]) wm[wk] = {};
+          Object.entries(days || {}).forEach(([d, slots]) => {
+            wm[wk][d] = { ...(wm[wk][d] || {}), ...slots };
+          });
+        });
+      });
       profMap[p.id] = {
         ...newer,
         sessions: Object.values(sessMap),
-        dailyLog: Object.values(logMap).sort((a, b) => a.date < b.date ? -1 : 1)
+        dailyLog: Object.values(logMap).sort((a, b) => a.date < b.date ? -1 : 1),
+        weekSessions: weekSessionsMerged,
+        weekMeals: wm
       };
     }
   });
@@ -1113,10 +1198,14 @@ icsInput.addEventListener('change', e => {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = evt => {
-    activeProfile().sessions = parseICS(evt.target.result);
+    const ap = activeProfile();
+    const sess = parseICS(evt.target.result);
+    ap.sessions = sess;
+    if (!ap.weekSessions) ap.weekSessions = {};
+    ap.weekSessions[isoWeekKey(new Date())] = sess;
     document.getElementById('ics-filename').textContent = '✅ ' + file.name;
     save(); renderAll();
-    toast('Calendar imported — ' + activeProfile().sessions.length + ' session(s) found');
+    toast('Calendar imported — ' + sess.length + ' session(s) found');
   };
   reader.readAsText(file);
 });
@@ -1129,17 +1218,21 @@ uploadZone.addEventListener('drop', e => {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = evt => {
-    activeProfile().sessions = parseICS(evt.target.result);
+    const ap = activeProfile();
+    const sess = parseICS(evt.target.result);
+    ap.sessions = sess;
+    if (!ap.weekSessions) ap.weekSessions = {};
+    ap.weekSessions[isoWeekKey(new Date())] = sess;
     document.getElementById('ics-filename').textContent = '✅ ' + file.name;
     save(); renderAll();
-    toast('Calendar imported — ' + activeProfile().sessions.length + ' session(s) found');
+    toast('Calendar imported — ' + sess.length + ' session(s) found');
   };
   reader.readAsText(file);
 });
 
 // Demo week
 document.getElementById('btn-demo').addEventListener('click', () => {
-  activeProfile().sessions = [
+  const demoSess = [
     { day:0, type:'run', dist:10, dur:55, intensity:'easy', title:'Easy Run' },
     { day:1, type:'run', dist:12, dur:65, intensity:'moderate', title:'Steady State Run' },
     { day:2, type:'strength', dist:0, dur:50, intensity:'moderate', title:'Strength & Conditioning' },
@@ -1148,13 +1241,21 @@ document.getElementById('btn-demo').addEventListener('click', () => {
     { day:5, type:'run', dist:22, dur:120, intensity:'moderate', title:'Long Run' },
     { day:6, type:'run', dist:8, dur:45, intensity:'easy', title:'Easy Recovery Run' },
   ];
+  const ap = activeProfile();
+  ap.sessions = demoSess;
+  if (!ap.weekSessions) ap.weekSessions = {};
+  ap.weekSessions[isoWeekKey(mondayOfOffset(trainingWeekOffset))] = demoSess;
   document.getElementById('ics-filename').textContent = '✅ Demo week loaded';
   save(); renderAll();
   toast('Demo training week loaded');
 });
 
 document.getElementById('btn-clear-training').addEventListener('click', () => {
-  activeProfile().sessions = [];
+  const ap = activeProfile();
+  if (!ap.weekSessions) ap.weekSessions = {};
+  const wk = isoWeekKey(mondayOfOffset(trainingWeekOffset));
+  ap.weekSessions[wk] = [];
+  if (trainingWeekOffset === 0) ap.sessions = [];
   document.getElementById('ics-filename').textContent = '';
   save(); renderAll();
   toast('Schedule cleared');
@@ -1172,8 +1273,12 @@ document.getElementById('btn-add-session').addEventListener('click', () => {
   const dur  = parseInt(document.getElementById('man-dur').value) || 0;
   const intensity = document.getElementById('man-int').value;
   const ap = activeProfile();
-  ap.sessions = ap.sessions.filter(s => s.day !== dayIdx);
-  ap.sessions.push({ day: dayIdx, type, dist, dur, intensity, title: type.charAt(0).toUpperCase()+type.slice(1), updatedAt: new Date().toISOString() });
+  if (!ap.weekSessions) ap.weekSessions = {};
+  const wk = isoWeekKey(mondayOfOffset(trainingWeekOffset));
+  if (!ap.weekSessions[wk]) ap.weekSessions[wk] = [];
+  ap.weekSessions[wk] = ap.weekSessions[wk].filter(s => s.day !== dayIdx);
+  ap.weekSessions[wk].push({ day: dayIdx, type, dist, dur, intensity, title: type.charAt(0).toUpperCase()+type.slice(1), updatedAt: new Date().toISOString() });
+  if (trainingWeekOffset === 0) ap.sessions = ap.weekSessions[wk]; // keep legacy array in sync
   save(); renderAll();
   toast('Session saved for ' + dayName);
 });
@@ -1185,7 +1290,10 @@ const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sun
 const ABBR = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 function sessionForDay(dayIdx) {
-  return activeProfile().sessions.find(s => s.day === dayIdx) || null;
+  const ap = activeProfile();
+  const wk = isoWeekKey(mondayOfOffset(trainingWeekOffset));
+  const sessions = (ap.weekSessions && ap.weekSessions[wk]) || ap.sessions || [];
+  return sessions.find(s => s.day === dayIdx) || null;
 }
 
 function intensityMult(intensity) {
@@ -1238,24 +1346,80 @@ function dailyTargets(dayIdx) {
 }
 
 // ============================================================
+// WEEK KEY HELPERS + OFFSETS
+// ============================================================
+// Returns the ISO week key "YYYY-Www" for a Date (Mon=start)
+function isoWeekKey(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7; // Sun=7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum); // Thursday of the ISO week
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2,'0')}`;
+}
+
+// Returns Monday Date for a given week offset (0 = current week)
+function mondayOfOffset(offset) {
+  const today = new Date();
+  const todayMon0 = (today.getDay() + 6) % 7;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - todayMon0 + offset * 7);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+function weekRangeLabel(monday) {
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+  const fmt = d => d.getDate() + '/' + String(d.getMonth()+1).padStart(2,'0');
+  return fmt(monday) + ' – ' + fmt(sunday) + ' ' + sunday.getFullYear();
+}
+
+// Migrate legacy sessions[] → weekSessions for current week (one-time)
+function migrateSessions() {
+  const ap = activeProfile();
+  if (!ap.weekSessions) ap.weekSessions = {};
+  if (!ap.weekMeals) ap.weekMeals = {};
+  if (ap.sessions && ap.sessions.length > 0) {
+    const key = isoWeekKey(new Date());
+    if (!ap.weekSessions[key]) {
+      ap.weekSessions[key] = ap.sessions.map(s => ({ ...s }));
+    }
+  }
+}
+
+let trainingWeekOffset = 0;
+let mealWeekOffset = 0;
+
+// ============================================================
 // RENDER WEEK GRID
 // ============================================================
+function sessionForWeekDay(weekKey, dayIdx) {
+  const ap = activeProfile();
+  const sessions = (ap.weekSessions && ap.weekSessions[weekKey]) || ap.sessions || [];
+  return sessions.find(s => s.day === dayIdx) || null;
+}
+
 function renderWeekGrid() {
   const today = new Date();
   const todayMon0 = (today.getDay() + 6) % 7;
-  // Find Monday of the current week
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - todayMon0);
-  monday.setHours(0, 0, 0, 0);
+  const monday = mondayOfOffset(trainingWeekOffset);
+  const weekKey = isoWeekKey(monday);
+
+  const labelEl = document.getElementById('training-week-label');
+  if (labelEl) {
+    const suffix = trainingWeekOffset === 0 ? ' (this week)' : trainingWeekOffset < 0 ? ' (past)' : ' (upcoming)';
+    labelEl.textContent = weekRangeLabel(monday) + suffix;
+  }
+
   const grid = document.getElementById('week-grid');
   if (!grid) return;
   grid.innerHTML = '';
+
   for (let d = 0; d < 7; d++) {
-    const s = sessionForDay(d);
+    const s = sessionForWeekDay(weekKey, d);
     const t = dailyTargets(d);
-    const isToday = d === todayMon0;
-    const cellDate = new Date(monday);
-    cellDate.setDate(monday.getDate() + d);
+    const cellDate = new Date(monday); cellDate.setDate(monday.getDate() + d);
+    const isToday = trainingWeekOffset === 0 && d === todayMon0;
     const dateLabel = cellDate.getDate() + '/' + String(cellDate.getMonth() + 1).padStart(2, '0');
     const cell = document.createElement('div');
     cell.className = 'day-cell';
@@ -1276,6 +1440,172 @@ function renderWeekGrid() {
     grid.appendChild(cell);
   }
 }
+
+// ============================================================
+// WEEK NAV BUTTONS
+// ============================================================
+document.getElementById('training-prev').addEventListener('click', () => { trainingWeekOffset--; renderWeekGrid(); });
+document.getElementById('training-next').addEventListener('click', () => { trainingWeekOffset++; renderWeekGrid(); });
+document.getElementById('meal-prev').addEventListener('click',     () => { mealWeekOffset--;     renderMealGrid(); });
+document.getElementById('meal-next').addEventListener('click',     () => { mealWeekOffset++;     renderMealGrid(); });
+
+// ============================================================
+// MEAL WEEK GRID
+// ============================================================
+const MEAL_SLOTS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
+
+function renderMealGrid() {
+  const today = new Date();
+  const todayMon0 = (today.getDay() + 6) % 7;
+  const monday = mondayOfOffset(mealWeekOffset);
+  const weekKey = isoWeekKey(monday);
+  const ap = activeProfile();
+  if (!ap.weekMeals) ap.weekMeals = {};
+  const weekData = ap.weekMeals[weekKey] || {};
+
+  const labelEl = document.getElementById('meal-week-label');
+  if (labelEl) {
+    const suffix = mealWeekOffset === 0 ? ' (this week)' : mealWeekOffset < 0 ? ' (past)' : ' (upcoming)';
+    labelEl.textContent = weekRangeLabel(monday) + suffix;
+  }
+
+  const grid = document.getElementById('meal-week-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  for (let d = 0; d < 7; d++) {
+    const cellDate = new Date(monday); cellDate.setDate(monday.getDate() + d);
+    const dateKey = dateStr(cellDate);
+    const isToday = mealWeekOffset === 0 && d === todayMon0;
+    const dateLabel = cellDate.getDate() + '/' + String(cellDate.getMonth() + 1).padStart(2, '0');
+
+    // Get calorie data from dailyLog
+    const logEntry = (ap.dailyLog || []).find(l => l.date === dateKey);
+    const consumed = logEntry ? (logEntry.consumed || 0) : 0;
+    const target = logEntry ? (logEntry.target || 0) : dailyTargets(d).kcal;
+    const items = logEntry ? (logEntry.items || []) : [];
+    const pct = target > 0 ? Math.min((consumed / target) * 100, 120) : 0;
+    const isOver = consumed > target && target > 0;
+
+    // Quick preview of plate items (max 3)
+    const previewItems = items.slice(0, 3).map(i => i.name).join(', ');
+    const moreCount = items.length > 3 ? ` +${items.length - 3} more` : '';
+
+    // Also count planned meals from weekMeals
+    const dayMeals = weekData[d] || {};
+    const plannedCount = MEAL_SLOTS.reduce((s, slot) => s + (dayMeals[slot] || []).length, 0);
+    const plannedLabel = plannedCount > 0 ? `📋 ${plannedCount} planned` : '';
+
+    const cell = document.createElement('div');
+    cell.className = 'meal-day-cell' + (isToday ? ' today-cell' : '');
+    cell.onclick = () => openMealDetail(weekKey, d, dateKey, dateLabel);
+    cell.innerHTML = `
+      <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
+      <div class="day-date">${dateLabel}</div>
+      <div class="kcal-consumed">${consumed > 0 ? consumed.toLocaleString() : '—'}</div>
+      <div class="kcal-target">of ${target.toLocaleString()} kcal target</div>
+      <div class="kcal-bar"><div class="kcal-bar-fill${isOver ? ' over' : ''}" style="width:${Math.min(pct, 100)}%"></div></div>
+      ${previewItems ? `<div class="meal-items-preview">${previewItems}${moreCount}</div>` : ''}
+      ${plannedLabel ? `<div style="font-size:.68rem; color:var(--accent); margin-top:.15rem;">${plannedLabel}</div>` : ''}
+      <div style="font-size:.68rem; color:var(--muted); margin-top:.2rem;">tap for details</div>
+    `;
+    grid.appendChild(cell);
+  }
+}
+
+// ============================================================
+// MEAL DAY DETAIL OVERLAY
+// ============================================================
+function openMealDetail(weekKey, dayIdx, dateKey, dateLabel) {
+  const ap = activeProfile();
+  const logEntry = (ap.dailyLog || []).find(l => l.date === dateKey);
+  const items = logEntry ? (logEntry.items || []) : [];
+  const consumed = logEntry ? (logEntry.consumed || 0) : 0;
+  const target = logEntry ? (logEntry.target || 0) : dailyTargets(dayIdx).kcal;
+  if (!ap.weekMeals) ap.weekMeals = {};
+  if (!ap.weekMeals[weekKey]) ap.weekMeals[weekKey] = {};
+  const dayMeals = ap.weekMeals[weekKey][dayIdx] || {};
+
+  let html = `<h3>🍽️ ${DAYS[dayIdx]} ${dateLabel}</h3>`;
+
+  // Consumed items (from plate / dailyLog)
+  html += `<div class="detail-slot-label">🔥 Consumed (from plate)</div>`;
+  if (items.length) {
+    items.forEach(item => {
+      html += `<div class="detail-item">
+        <span>${item.name} <span style="color:var(--muted); font-size:.78rem;">(${item.qty}${item.unit === 'servings' ? ' srv' : 'g'})</span></span>
+        <span>${item.kcal} kcal</span>
+      </div>`;
+    });
+  } else {
+    html += `<div style="font-size:.82rem; color:var(--muted); padding:.3rem 0;">Nothing logged yet</div>`;
+  }
+  html += `<div class="detail-total"><span>Total consumed</span><span>${consumed.toLocaleString()} / ${target.toLocaleString()} kcal</span></div>`;
+
+  // Planned meals (from weekMeals)
+  html += `<div style="margin-top:1rem;"><div class="detail-slot-label" style="margin-top:0;">📋 Meal Plan</div></div>`;
+  for (const slot of MEAL_SLOTS) {
+    const slotItems = dayMeals[slot] || [];
+    html += `<div class="detail-slot-label" style="font-size:.7rem; margin-top:.4rem;">${slot}</div>`;
+    slotItems.forEach((item, idx) => {
+      html += `<div class="detail-item">
+        <span>${item}</span>
+        <button class="meal-slot-del" onclick="removeMealEntry('${weekKey}',${dayIdx},'${slot}',${idx})" title="Remove">✕</button>
+      </div>`;
+    });
+    html += `<button class="meal-detail-add-btn" onclick="addMealEntry('${weekKey}',${dayIdx},'${slot}')">+ add ${slot.toLowerCase()}</button>`;
+  }
+
+  html += `<div style="margin-top:1rem; text-align:center;">
+    <button class="btn btn-secondary btn-sm" onclick="closeMealDetail()">Close</button>
+  </div>`;
+
+  document.getElementById('meal-detail-card').innerHTML = html;
+  document.getElementById('meal-detail-overlay').classList.add('open');
+}
+
+function closeMealDetail() {
+  document.getElementById('meal-detail-overlay').classList.remove('open');
+}
+document.getElementById('meal-detail-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('meal-detail-overlay')) closeMealDetail();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('meal-detail-overlay').classList.contains('open')) closeMealDetail();
+});
+
+window.addMealEntry = function(weekKey, dayIdx, slot) {
+  const input = prompt(`Add to ${DAYS[dayIdx]} ${slot}:`);
+  if (!input || !input.trim()) return;
+  const ap = activeProfile();
+  if (!ap.weekMeals) ap.weekMeals = {};
+  if (!ap.weekMeals[weekKey]) ap.weekMeals[weekKey] = {};
+  if (!ap.weekMeals[weekKey][dayIdx]) ap.weekMeals[weekKey][dayIdx] = {};
+  if (!ap.weekMeals[weekKey][dayIdx][slot]) ap.weekMeals[weekKey][dayIdx][slot] = [];
+  ap.weekMeals[weekKey][dayIdx][slot].push(input.trim());
+  save();
+  renderMealGrid();
+  // Re-open the detail if overlay is open
+  const dateObj = mondayOfOffset(mealWeekOffset);
+  dateObj.setDate(dateObj.getDate() + dayIdx);
+  const dk = dateStr(dateObj);
+  const dl = dateObj.getDate() + '/' + String(dateObj.getMonth()+1).padStart(2,'0');
+  openMealDetail(weekKey, dayIdx, dk, dl);
+};
+
+window.removeMealEntry = function(weekKey, dayIdx, slot, idx) {
+  const ap = activeProfile();
+  if (!ap.weekMeals?.[weekKey]?.[dayIdx]?.[slot]) return;
+  ap.weekMeals[weekKey][dayIdx][slot].splice(idx, 1);
+  save();
+  renderMealGrid();
+  // Re-open detail
+  const dateObj = mondayOfOffset(mealWeekOffset);
+  dateObj.setDate(dateObj.getDate() + dayIdx);
+  const dk = dateStr(dateObj);
+  const dl = dateObj.getDate() + '/' + String(dateObj.getMonth()+1).padStart(2,'0');
+  openMealDetail(weekKey, dayIdx, dk, dl);
+};
 
 // ============================================================
 // RENDER NUTRITION TABLE
@@ -2176,9 +2506,11 @@ function renderHeaderSwitcher() {
 }
 
 function renderAll() {
+  migrateSessions();
   renderHeaderSwitcher();
   renderDashboard();
   renderWeekGrid();
+  renderMealGrid();
   renderNutritionTable();
   renderProducts();
   renderRecommendations();

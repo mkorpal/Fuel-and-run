@@ -487,6 +487,10 @@
               <label>Product Name</label>
               <input type="text" id="p-name" placeholder="e.g. Chobani Greek Yoghurt" required />
             </div>
+            <div class="form-row" style="flex:1; min-width:140px;">
+              <label>My nickname <span style="font-weight:400; color:var(--muted);">(optional)</span></label>
+              <input type="text" id="p-nickname" placeholder="e.g. Morning yoghurt" />
+            </div>
             <div class="form-row" style="flex:1;">
               <label>Brand</label>
               <input type="text" id="p-brand" placeholder="e.g. Chobani" />
@@ -1032,7 +1036,8 @@ function renderProducts() {
   list.innerHTML = state.products.map(p => `
     <div class="product-card">
       <button class="pbtn-del" onclick="deleteProduct('${p.id}')">✕</button>
-      <div class="pname">${p.name}</div>
+      <div class="pname">${p.nickname || p.name}</div>
+      ${p.nickname ? `<div style="font-size:.78rem; color:var(--muted); margin-bottom:.1rem;">${p.name}</div>` : ''}
       <div class="pbrand">${p.brand || ''} <span class="ptag">${p.cat}</span></div>
       ${p.notes ? `<div style="font-size:.78rem; color:var(--muted); margin-bottom:.3rem;">${p.notes}</div>` : ''}
       <div class="nutrient-row"><span>Serving</span><span>${p.serve || '—'}g/ml</span></div>
@@ -1056,7 +1061,8 @@ function saveProductFromForm() {
   if (!name) return;
   const product = {
     id: Date.now().toString(),
-    name, brand: document.getElementById('p-brand').value.trim(),
+    name, nickname: document.getElementById('p-nickname').value.trim(),
+    brand: document.getElementById('p-brand').value.trim(),
     cat: document.getElementById('p-cat').value,
     serve: +document.getElementById('p-serve').value || null,
     kcal: +document.getElementById('p-kcal').value || null,
@@ -1190,7 +1196,7 @@ function renderIngredientRows() {
     return;
   }
   const optionHTML = `<option value="">— select product —</option>` +
-    products.map(p => `<option value="${p.id}">${p.name}${p.brand?' · '+p.brand:''} (${p.serve||100}g serving)</option>`).join('');
+    products.map(p => `<option value="${p.id}">${p.nickname || p.name}${p.brand?' · '+p.brand:''} (${p.serve||100}g serving)</option>`).join('');
 
   container.innerHTML = mealIngredients.map((ing, i) => `
     <div class="ingredient-row" data-idx="${i}">

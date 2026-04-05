@@ -269,6 +269,51 @@
   }
   #toast.show { opacity: 1; }
 
+  /* ---- Meals ---- */
+  .meal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+  .meal-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1rem; position: relative;
+  }
+  .meal-card .meal-name { font-weight: 700; font-size: 1rem; margin-bottom: .4rem; }
+  .meal-card .meal-del {
+    position: absolute; top: .6rem; right: .6rem;
+    background: none; border: none; cursor: pointer; color: var(--muted); font-size: 1rem;
+  }
+  .meal-card .meal-del:hover { color: var(--danger); }
+  .meal-type-badge { display: inline-block; font-size: .7rem; font-weight: 600; padding: .15rem .5rem; border-radius: 20px; margin-bottom: .5rem; }
+  .meal-type-pantry { background: #d4edda; color: #155724; }
+  .meal-type-recipe { background: #cce5ff; color: #004085; }
+  .meal-ingredients { font-size: .8rem; color: var(--muted); margin-bottom: .4rem; line-height: 1.5; }
+  .meal-macros { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .4rem; }
+  .meal-macro-chip { background: var(--surface2); border-radius: 4px; padding: .15rem .5rem; font-size: .78rem; }
+  /* Meal modal */
+  #meal-modal {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,.75); align-items: center; justify-content: center;
+  }
+  #meal-modal.open { display: flex; }
+  #meal-box {
+    background: var(--surface); border-radius: var(--radius);
+    padding: 1.5rem; width: min(96vw, 560px); max-height: 90vh; overflow-y: auto; position: relative;
+  }
+  #meal-box h3 { font-family: var(--font-head); font-size: 1.1rem; margin-bottom: 1rem; }
+  #meal-modal-close {
+    position: absolute; top: .8rem; right: 1rem;
+    background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--muted);
+  }
+  #meal-modal-close:hover { color: var(--danger); }
+  .meal-type-tabs { display: flex; gap: 0; margin-bottom: 1.25rem; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .meal-type-tab { flex: 1; padding: .6rem; text-align: center; cursor: pointer; font-size: .88rem; font-weight: 500; background: var(--surface2); border: none; color: var(--muted); transition: background .15s, color .15s; }
+  .meal-type-tab.active { background: var(--accent); color: #fff; }
+  /* Ingredient rows in builder */
+  .ingredient-row { display: flex; gap: .5rem; align-items: center; margin-bottom: .4rem; flex-wrap: wrap; }
+  .ingredient-row select { flex: 2; min-width: 140px; padding: .45rem .6rem; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--font-body); font-size: .85rem; }
+  .ingredient-row input[type=number] { flex: 1; min-width: 70px; padding: .45rem .6rem; border: 1px solid var(--border); border-radius: var(--radius); font-family: var(--font-body); font-size: .85rem; }
+  .ingredient-row .ing-remove { background: none; border: none; cursor: pointer; color: var(--muted); padding: .3rem .4rem; font-size: 1rem; }
+  .ingredient-row .ing-remove:hover { color: var(--danger); }
+  #meal-preview { background: var(--surface2); border-radius: var(--radius); padding: .75rem 1rem; font-size: .85rem; margin-bottom: .75rem; display: none; }
+  .meal-filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   /* ---- Responsive ---- */
   @media (max-width: 640px) {
     main { padding: 1rem; }
@@ -295,6 +340,7 @@
     <button data-tab="nutrition">Daily Targets</button>
     <button data-tab="products">My Products</button>
     <button data-tab="recommendations">AU Food Ideas</button>
+    <button data-tab="meals">My Meals</button>
     <button data-tab="profile">Profile</button>
   </nav>
   <main>
@@ -449,6 +495,24 @@
       </div>
     </section>
 
+    <!-- MY MEALS -->
+    <section id="tab-meals" class="section">
+      <div class="card">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>🍽️ My Meals</span>
+          <button class="btn btn-primary btn-sm" id="btn-new-meal">+ Create Meal</button>
+        </div>
+        <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">Build meals from your pantry products (nutrition auto-calculated) or save internet recipes with macros per 100g for easy day logging.</p>
+        <div style="display:flex; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm meal-filter-btn active" data-filter="all">All meals</button>
+          <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="pantry">🛒 From Pantry</button>
+          <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="recipe">🌐 From Recipe</button>
+        </div>
+        <div class="meal-grid" id="meal-grid"></div>
+        <p id="no-meals" style="color:var(--muted); font-size:.85rem;">No meals saved yet. Create your first meal above.</p>
+      </div>
+    </section>
+
     <!-- PROFILE -->
     <section id="tab-profile" class="section">
       <div class="card">
@@ -521,6 +585,58 @@
   </div>
 </div>
 
+<!-- Meal Builder Modal -->
+<div id="meal-modal">
+  <div id="meal-box">
+    <button id="meal-modal-close" title="Close">✕</button>
+    <h3>🍽️ Create a Meal</h3>
+    <div class="meal-type-tabs">
+      <button class="meal-type-tab active" data-mtype="pantry">🛒 Build from my pantry</button>
+      <button class="meal-type-tab" data-mtype="recipe">🌐 From internet recipe</button>
+    </div>
+    <div class="form-row">
+      <label>Meal Name</label>
+      <input type="text" id="meal-name" placeholder="e.g. Post-run recovery bowl" />
+    </div>
+    <!-- Pantry section -->
+    <div id="meal-pantry-section">
+      <div style="font-size:.82rem; font-weight:600; color:var(--muted); margin-bottom:.4rem;">Ingredients</div>
+      <div id="meal-ingredient-rows"></div>
+      <button class="btn btn-secondary btn-sm" id="btn-add-ingredient" style="margin-bottom:.9rem;">➕ Add Ingredient</button>
+      <div id="meal-preview">
+        <strong>Meal totals:</strong>
+        <div id="meal-preview-vals" style="margin-top:.3rem;"></div>
+      </div>
+    </div>
+    <!-- Recipe section -->
+    <div id="meal-recipe-section" style="display:none;">
+      <div class="form-row">
+        <label>Recipe URL</label>
+        <input type="url" id="meal-url" placeholder="https://www.taste.com.au/..." />
+      </div>
+      <div class="form-row">
+        <label>Source / Website</label>
+        <input type="text" id="meal-source" placeholder="e.g. Taste, Delicious, Wholesome Patisserie" />
+      </div>
+      <div class="form-row">
+        <label>Notes (serves, cook time, tags)</label>
+        <input type="text" id="meal-notes" placeholder="e.g. Serves 2, 20 min, high protein" />
+      </div>
+      <p style="font-size:.81rem; color:var(--muted); margin-bottom:.75rem;">Enter nutrition <strong>per 100g of finished meal</strong>. You can work out your serve’s macros by weight when you log it to a day.</p>
+      <div class="form-inline">
+        <div class="form-row"><label>Calories (kcal/100g)</label><input type="number" id="meal-r-kcal" min="0" placeholder="e.g. 180" /></div>
+        <div class="form-row"><label>Protein (g/100g)</label><input type="number" id="meal-r-prot" min="0" step=".1" /></div>
+        <div class="form-row"><label>Carbs (g/100g)</label><input type="number" id="meal-r-carb" min="0" step=".1" /></div>
+        <div class="form-row"><label>Fat (g/100g)</label><input type="number" id="meal-r-fat" min="0" step=".1" /></div>
+      </div>
+    </div>
+    <div style="display:flex; gap:.75rem; margin-top:.5rem;">
+      <button class="btn btn-primary" id="btn-save-meal">Save Meal</button>
+      <button class="btn btn-secondary" id="btn-cancel-meal">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -535,7 +651,8 @@ function newProfile(id, name) {
 let state = {
   activeProfileId: 'p1',
   profiles: [ newProfile('p1', 'Profile 1') ],
-  products: []
+  products: [],
+  meals: []
 };
 
 function activeProfile() {
@@ -554,9 +671,10 @@ function load() {
     // Migrate old single-profile format
     if (parsed.profile && !parsed.profiles) {
       const p = { ...newProfile('p1', parsed.profile.name||'Profile 1'), ...parsed.profile, id:'p1', sessions: parsed.sessions||[] };
-      state = { activeProfileId:'p1', profiles:[p], products: parsed.products||[] };
+      state = { activeProfileId:'p1', profiles:[p], products: parsed.products||[], meals: parsed.meals||[] };
     } else {
       state = { ...state, ...parsed };
+      if (!state.meals) state.meals = [];
     }
   } catch(e) {}
 }
@@ -973,6 +1091,266 @@ const TIPS = [
   'Magnesium-rich foods like pumpkin seeds, dark chocolate, and leafy greens can improve sleep quality — crucial for recovery.',
 ];
 
+// ============================================================
+// MEALS
+// ============================================================
+
+// ---- State for the builder modal ----
+let mealBuilderType = 'pantry'; // 'pantry' | 'recipe'
+let mealIngredients = []; // [{ productId, qty }]
+
+function openMealModal() {
+  mealBuilderType = 'pantry';
+  mealIngredients = [];
+  document.getElementById('meal-name').value = '';
+  document.getElementById('meal-url').value = '';
+  document.getElementById('meal-source').value = '';
+  document.getElementById('meal-notes').value = '';
+  document.getElementById('meal-r-kcal').value = '';
+  document.getElementById('meal-r-prot').value = '';
+  document.getElementById('meal-r-carb').value = '';
+  document.getElementById('meal-r-fat').value = '';
+  setMealBuilderType('pantry');
+  renderIngredientRows();
+  addIngredientRow(); // start with one row
+  document.getElementById('meal-modal').classList.add('open');
+}
+
+function closeMealModal() {
+  document.getElementById('meal-modal').classList.remove('open');
+}
+
+function setMealBuilderType(type) {
+  mealBuilderType = type;
+  document.querySelectorAll('.meal-type-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.mtype === type);
+  });
+  document.getElementById('meal-pantry-section').style.display = type === 'pantry' ? '' : 'none';
+  document.getElementById('meal-recipe-section').style.display = type === 'recipe' ? '' : 'none';
+}
+
+function addIngredientRow(productId, qty) {
+  mealIngredients.push({ productId: productId || '', qty: qty || '' });
+  renderIngredientRows();
+}
+
+function removeIngredientRow(idx) {
+  mealIngredients.splice(idx, 1);
+  renderIngredientRows();
+}
+
+function renderIngredientRows() {
+  const container = document.getElementById('meal-ingredient-rows');
+  if (!container) return;
+  const products = state.products;
+  if (!products.length) {
+    container.innerHTML = '<p style="font-size:.83rem; color:var(--muted); margin-bottom:.6rem;">⚠️ No products in your pantry yet. Add products first, then build meals from them.</p>';
+    updateMealPreview();
+    return;
+  }
+  const optionHTML = `<option value="">— select product —</option>` +
+    products.map(p => `<option value="${p.id}">${p.name}${p.brand?' · '+p.brand:''} (${p.serve||100}g serving)</option>`).join('');
+
+  container.innerHTML = mealIngredients.map((ing, i) => `
+    <div class="ingredient-row" data-idx="${i}">
+      <select onchange="updateIngredient(${i},'productId',this.value)">${optionHTML.replace(`value="${ing.productId}"`, `value="${ing.productId}" selected`)}</select>
+      <input type="number" min="0" step="1" placeholder="g / ml" value="${ing.qty}"
+        oninput="updateIngredient(${i},'qty',this.value)" />
+      <button class="ing-remove" onclick="removeIngredientRow(${i})">✕</button>
+    </div>
+  `).join('');
+  updateMealPreview();
+}
+
+window.updateIngredient = (idx, field, val) => {
+  mealIngredients[idx][field] = val;
+  updateMealPreview();
+};
+
+function calcPantryMealMacros() {
+  let kcal = 0, prot = 0, carb = 0, fat = 0;
+  for (const ing of mealIngredients) {
+    if (!ing.productId || !ing.qty) continue;
+    const p = state.products.find(x => x.id === ing.productId);
+    if (!p) continue;
+    const ref = p.serve || 100; // nutrients are per 'serve' g
+    const scale = parseFloat(ing.qty) / ref;
+    kcal += (p.kcal || 0) * scale;
+    prot += (p.prot || 0) * scale;
+    carb += (p.carb || 0) * scale;
+    fat  += (p.fat  || 0) * scale;
+  }
+  return { kcal: Math.round(kcal), prot: +prot.toFixed(1), carb: +carb.toFixed(1), fat: +fat.toFixed(1) };
+}
+
+function updateMealPreview() {
+  const preview = document.getElementById('meal-preview');
+  const vals = document.getElementById('meal-preview-vals');
+  if (!preview || !vals) return;
+  const hasIngredients = mealIngredients.some(i => i.productId && i.qty);
+  if (!hasIngredients) { preview.style.display = 'none'; return; }
+  const m = calcPantryMealMacros();
+  preview.style.display = '';
+  vals.innerHTML = `<span style="margin-right:.8rem;">🔥 <strong>${m.kcal}</strong> kcal</span>` +
+    `<span style="margin-right:.8rem;">Protein <strong>${m.prot}g</strong></span>` +
+    `<span style="margin-right:.8rem;">Carbs <strong>${m.carb}g</strong></span>` +
+    `<span>Fat <strong>${m.fat}g</strong></span>`;
+}
+
+document.getElementById('btn-new-meal').addEventListener('click', openMealModal);
+document.getElementById('meal-modal-close').addEventListener('click', closeMealModal);
+document.getElementById('btn-cancel-meal').addEventListener('click', closeMealModal);
+document.getElementById('btn-add-ingredient').addEventListener('click', () => addIngredientRow());
+document.getElementById('meal-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('meal-modal')) closeMealModal();
+});
+
+document.querySelectorAll('.meal-type-tab').forEach(btn => {
+  btn.addEventListener('click', () => setMealBuilderType(btn.dataset.mtype));
+});
+
+// ---- Save meal ----
+document.getElementById('btn-save-meal').addEventListener('click', () => {
+  const name = document.getElementById('meal-name').value.trim();
+  if (!name) { toast('Please enter a meal name'); return; }
+
+  let meal;
+  if (mealBuilderType === 'pantry') {
+    const validIngs = mealIngredients.filter(i => i.productId && i.qty);
+    if (!validIngs.length) { toast('Add at least one ingredient'); return; }
+    const m = calcPantryMealMacros();
+    const ingredients = validIngs.map(i => {
+      const p = state.products.find(x => x.id === i.productId);
+      return { productId: i.productId, name: p ? p.name : '', qty: +i.qty };
+    });
+    meal = {
+      id: Date.now().toString(), name, type: 'pantry',
+      ingredients,
+      kcal: m.kcal, prot: m.prot, carb: m.carb, fat: m.fat,
+    };
+  } else {
+    // Recipe meal — store macros per 100g for flexible portion logging
+    const kcal100 = +document.getElementById('meal-r-kcal').value || null;
+    const prot100 = +document.getElementById('meal-r-prot').value || null;
+    const carb100 = +document.getElementById('meal-r-carb').value || null;
+    const fat100  = +document.getElementById('meal-r-fat').value  || null;
+    meal = {
+      id: Date.now().toString(), name, type: 'recipe',
+      url:    document.getElementById('meal-url').value.trim(),
+      source: document.getElementById('meal-source').value.trim(),
+      notes:  document.getElementById('meal-notes').value.trim(),
+      kcal100, prot100, carb100, fat100,
+    };
+  }
+  state.meals.unshift(meal);
+  save();
+  renderMeals();
+  closeMealModal();
+  toast('✅ Meal saved: ' + name);
+});
+
+// ---- Delete meal ----
+window.deleteMeal = id => {
+  state.meals = state.meals.filter(m => m.id !== id);
+  save(); renderMeals();
+  toast('Meal removed');
+};
+
+// ---- Filter ----
+let mealFilter = 'all';
+document.querySelectorAll('.meal-filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    mealFilter = btn.dataset.filter;
+    document.querySelectorAll('.meal-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderMeals();
+  });
+});
+
+// ---- Render ----
+function renderMeals() {
+  const grid = document.getElementById('meal-grid');
+  const none = document.getElementById('no-meals');
+  if (!grid) return;
+
+  const filtered = state.meals.filter(m => mealFilter === 'all' || m.type === mealFilter);
+  if (!filtered.length) {
+    grid.innerHTML = '';
+    none.style.display = '';
+    return;
+  }
+  none.style.display = 'none';
+
+  grid.innerHTML = filtered.map(m => {
+    const badgeClass = m.type === 'pantry' ? 'meal-type-pantry' : 'meal-type-recipe';
+    const badgeLabel = m.type === 'pantry' ? '🛒 From Pantry' : '🌐 From Recipe';
+
+    let ingredientLines = '';
+    let macroHtml = '';
+
+    if (m.type === 'pantry') {
+      ingredientLines = (m.ingredients || []).map(i =>
+        `<span>${i.name} — ${i.qty}g</span>`
+      ).join('<br>');
+      macroHtml = `
+        <div class="meal-macros">
+          <span class="meal-macro-chip">🔥 ${m.kcal} kcal</span>
+          <span class="meal-macro-chip">P ${m.prot}g</span>
+          <span class="meal-macro-chip">C ${m.carb}g</span>
+          <span class="meal-macro-chip">F ${m.fat}g</span>
+        </div>`;
+    } else {
+      // Recipe: show per-100g + portion calculator
+      const hasNutrition = m.kcal100 || m.prot100 || m.carb100 || m.fat100;
+      ingredientLines = [m.source, m.notes].filter(Boolean).join(' · ');
+      macroHtml = `
+        ${hasNutrition ? `<div class="meal-macros" style="margin-bottom:.4rem;">
+          <span class="meal-macro-chip">🔥 ${m.kcal100||'?'} kcal/100g</span>
+          <span class="meal-macro-chip">P ${m.prot100||'?'}g</span>
+          <span class="meal-macro-chip">C ${m.carb100||'?'}g</span>
+          <span class="meal-macro-chip">F ${m.fat100||'?'}g</span>
+        </div>` : ''}
+        <div style="display:flex; gap:.4rem; align-items:center; margin-top:.3rem; flex-wrap:wrap;">
+          <input type="number" min="0" step="10" placeholder="g to serve"
+            id="portion-${m.id}" style="width:100px; padding:.3rem .5rem; border:1px solid var(--border); border-radius:4px; font-size:.82rem;"
+            oninput="calcRecipePortion('${m.id}')" />
+          <span id="portion-result-${m.id}" style="font-size:.8rem; color:var(--accent); font-weight:600;"></span>
+        </div>`;
+    }
+
+    return `
+      <div class="meal-card">
+        <button class="meal-del" onclick="deleteMeal('${m.id}')">✕</button>
+        <div class="meal-name">${m.name}</div>
+        <span class="meal-type-badge ${badgeClass}">${badgeLabel}</span>
+        ${ingredientLines ? `<div class="meal-ingredients">${ingredientLines}</div>` : ''}
+        ${macroHtml}
+        ${m.url ? `<div style="margin-top:.5rem;"><a href="${m.url}" target="_blank" style="font-size:.76rem;">View recipe ↗</a></div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+// ---- Portion calculator for recipe meals ----
+window.calcRecipePortion = mealId => {
+  const meal = state.meals.find(m => m.id === mealId);
+  if (!meal || meal.type !== 'recipe') return;
+  const grams = parseFloat(document.getElementById('portion-' + mealId).value) || 0;
+  const result = document.getElementById('portion-result-' + mealId);
+  if (!result) return;
+  if (!grams || (!meal.kcal100 && !meal.prot100)) { result.textContent = ''; return; }
+  const s = grams / 100;
+  const kcal = meal.kcal100 ? Math.round(meal.kcal100 * s) : null;
+  const prot = meal.prot100 ? (meal.prot100 * s).toFixed(1) : null;
+  const carb = meal.carb100 ? (meal.carb100 * s).toFixed(1) : null;
+  const fat  = meal.fat100  ? (meal.fat100  * s).toFixed(1) : null;
+  result.textContent = [
+    kcal != null ? `${kcal} kcal` : null,
+    prot != null ? `P ${prot}g` : null,
+    carb != null ? `C ${carb}g` : null,
+    fat  != null ? `F ${fat}g`  : null,
+  ].filter(Boolean).join(' · ');
+};
+
 function renderDashboard() {
   const summary = document.getElementById('dash-summary');
   const guide = document.getElementById('dash-guide');
@@ -995,6 +1373,7 @@ function renderDashboard() {
     <div class="target-card warn"><div class="target-val">${hardDays}</div><div class="target-label">hard/race days (full fuel)</div></div>
     <div class="target-card"><div class="target-val">${toGo}kg</div><div class="target-label">to goal weight (${goal}kg)</div></div>
     <div class="target-card"><div class="target-val">${state.products.length}</div><div class="target-label">products in your pantry</div></div>
+    <div class="target-card"><div class="target-val">${state.meals.length}</div><div class="target-label">saved meals</div></div>
   `;
 
   // Weekly guide text
@@ -1118,6 +1497,7 @@ function renderAll() {
   renderNutritionTable();
   renderProducts();
   renderRecommendations();
+  renderMeals();
   renderProfileCards();
   loadProfileForm();
   renderProfileSummary();

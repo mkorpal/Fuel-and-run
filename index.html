@@ -612,6 +612,18 @@
         <div class="card-title">📋 Your Nutritional Defaults</div>
         <div id="prof-summary" style="font-size:.88rem; color:var(--muted);"></div>
       </div>
+      <div class="card" style="border-left: 4px solid var(--accent2);">
+        <div class="card-title">🔄 Sync Between Devices</div>
+        <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">Products scanned on your iPhone are stored only in that browser. Use Export &rarr; AirDrop/email &rarr; Import to move data between your iPhone and Mac.</p>
+        <div style="display:flex; gap:.75rem; flex-wrap:wrap; align-items:center;">
+          <button class="btn btn-primary btn-sm" id="btn-export-data">⬇️ Export all my data</button>
+          <label class="btn btn-secondary btn-sm" style="cursor:pointer;">⬆️ Import data
+            <input type="file" id="import-file-input" accept=".json" style="display:none;" />
+          </label>
+          <span id="import-status" style="font-size:.82rem; color:var(--muted);"></span>
+        </div>
+        <p style="font-size:.78rem; color:var(--muted); margin-top:.75rem;">Importing <strong>merges</strong> products and meals into your current device. It does not overwrite your existing data.</p>
+      </div>
     </section>
 
   </main>
@@ -1637,6 +1649,62 @@ window.deleteProfile = id => {
   save(); renderAll();
   toast('Profile deleted');
 };
+
+// ============================================================
+// EXPORT / IMPORT
+// ============================================================
+document.getElementById('btn-export-data').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'fuel-and-run-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Data exported — share the file to your other device');
+});
+
+document.getElementById('import-file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try {
+      const imported = JSON.parse(evt.target.result);
+      let addedProducts = 0, addedMeals = 0;
+
+      // Merge products (skip duplicates by id)
+      const existingProductIds = new Set(state.products.map(p => p.id));
+      for (const p of (imported.products || [])) {
+        if (!existingProductIds.has(p.id)) {
+          state.products.push(p);
+          addedProducts++;
+        }
+      }
+
+      // Merge meals (skip duplicates by id)
+      if (!state.meals) state.meals = [];
+      const existingMealIds = new Set(state.meals.map(m => m.id));
+      for (const m of (imported.meals || [])) {
+        if (!existingMealIds.has(m.id)) {
+          state.meals.push(m);
+          addedMeals++;
+        }
+      }
+
+      save(); renderAll();
+      const status = document.getElementById('import-status');
+      if (status) status.textContent = `✅ Added ${addedProducts} product(s), ${addedMeals} meal(s)`;
+      toast(`✅ Import complete: ${addedProducts} new product(s), ${addedMeals} new meal(s)`);
+    } catch(err) {
+      const status = document.getElementById('import-status');
+      if (status) status.textContent = '⚠️ Invalid file — make sure it\'s a Fuel & Run export';
+      toast('⚠️ Import failed: invalid file');
+    }
+    e.target.value = ''; // reset so same file can be imported again if needed
+  };
+  reader.readAsText(file);
+});
 
 document.getElementById('btn-save-profile').addEventListener('click', () => {
   const ap = activeProfile();

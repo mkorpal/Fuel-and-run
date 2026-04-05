@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -282,7 +283,10 @@
 <body>
 <div id="app">
   <header>
-    <h1>🌿 Fuel &amp; Run</h1>
+    <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+      <h1>🌿 Fuel &amp; Run</h1>
+      <div id="profile-switcher" style="display:flex; align-items:center; gap:.5rem;"></div>
+    </div>
     <span>Nutrition Companion for Active Lifestyles</span>
   </header>
   <nav id="main-nav">
@@ -448,8 +452,15 @@
     <!-- PROFILE -->
     <section id="tab-profile" class="section">
       <div class="card">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>👤 Profiles</span>
+          <button class="btn btn-secondary btn-sm" id="btn-add-profile">+ Add Profile</button>
+        </div>
+        <div id="profile-list-cards" style="display:flex; gap:.75rem; flex-wrap:wrap; margin-bottom:1rem;"></div>
+      </div>
+      <div class="card">
         <div class="profile-avatar">🏃</div>
-        <div class="card-title">My Profile</div>
+        <div class="card-title" id="profile-form-title">My Profile</div>
         <div class="form-inline">
           <div class="form-row"><label>Name</label><input type="text" id="prof-name" placeholder="Your name" /></div>
           <div class="form-row"><label>Age</label><input type="number" id="prof-age" min="18" max="80" /></div>
@@ -514,16 +525,22 @@
 
 <script>
 // ============================================================
-// STATE
+// STATE  (multi-profile; products shared)
 // ============================================================
+function newProfile(id, name) {
+  return { id, name: name||'Runner '+(id), age: '', sex: 'male', weight: 72,
+    goalWeight: 69.5, height: 175, weeklyKm: 75, diet: 'plantforward', notes: '', sessions: [] };
+}
+
 let state = {
-  profile: {
-    name: '', age: '', sex: 'male', weight: 72, goalWeight: 69.5,
-    height: 175, weeklyKm: 75, diet: 'plantforward', notes: ''
-  },
-  sessions: [], // {day:0-6, type, dist, dur, intensity, title}
-  products: []  // {id, name, brand, cat, serve, kcal, prot, carb, fat, notes, url}
+  activeProfileId: 'p1',
+  profiles: [ newProfile('p1', 'Profile 1') ],
+  products: []
 };
+
+function activeProfile() {
+  return state.profiles.find(p => p.id === state.activeProfileId) || state.profiles[0];
+}
 
 // ============================================================
 // PERSIST
@@ -532,7 +549,15 @@ function save() { localStorage.setItem('fuelrun', JSON.stringify(state)); }
 function load() {
   try {
     const d = localStorage.getItem('fuelrun');
-    if (d) state = { ...state, ...JSON.parse(d) };
+    if (!d) return;
+    const parsed = JSON.parse(d);
+    // Migrate old single-profile format
+    if (parsed.profile && !parsed.profiles) {
+      const p = { ...newProfile('p1', parsed.profile.name||'Profile 1'), ...parsed.profile, id:'p1', sessions: parsed.sessions||[] };
+      state = { activeProfileId:'p1', profiles:[p], products: parsed.products||[] };
+    } else {
+      state = { ...state, ...parsed };
+    }
   } catch(e) {}
 }
 
@@ -613,10 +638,10 @@ icsInput.addEventListener('change', e => {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = evt => {
-    state.sessions = parseICS(evt.target.result);
+    activeProfile().sessions = parseICS(evt.target.result);
     document.getElementById('ics-filename').textContent = '✅ ' + file.name;
     save(); renderAll();
-    toast('Calendar imported — ' + state.sessions.length + ' session(s) found');
+    toast('Calendar imported — ' + activeProfile().sessions.length + ' session(s) found');
   };
   reader.readAsText(file);
 });
@@ -629,17 +654,17 @@ uploadZone.addEventListener('drop', e => {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = evt => {
-    state.sessions = parseICS(evt.target.result);
+    activeProfile().sessions = parseICS(evt.target.result);
     document.getElementById('ics-filename').textContent = '✅ ' + file.name;
     save(); renderAll();
-    toast('Calendar imported — ' + state.sessions.length + ' session(s) found');
+    toast('Calendar imported — ' + activeProfile().sessions.length + ' session(s) found');
   };
   reader.readAsText(file);
 });
 
 // Demo week
 document.getElementById('btn-demo').addEventListener('click', () => {
-  state.sessions = [
+  activeProfile().sessions = [
     { day:0, type:'run', dist:10, dur:55, intensity:'easy', title:'Easy Run' },
     { day:1, type:'run', dist:12, dur:65, intensity:'moderate', title:'Steady State Run' },
     { day:2, type:'strength', dist:0, dur:50, intensity:'moderate', title:'Strength & Conditioning' },
@@ -654,7 +679,7 @@ document.getElementById('btn-demo').addEventListener('click', () => {
 });
 
 document.getElementById('btn-clear-training').addEventListener('click', () => {
-  state.sessions = [];
+  activeProfile().sessions = [];
   document.getElementById('ics-filename').textContent = '';
   save(); renderAll();
   toast('Schedule cleared');
@@ -671,9 +696,9 @@ document.getElementById('btn-add-session').addEventListener('click', () => {
   const dist = parseFloat(document.getElementById('man-dist').value) || 0;
   const dur  = parseInt(document.getElementById('man-dur').value) || 0;
   const intensity = document.getElementById('man-int').value;
-  // Remove existing session for this day
-  state.sessions = state.sessions.filter(s => s.day !== dayIdx);
-  state.sessions.push({ day: dayIdx, type, dist, dur, intensity, title: type.charAt(0).toUpperCase()+type.slice(1) });
+  const ap = activeProfile();
+  ap.sessions = ap.sessions.filter(s => s.day !== dayIdx);
+  ap.sessions.push({ day: dayIdx, type, dist, dur, intensity, title: type.charAt(0).toUpperCase()+type.slice(1) });
   save(); renderAll();
   toast('Session saved for ' + dayName);
 });
@@ -685,7 +710,7 @@ const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sun
 const ABBR = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 function sessionForDay(dayIdx) {
-  return state.sessions.find(s => s.day === dayIdx) || null;
+  return activeProfile().sessions.find(s => s.day === dayIdx) || null;
 }
 
 function intensityMult(intensity) {
@@ -695,7 +720,7 @@ function intensityMult(intensity) {
 // Estimate kcal burned from running (approx: ~1 kcal/kg/km, + 5 MET * (dur/60) * weight)
 function estimateBurn(session) {
   if (!session || session.type === 'rest') return 0;
-  const w = state.profile.weight || 72;
+  const w = activeProfile().weight || 72;
   if (session.type === 'run') {
     const byDist = session.dist > 0 ? session.dist * w * 1.0 : 0;
     const byDur  = session.dur  > 0 ? (session.dur / 60) * w * ({ easy:8.5, moderate:10, hard:12, race:14 }[session.intensity] || 10) : 0;
@@ -708,16 +733,17 @@ function estimateBurn(session) {
 }
 
 function dailyTargets(dayIdx) {
-  const w = state.profile.weight || 72;
+  const ap = activeProfile();
+  const w = ap.weight || 72;
   const s = sessionForDay(dayIdx);
   const burn = estimateBurn(s);
   const isHard = s && (s.intensity === 'hard' || s.intensity === 'race');
   const isRest = !s || s.type === 'rest';
 
   // BMR (Mifflin-St Jeor, male default unless female set)
-  const isFemale = state.profile.sex === 'female';
-  const h = state.profile.height || 175;
-  const age = state.profile.age || 35;
+  const isFemale = ap.sex === 'female';
+  const h = ap.height || 175;
+  const age = ap.age || 35;
   const bmr = isFemale
     ? (10 * w + 6.25 * h - 5 * age - 161)
     : (10 * w + 6.25 * h - 5 * age + 5);
@@ -945,12 +971,13 @@ function renderDashboard() {
   const tipEl = document.getElementById('dash-tip');
   if (!summary) return;
 
-  const totalKm = state.sessions.reduce((a,s) => a + (s.type==='run' ? s.dist : 0), 0);
-  const totalBurn = state.sessions.reduce((a,s) => a + estimateBurn(s), 0);
+  const ap = activeProfile();
+  const totalKm = ap.sessions.reduce((a,s) => a + (s.type==='run' ? s.dist : 0), 0);
+  const totalBurn = ap.sessions.reduce((a,s) => a + estimateBurn(s), 0);
   const avgKcal = Math.round([0,1,2,3,4,5,6].reduce((a,d) => a + dailyTargets(d).kcal, 0) / 7);
-  const hardDays = state.sessions.filter(s => s.intensity === 'hard' || s.intensity === 'race').length;
-  const w = state.profile.weight || 72;
-  const goal = state.profile.goalWeight || 69.5;
+  const hardDays = ap.sessions.filter(s => s.intensity === 'hard' || s.intensity === 'race').length;
+  const w = ap.weight || 72;
+  const goal = ap.goalWeight || 69.5;
   const toGo = Math.max(0, w - goal).toFixed(1);
 
   summary.innerHTML = `
@@ -966,9 +993,9 @@ function renderDashboard() {
   const weeklyCarb = Math.round(totalKm * 1.5 * (w / 70));
   guide.innerHTML = `
     <div style="font-size:.88rem; line-height:1.8;">
-      <p>This week you have <strong>${totalKm.toFixed(0)} km</strong> of running planned across <strong>${state.sessions.filter(s=>s.type==='run').length} sessions</strong>.</p>
-      <p style="margin-top:.6rem;"><strong>Protein:</strong> Aim for ~${Math.round(1.8*(state.profile.weight||72))}g/day spread over 4+ meals to support muscle repair.</p>
-      <p style="margin-top:.4rem;"><strong>Carbohydrates:</strong> Increase on long run / hard days (up to ${Math.round(7.5*(state.profile.weight||72))}g/day). Reduce on rest days (${Math.round(4.5*(state.profile.weight||72))}g/day).</p>
+      <p>This week you have <strong>${totalKm.toFixed(0)} km</strong> of running planned across <strong>${ap.sessions.filter(s=>s.type==='run').length} sessions</strong>.</p>
+      <p style="margin-top:.6rem;"><strong>Protein:</strong> Aim for ~${Math.round(1.8*(ap.weight||72))}g/day spread over 4+ meals to support muscle repair.</p>
+      <p style="margin-top:.4rem;"><strong>Carbohydrates:</strong> Increase on long run / hard days (up to ${Math.round(7.5*(ap.weight||72))}g/day). Reduce on rest days (${Math.round(4.5*(ap.weight||72))}g/day).</p>
       <p style="margin-top:.4rem;"><strong>Hydration:</strong> Add ~500–750ml water per hour of running on top of baseline 2–2.5L/day.</p>
       ${hardDays > 2 ? '<p style="margin-top:.4rem; color:var(--warn);"><strong>⚠️ Busy week:</strong> '+hardDays+' hard sessions — ensure you nail pre-run fuelling and post-run recovery nutrition every time.</p>' : ''}
     </div>
@@ -981,24 +1008,62 @@ function renderDashboard() {
 // ============================================================
 // PROFILE
 // ============================================================
-document.getElementById('btn-save-profile').addEventListener('click', () => {
-  state.profile = {
-    name:      document.getElementById('prof-name').value.trim(),
-    age:       +document.getElementById('prof-age').value || 35,
-    sex:       document.getElementById('prof-sex').value,
-    weight:    +document.getElementById('prof-weight').value || 72,
-    goalWeight:+document.getElementById('prof-goal').value || 69.5,
-    height:    +document.getElementById('prof-height').value || 175,
-    weeklyKm:  +document.getElementById('prof-km').value || 75,
-    diet:      document.getElementById('prof-diet').value,
-    notes:     document.getElementById('prof-notes').value.trim(),
-  };
+document.getElementById('btn-add-profile').addEventListener('click', () => {
+  const id = 'p' + Date.now();
+  const n = state.profiles.length + 1;
+  state.profiles.push(newProfile(id, 'Profile ' + n));
+  state.activeProfileId = id;
   save(); renderAll();
-  toast('Profile saved');
+  toast('New profile created — fill in details and save');
 });
 
+window.switchProfile = id => {
+  state.activeProfileId = id;
+  save(); renderAll();
+  toast('Switched to ' + (activeProfile().name || 'profile'));
+};
+
+window.deleteProfile = id => {
+  if (state.profiles.length === 1) { toast('Cannot delete the only profile'); return; }
+  state.profiles = state.profiles.filter(p => p.id !== id);
+  if (state.activeProfileId === id) state.activeProfileId = state.profiles[0].id;
+  save(); renderAll();
+  toast('Profile deleted');
+};
+
+document.getElementById('btn-save-profile').addEventListener('click', () => {
+  const ap = activeProfile();
+  ap.name       = document.getElementById('prof-name').value.trim() || ap.name;
+  ap.age        = +document.getElementById('prof-age').value || 35;
+  ap.sex        = document.getElementById('prof-sex').value;
+  ap.weight     = +document.getElementById('prof-weight').value || 72;
+  ap.goalWeight = +document.getElementById('prof-goal').value || 69.5;
+  ap.height     = +document.getElementById('prof-height').value || 175;
+  ap.weeklyKm   = +document.getElementById('prof-km').value || 75;
+  ap.diet       = document.getElementById('prof-diet').value;
+  ap.notes      = document.getElementById('prof-notes').value.trim();
+  save(); renderAll();
+  toast('Profile saved: ' + ap.name);
+});
+
+function renderProfileCards() {
+  const el = document.getElementById('profile-list-cards');
+  if (!el) return;
+  el.innerHTML = state.profiles.map(p => {
+    const isActive = p.id === state.activeProfileId;
+    return `<div style="border:2px solid ${isActive?'var(--accent)':'var(--border)'}; border-radius:var(--radius); padding:.6rem .9rem; background:${isActive?'#eaf4ee':'var(--surface)'}; min-width:130px; position:relative;">
+      ${state.profiles.length>1?`<button onclick="deleteProfile('${p.id}')" style="position:absolute;top:.3rem;right:.4rem;background:none;border:none;cursor:pointer;color:var(--muted);font-size:.85rem;" title="Delete">✕</button>`:''}  
+      <div style="font-weight:700; font-size:.9rem;">${p.name||'Unnamed'}</div>
+      <div style="font-size:.75rem; color:var(--muted);">${p.weight||'—'}kg · ${p.weeklyKm||'—'}km/wk</div>
+      ${!isActive?`<button class="btn btn-secondary btn-sm" style="margin-top:.4rem;" onclick="switchProfile('${p.id}')">Switch</button>`:'<span style="font-size:.72rem; color:var(--accent); font-weight:600;">● Active</span>'}
+    </div>`;
+  }).join('');
+  const title = document.getElementById('profile-form-title');
+  if (title) title.textContent = 'Edit: ' + (activeProfile().name || 'Profile');
+}
+
 function loadProfileForm() {
-  const p = state.profile;
+  const p = activeProfile();
   document.getElementById('prof-name').value = p.name || '';
   document.getElementById('prof-age').value = p.age || '';
   document.getElementById('prof-sex').value = p.sex || 'male';
@@ -1011,7 +1076,7 @@ function loadProfileForm() {
 }
 
 function renderProfileSummary() {
-  const p = state.profile;
+  const p = activeProfile();
   const el = document.getElementById('prof-summary');
   if (!el) return;
   const bmi = p.height ? (p.weight / Math.pow(p.height/100, 2)).toFixed(1) : '—';
@@ -1028,12 +1093,24 @@ function renderProfileSummary() {
 // ============================================================
 // RENDER ALL
 // ============================================================
+function renderHeaderSwitcher() {
+  const el = document.getElementById('profile-switcher');
+  if (!el) return;
+  el.innerHTML = state.profiles.map(p =>
+    p.id === state.activeProfileId
+      ? `<span style="background:rgba(255,255,255,.25); color:#fff; font-size:.8rem; font-weight:700; padding:.2rem .65rem; border-radius:20px;">${p.name||'Profile'}</span>`
+      : `<button onclick="switchProfile('${p.id}')" style="background:rgba(255,255,255,.1); color:rgba(255,255,255,.8); border:1px solid rgba(255,255,255,.3); font-size:.78rem; padding:.2rem .6rem; border-radius:20px; cursor:pointer;">${p.name||'Profile'}</button>`
+  ).join('');
+}
+
 function renderAll() {
+  renderHeaderSwitcher();
   renderDashboard();
   renderWeekGrid();
   renderNutritionTable();
   renderProducts();
   renderRecommendations();
+  renderProfileCards();
   loadProfileForm();
   renderProfileSummary();
 }

@@ -157,27 +157,41 @@
   .target-label { font-size: .75rem; color: var(--muted); margin-top: .1rem; }
 
   /* ---- Products ---- */
-  .product-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+  .product-group-title {
+    font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--muted); margin: 1rem 0 .4rem; padding-bottom: .25rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .product-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .6rem; }
   .product-card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 1rem;
+    padding: .55rem .75rem;
     position: relative;
+    cursor: pointer;
+    transition: border-color .15s;
   }
-  .product-card .pname { font-weight: 700; font-size: .95rem; margin-bottom: .2rem; }
-  .product-card .pbrand { font-size: .78rem; color: var(--muted); margin-bottom: .5rem; }
+  .product-card:hover { border-color: var(--accent); }
+  .product-card .pname { font-weight: 700; font-size: .9rem; margin-bottom: .1rem; padding-right: 1.4rem; }
+  .product-card .pbrand { font-size: .75rem; color: var(--muted); }
   .product-card .ptag {
-    display: inline-block; font-size: .7rem; font-weight: 600;
-    background: var(--surface2); border-radius: 3px; padding: .1rem .4rem; margin-right: .3rem; margin-bottom: .3rem;
+    display: inline-block; font-size: .68rem; font-weight: 600;
+    background: var(--surface2); border-radius: 3px; padding: .05rem .35rem; margin-right: .25rem;
   }
   .product-card .pbtn-del {
-    position: absolute; top: .6rem; right: .6rem;
-    background: none; border: none; cursor: pointer; color: var(--muted); font-size: 1rem;
+    position: absolute; top: .45rem; right: .5rem;
+    background: none; border: none; cursor: pointer; color: var(--muted); font-size: .9rem;
+    z-index: 1;
   }
   .product-card .pbtn-del:hover { color: var(--danger); }
-  .nutrient-row { display: flex; justify-content: space-between; font-size: .78rem; border-top: 1px solid var(--border); padding: .2rem 0; }
-  .nutrient-row:first-of-type { margin-top: .4rem; }
+  .product-card .pnutrients {
+    display: none; margin-top: .45rem; padding-top: .35rem; border-top: 1px solid var(--border);
+  }
+  .product-card.expanded .pnutrients,
+  .product-card:hover .pnutrients { display: block; }
+  .nutrient-row { display: flex; justify-content: space-between; font-size: .76rem; padding: .15rem 0; border-top: 1px solid var(--border); }
+  .nutrient-row:first-of-type { border-top: none; }
 
   /* ---- Forms ---- */
   .form-row { margin-bottom: .9rem; }
@@ -526,7 +540,8 @@
       </div>
       <div class="card">
         <div class="card-title">My Product Pantry</div>
-        <div class="product-list" id="product-list"></div>
+        <p style="font-size:.8rem; color:var(--muted); margin-bottom:.75rem;">Hover over a product (or tap on mobile) to see its nutritional info. Products are grouped by category.</p>
+        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap:.6rem;" id="product-list"></div>
         <p id="no-products" style="color:var(--muted); font-size:.85rem;">No products saved yet. Add your first product above.</p>
       </div>
     </section>
@@ -1207,22 +1222,49 @@ function renderProducts() {
     return;
   }
   none.style.display = 'none';
-  list.innerHTML = state.products.map(p => `
-    <div class="product-card">
+
+  // Group products by category
+  const groups = {};
+  state.products.forEach(p => {
+    const cat = p.cat || 'Other';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(p);
+  });
+  const catOrder = ['Dairy','Protein','Carbs','Fruit & Veg','Snack','Drink','Supplement','Other'];
+  const sortedCats = Object.keys(groups).sort((a, b) => {
+    const ai = catOrder.indexOf(a), bi = catOrder.indexOf(b);
+    return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
+  });
+
+  const productCard = p => `
+    <div class="product-card" id="pcard-${p.id}" onclick="toggleProductCard('${p.id}', event)">
       <button class="pbtn-del" onclick="deleteProduct('${p.id}')">✕</button>
       <div class="pname">${p.nickname || p.name}</div>
-      ${p.nickname ? `<div style="font-size:.78rem; color:var(--muted); margin-bottom:.1rem;">${p.name}</div>` : ''}
-      <div class="pbrand">${p.brand || ''} <span class="ptag">${p.cat}</span></div>
-      ${p.notes ? `<div style="font-size:.78rem; color:var(--muted); margin-bottom:.3rem;">${p.notes}</div>` : ''}
-      <div class="nutrient-row"><span>Serving</span><span>${p.serve || '—'}g/ml</span></div>
-      <div class="nutrient-row"><span>Calories</span><span><b>${p.kcal || '—'}</b> kcal</span></div>
-      <div class="nutrient-row"><span>Protein</span><span>${p.prot || '—'}g</span></div>
-      <div class="nutrient-row"><span>Carbohydrate</span><span>${p.carb || '—'}g</span></div>
-      <div class="nutrient-row"><span>Fat</span><span>${p.fat || '—'}g</span></div>
-      ${p.url ? `<div style="margin-top:.5rem;"><a href="${p.url}" target="_blank" style="font-size:.76rem;">View product ↗</a></div>` : ''}
+      ${p.nickname ? `<div class="pbrand">${p.name}</div>` : ''}
+      ${p.brand ? `<div class="pbrand">${p.brand}</div>` : ''}
+      ${p.notes ? `<div style="font-size:.73rem; color:var(--muted);">${p.notes}</div>` : ''}
+      <div class="pnutrients">
+        <div class="nutrient-row"><span>Serving</span><span>${p.serve || '—'}g/ml</span></div>
+        <div class="nutrient-row"><span>Calories</span><span><b>${p.kcal || '—'}</b> kcal</span></div>
+        <div class="nutrient-row"><span>Protein</span><span>${p.prot || '—'}g</span></div>
+        <div class="nutrient-row"><span>Carbs</span><span>${p.carb || '—'}g</span></div>
+        <div class="nutrient-row"><span>Fat</span><span>${p.fat || '—'}g</span></div>
+        ${p.url ? `<div style="margin-top:.4rem;"><a href="${p.url}" target="_blank" style="font-size:.74rem;" onclick="event.stopPropagation()">View product ↗</a></div>` : ''}
+      </div>
     </div>
+  `;
+
+  list.innerHTML = sortedCats.map(cat => `
+    <div style="grid-column: 1/-1;" class="product-group-title">${cat} <span style="font-weight:400; font-size:.72rem;">(${groups[cat].length})</span></div>
+    ${groups[cat].map(productCard).join('')}
   `).join('');
 }
+
+window.toggleProductCard = (id, e) => {
+  if (e && e.target.classList.contains('pbtn-del')) return;
+  const card = document.getElementById('pcard-' + id);
+  if (card) card.classList.toggle('expanded');
+};
 
 window.deleteProduct = id => {
   state.products = state.products.filter(p => p.id !== id);

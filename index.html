@@ -454,8 +454,8 @@
         <div class="card-title">📝 Log Calories</div>
         <div class="form-inline">
           <div class="form-row" style="flex:2; min-width:180px;">
-            <label>Calories consumed today</label>
-            <input type="number" id="log-consumed" min="0" step="10" placeholder="e.g. 2400" />
+            <label>Extra calories today (not in your plate)</label>
+            <input type="number" id="log-consumed" min="0" step="10" placeholder="e.g. 300" />
           </div>
           <div class="form-row" style="flex:1; min-width:140px;">
             <label>Date</label>
@@ -1812,15 +1812,26 @@ function aggregateCalorieData(log, days) {
 }
 
 function renderCalorieChart() {
-  // Only render when dashboard section is visible (avoids zero-size canvas)
-  if (!document.getElementById('tab-dashboard').classList.contains('active')) return;
+  const canvas = document.getElementById('calorie-chart');
+  if (!canvas) return;
+  const isDashboardActive = document.getElementById('tab-dashboard').classList.contains('active');
   const ap = activeProfile();
   const log = ap.dailyLog || [];
   const { labels, consumed, used } = aggregateCalorieData(log, chartPeriodDays);
-  const canvas = document.getElementById('calorie-chart');
-  if (!canvas) return;
   const hasData = consumed.some(v => v !== null) || used.some(v => v !== null);
   const noDataEl = document.getElementById('chart-no-data');
+
+  // If chart already exists and dashboard isn't visible, silently update data in-place
+  if (calorieChart && !isDashboardActive) {
+    calorieChart.data.labels = labels;
+    calorieChart.data.datasets[0].data = consumed;
+    calorieChart.data.datasets[1].data = used;
+    calorieChart.update('none');
+    return;
+  }
+
+  // Only do a full (re)create when dashboard is visible — avoids zero-size canvas on first render
+  if (!isDashboardActive) return;
   if (noDataEl) noDataEl.style.display = hasData ? 'none' : '';
   if (calorieChart) { calorieChart.destroy(); calorieChart = null; }
   if (!hasData) return;
@@ -1897,15 +1908,16 @@ document.getElementById('btn-log-calories').addEventListener('click', () => {
   const t = dailyTargets(dayMon0);
   const existing = ap.dailyLog.find(l => l.date === date);
   if (existing) {
-    existing.consumed = consumed;
+    const platePortion = (existing.items || []).reduce((s, i) => s + (i.kcal || 0), 0);
+    existing.consumed = platePortion + consumed;
     existing.tdee = existing.tdee || t.tdee;
   } else {
-    ap.dailyLog.push({ date, consumed, tdee: t.tdee, target: t.kcal });
+    ap.dailyLog.push({ date, consumed, tdee: t.tdee, target: t.kcal, items: [] });
   }
   save();
   renderCalorieChart();
   document.getElementById('log-consumed').value = '';
-  toast(`✅ Logged ${consumed.toLocaleString()} kcal for ${date}`);
+  toast(`✅ Logged ${consumed.toLocaleString()} kcal extra for ${date}`);
 });
 
 function renderDashboard() {
@@ -1955,7 +1967,12 @@ function renderDashboard() {
   if (hintEl) {
     const todayMon0 = (new Date().getDay() + 6) % 7;
     const t = dailyTargets(todayMon0);
-    hintEl.textContent = `Today’s target: ${t.kcal.toLocaleString()} kcal · TDEE: ${t.tdee.toLocaleString()} kcal`;
+    const todayEntry = (ap.dailyLog || []).find(l => l.date === dateStr(new Date()));
+    const platePortion = todayEntry ? (todayEntry.items || []).reduce((s, i) => s + (i.kcal || 0), 0) : 0;
+    const extraPortion = todayEntry ? Math.max(0, (todayEntry.consumed || 0) - platePortion) : 0;
+    const plateLabel = platePortion > 0 ? ` · Plate: ${platePortion.toLocaleString()} kcal` : '';
+    const extraLabel = extraPortion > 0 ? ` · Extra: ${extraPortion.toLocaleString()} kcal` : '';
+    hintEl.textContent = `Target: ${t.kcal.toLocaleString()} kcal · TDEE: ${t.tdee.toLocaleString()} kcal${plateLabel}${extraLabel}`;
   }
   renderCalorieChart();
 }

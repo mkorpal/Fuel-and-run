@@ -956,9 +956,14 @@ async function pullFromCloud(key) {
 // ============================================================
 // PERSIST
 // ============================================================
-function save() {
+let _pushQueued = false;
+async function save() {
   localStorage.setItem('fuelrun', JSON.stringify(state));
-  pushToCloud();
+  if (_pushQueued) return;  // debounce rapid saves
+  _pushQueued = true;
+  await new Promise(r => setTimeout(r, 300));
+  _pushQueued = false;
+  await pushToCloud();
 }
 
 function applyParsed(parsed) {
@@ -1094,10 +1099,12 @@ async function doAutoSync() {
     const remote = await pullFromCloud(syncKey);
     if (remote) {
       const merged = mergeStates(state, remote);
-      if (JSON.stringify(merged) !== JSON.stringify(state)) {
+      // Use sorted stringify for reliable comparison
+      const sortedStringify = o => JSON.stringify(o, Object.keys(o).sort());
+      if (sortedStringify(merged) !== sortedStringify(state)) {
         applyParsed(merged);
         localStorage.setItem('fuelrun', JSON.stringify(state));
-        pushToCloud();
+        await pushToCloud();
         renderAll();
         setSyncStatus('✔ Updated · ' + new Date().toLocaleTimeString());
       }
@@ -1110,6 +1117,15 @@ function startAutoSync() {
   if (_autoSyncTimer) clearInterval(_autoSyncTimer);
   if (syncKey) _autoSyncTimer = setInterval(doAutoSync, 30000);
 }
+
+// Sync when tab becomes visible (critical for mobile Safari)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && syncKey) {
+    doAutoSync();
+  }
+});
+// Also sync on focus (some browsers fire this instead of visibilitychange)
+window.addEventListener('focus', () => { if (syncKey) doAutoSync(); });
 
 // Manual sync trigger
 document.getElementById('btn-sync-now').addEventListener('click', () => {

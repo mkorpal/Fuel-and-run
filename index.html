@@ -192,6 +192,51 @@
   .product-card:hover { border-color: var(--accent); }
   .nutrient-row { display: flex; justify-content: space-between; font-size: .76rem; padding: .15rem 0; border-top: 1px solid var(--border); }
   .nutrient-row:first-of-type { border-top: none; }
+  .plog-btn {
+    display: inline-block; margin-top: .4rem; font-size: .72rem; font-weight: 700;
+    background: var(--accent); color: #fff; border: none; border-radius: 4px;
+    padding: .2rem .55rem; cursor: pointer; line-height: 1.4;
+  }
+  .plog-btn:hover { opacity: .85; }
+
+  /* ---- Today's Plate ---- */
+  .plate-panel { position: sticky; top: 1rem; min-width: 240px; width: 260px; flex-shrink: 0; }
+  .plate-zone {
+    position: relative;
+    border: 2.5px dashed var(--border); border-radius: 50%;
+    width: 150px; height: 150px;
+    margin: .5rem auto .75rem;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 2.6rem; cursor: default;
+    transition: border-color .2s, background .2s;
+    background: var(--surface2);
+    user-select: none;
+  }
+  .plate-zone.drag-over { border-color: var(--accent); background: #eaf4ee; border-style: solid; }
+  .plate-zone p { font-size: .7rem; color: var(--muted); text-align: center; margin: 0; line-height: 1.4; }
+  .plate-item-row {
+    display: flex; align-items: center; gap: .35rem;
+    font-size: .8rem; padding: .28rem 0; border-top: 1px solid var(--border);
+  }
+  .pi-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pi-qty  { font-size: .72rem; color: var(--muted); white-space: nowrap; }
+  .pi-kcal { font-weight: 700; color: var(--accent); white-space: nowrap; }
+  .pi-del  { background: none; border: none; cursor: pointer; color: var(--muted); font-size: .85rem; flex-shrink: 0; }
+  .pi-del:hover { color: var(--danger); }
+  .plate-total { font-size: .95rem; font-weight: 700; color: var(--accent); text-align: center; margin-top: .6rem; padding-top: .5rem; border-top: 2px solid var(--border); }
+  /* Quantity modal */
+  .qty-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 2000;
+  }
+  .qty-modal {
+    background: var(--surface); border-radius: var(--radius);
+    padding: 1.5rem; min-width: 290px; max-width: 92vw;
+    box-shadow: 0 8px 32px rgba(0,0,0,.22);
+  }
+  .qty-modal h3 { font-size: 1rem; margin-bottom: .3rem; }
+  .qty-modal .qty-preview { font-size: .82rem; color: var(--muted); margin: .35rem 0 1rem; min-height: 1.4em; }
 
   /* ---- Forms ---- */
   .form-row { margin-bottom: .9rem; }
@@ -538,11 +583,25 @@
           <button class="btn btn-secondary" type="button" id="btn-scan-barcode">📷 Scan Barcode</button>
         </form>
       </div>
-      <div class="card">
-        <div class="card-title">My Product Pantry</div>
-        <p style="font-size:.8rem; color:var(--muted); margin-bottom:.75rem;">Hover over a product (or tap on mobile) to see its nutritional info. Products are grouped by category.</p>
-        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap:.6rem;" id="product-list"></div>
-        <p id="no-products" style="color:var(--muted); font-size:.85rem;">No products saved yet. Add your first product above.</p>
+      <div style="display:flex; gap:1rem; align-items:start; flex-wrap:wrap;">
+        <div class="card" style="flex:1; min-width:260px;">
+          <div class="card-title">My Product Pantry</div>
+          <p style="font-size:.8rem; color:var(--muted); margin-bottom:.75rem;">Click a card to see nutrition. <strong>Drag</strong> it onto the plate (or tap <strong>＋</strong>) to log it for today.</p>
+          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap:.6rem;" id="product-list"></div>
+          <p id="no-products" style="color:var(--muted); font-size:.85rem;">No products saved yet. Add your first product above.</p>
+        </div>
+        <div class="card plate-panel" id="plate-products-wrap">
+          <div class="card-title" style="text-align:center;">🍽️ Today's Plate</div>
+          <div class="plate-zone" id="plate-zone-products"
+               ondragover="event.preventDefault(); document.getElementById('plate-zone-products').classList.add('drag-over')"
+               ondragleave="document.getElementById('plate-zone-products').classList.remove('drag-over')"
+               ondrop="handleDrop(event,'plate-zone-products')">
+            🍽️<p>Drop food here<br>or tap ＋</p>
+          </div>
+          <div id="plate-items-products"></div>
+          <div id="plate-total-products" class="plate-total" style="display:none;"></div>
+          <div id="plate-date-products" style="text-align:center;font-size:.73rem;color:var(--muted);margin-top:.4rem;"></div>
+        </div>
       </div>
     </section>
 
@@ -557,19 +616,33 @@
 
     <!-- MY MEALS -->
     <section id="tab-meals" class="section">
-      <div class="card">
-        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-          <span>🍽️ My Meals</span>
-          <button class="btn btn-primary btn-sm" id="btn-new-meal">+ Create Meal</button>
+      <div style="display:flex; gap:1rem; align-items:start; flex-wrap:wrap;">
+        <div class="card" style="flex:1; min-width:260px;">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+            <span>🍽️ My Meals</span>
+            <button class="btn btn-primary btn-sm" id="btn-new-meal">+ Create Meal</button>
+          </div>
+          <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">Build meals from your pantry products or save recipes. <strong>Drag</strong> a meal card (or tap <strong>＋</strong>) to log it to today's plate.</p>
+          <div style="display:flex; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm meal-filter-btn active" data-filter="all">All meals</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="pantry">🛒 From Pantry</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="recipe">🌐 From Recipe</button>
+          </div>
+          <div class="meal-grid" id="meal-grid"></div>
+          <p id="no-meals" style="color:var(--muted); font-size:.85rem;">No meals saved yet. Create your first meal above.</p>
         </div>
-        <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">Build meals from your pantry products (nutrition auto-calculated) or save internet recipes with macros per 100g for easy day logging.</p>
-        <div style="display:flex; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-sm meal-filter-btn active" data-filter="all">All meals</button>
-          <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="pantry">🛒 From Pantry</button>
-          <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="recipe">🌐 From Recipe</button>
+        <div class="card plate-panel" id="plate-meals-wrap">
+          <div class="card-title" style="text-align:center;">🍽️ Today's Plate</div>
+          <div class="plate-zone" id="plate-zone-meals"
+               ondragover="event.preventDefault(); document.getElementById('plate-zone-meals').classList.add('drag-over')"
+               ondragleave="document.getElementById('plate-zone-meals').classList.remove('drag-over')"
+               ondrop="handleDrop(event,'plate-zone-meals')">
+            🍽️<p>Drop food here<br>or tap ＋</p>
+          </div>
+          <div id="plate-items-meals"></div>
+          <div id="plate-total-meals" class="plate-total" style="display:none;"></div>
+          <div id="plate-date-meals" style="text-align:center;font-size:.73rem;color:var(--muted);margin-top:.4rem;"></div>
         </div>
-        <div class="meal-grid" id="meal-grid"></div>
-        <p id="no-meals" style="color:var(--muted); font-size:.85rem;">No meals saved yet. Create your first meal above.</p>
       </div>
     </section>
 
@@ -666,6 +739,22 @@
 
   </main>
   <footer>Fuel &amp; Run — personalised nutrition for active lifestyles · Data stored locally in your browser only</footer>
+</div>
+
+<!-- Quantity Modal -->
+<div class="qty-overlay" id="qty-overlay" style="display:none;">
+  <div class="qty-modal">
+    <h3 id="qty-modal-title">Add to Today's Plate</h3>
+    <div class="qty-preview" id="qty-preview"></div>
+    <div class="form-row">
+      <label id="qty-label">Quantity (g)</label>
+      <input type="number" id="qty-input" min="1" step="1" style="font-size:1rem;" />
+    </div>
+    <div style="display:flex; gap:.75rem; margin-top:.5rem;">
+      <button class="btn btn-primary" id="qty-confirm">Add to Plate</button>
+      <button class="btn btn-secondary" id="qty-cancel">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <!-- Barcode Scanner Modal -->
@@ -842,11 +931,20 @@ function mergeStates(local, remote) {
         const ex = sessMap[s.day];
         if (!ex || (s.updatedAt || '') > (ex.updatedAt || '')) sessMap[s.day] = s;
       });
-      // DailyLog: one per date, newer updatedAt wins
+      // DailyLog: one per date, newer updatedAt wins; merge items arrays
       const logMap = {};
       [...(base.dailyLog || []), ...(p.dailyLog || [])].forEach(entry => {
         const ex = logMap[entry.date];
-        if (!ex || (entry.updatedAt || '') > (ex.updatedAt || '')) logMap[entry.date] = entry;
+        if (!ex) { logMap[entry.date] = { ...entry, items: [...(entry.items || [])] }; }
+        else {
+          // Merge items by id, then recalc consumed
+          const itemMap = {};
+          [...(ex.items || []), ...(entry.items || [])].forEach(it => { itemMap[it.id] = it; });
+          const merged = { ...((entry.updatedAt||'') > (ex.updatedAt||'') ? entry : ex) };
+          merged.items = Object.values(itemMap);
+          merged.consumed = merged.items.reduce((s, i) => s + (i.kcal || 0), 0) || merged.consumed;
+          logMap[entry.date] = merged;
+        }
       });
       // Profile settings: newer updatedAt wins
       const newer = ((p.updatedAt || '') > (base.updatedAt || '')) ? p : base;
@@ -1249,8 +1347,10 @@ function renderProducts() {
   });
 
   const productCard = p => `
-    <div class="product-card" id="pcard-${p.id}" onclick="toggleProductCard('${p.id}', event)">
-      <button class="pbtn-del" onclick="deleteProduct('${p.id}')">✕</button>
+    <div class="product-card" id="pcard-${p.id}"
+         onclick="toggleProductCard('${p.id}', event)"
+         draggable="true" ondragstart="startDrag(event,'product','${p.id}')">
+      <button class="pbtn-del" onclick="event.stopPropagation(); deleteProduct('${p.id}')">✕</button>
       <div class="pname">${p.nickname || p.name}</div>
       ${p.nickname ? `<div class="pbrand">${p.name}</div>` : ''}
       ${p.brand ? `<div class="pbrand">${p.brand}</div>` : ''}
@@ -1263,6 +1363,7 @@ function renderProducts() {
         <div class="nutrient-row"><span>Fat</span><span>${p.fat || '—'}g</span></div>
         ${p.url ? `<div style="margin-top:.4rem;"><a href="${p.url}" target="_blank" style="font-size:.74rem;" onclick="event.stopPropagation()">View product ↗</a></div>` : ''}
       </div>
+      <button class="plog-btn" onclick="event.stopPropagation(); openQtyModal('product','${p.id}')">＋ Log today</button>
     </div>
   `;
 
@@ -1597,13 +1698,15 @@ function renderMeals() {
     }
 
     return `
-      <div class="meal-card">
+      <div class="meal-card" draggable="true" ondragstart="startDrag(event,'meal','${m.id}')">
         <button class="meal-del" onclick="deleteMeal('${m.id}')">✕</button>
         <div class="meal-name">${m.name}</div>
         <span class="meal-type-badge ${badgeClass}">${badgeLabel}</span>
         ${ingredientLines ? `<div class="meal-ingredients">${ingredientLines}</div>` : ''}
         ${macroHtml}
         ${m.url ? `<div style="margin-top:.5rem;"><a href="${m.url}" target="_blank" style="font-size:.76rem;">View recipe ↗</a></div>` : ''}
+        <button class="plog-btn" style="margin-top:.5rem;" onclick="openQtyModal('meal','${m.id}')"
+                ondragstart="event.stopPropagation()">＋ Log today</button>
       </div>`;
   }).join('');
 }
@@ -2046,6 +2149,7 @@ function renderAll() {
   loadProfileForm();
   renderProfileSummary();
   renderSyncCode();
+  renderPlate();
 }
 
 // ============================================================
@@ -2128,6 +2232,163 @@ document.getElementById('scanner-stop-btn').addEventListener('click', closeScann
 document.getElementById('scanner-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('scanner-modal')) closeScanner();
 });
+
+// ============================================================
+// TODAY'S PLATE — DRAG & DROP + QUANTITY MODAL
+// ============================================================
+let _dragType = null, _dragId = null;
+
+function startDrag(e, type, id) {
+  _dragType = type; _dragId = id;
+  e.dataTransfer.effectAllowed = 'copy';
+  e.dataTransfer.setData('text/plain', type + ':' + id);
+}
+
+function handleDrop(e, zoneId) {
+  e.preventDefault();
+  document.getElementById(zoneId).classList.remove('drag-over');
+  const type = _dragType, id = _dragId;
+  _dragType = null; _dragId = null;
+  if (!type || !id) return;
+  openQtyModal(type, id);
+}
+
+// --- Quantity modal ---
+let _qtyResolve = null;
+
+function openQtyModal(type, id) {
+  const overlay = document.getElementById('qty-overlay');
+  const titleEl = document.getElementById('qty-modal-title');
+  const labelEl = document.getElementById('qty-label');
+  const previewEl = document.getElementById('qty-preview');
+  const input = document.getElementById('qty-input');
+
+  let name, defaultQty, unit, kcalPer, protPer, carbPer, fatPer;
+
+  if (type === 'product') {
+    const p = state.products.find(x => x.id === id);
+    if (!p) return;
+    name = p.nickname || p.name;
+    defaultQty = p.serve || 100;
+    unit = 'g / ml';
+    kcalPer = p.kcal && p.serve ? p.kcal / p.serve : (p.kcal ? p.kcal / 100 : null);
+    protPer = p.prot && p.serve ? p.prot / p.serve : (p.prot ? p.prot / 100 : null);
+    carbPer = p.carb && p.serve ? p.carb / p.serve : (p.carb ? p.carb / 100 : null);
+    fatPer  = p.fat  && p.serve ? p.fat  / p.serve : (p.fat  ? p.fat  / 100 : null);
+  } else {
+    const m = state.meals.find(x => x.id === id);
+    if (!m) return;
+    name = m.name;
+    if (m.type === 'pantry') {
+      defaultQty = 1; unit = 'servings';
+      kcalPer = m.kcal; protPer = m.prot; carbPer = m.carb; fatPer = m.fat;
+    } else {
+      defaultQty = 100; unit = 'g';
+      kcalPer = m.kcal100 ? m.kcal100 / 100 : null;
+      protPer = m.prot100 ? m.prot100 / 100 : null;
+      carbPer = m.carb100 ? m.carb100 / 100 : null;
+      fatPer  = m.fat100  ? m.fat100  / 100 : null;
+    }
+  }
+
+  titleEl.textContent = 'Add to Today\'s Plate: ' + name;
+  labelEl.textContent = 'Quantity (' + unit + ')';
+  input.value = defaultQty;
+
+  function updatePreview() {
+    const qty = parseFloat(input.value) || 0;
+    if (!qty || !kcalPer) { previewEl.textContent = ''; return; }
+    const kcal = Math.round(kcalPer * qty);
+    const parts = [kcal + ' kcal'];
+    if (protPer) parts.push('P ' + (protPer * qty).toFixed(1) + 'g');
+    if (carbPer) parts.push('C ' + (carbPer * qty).toFixed(1) + 'g');
+    if (fatPer)  parts.push('F ' + (fatPer  * qty).toFixed(1) + 'g');
+    previewEl.textContent = parts.join(' · ');
+  }
+  input.oninput = updatePreview;
+  updatePreview();
+  overlay.style.display = 'flex';
+  input.focus(); input.select();
+
+  _qtyResolve = (confirmed) => {
+    overlay.style.display = 'none';
+    input.oninput = null;
+    if (!confirmed) return;
+    const qty = parseFloat(input.value) || 0;
+    if (!qty) { toast('Enter a quantity first'); return; }
+    const kcal = kcalPer ? Math.round(kcalPer * qty) : 0;
+    const prot = protPer ? parseFloat((protPer * qty).toFixed(1)) : 0;
+    const carb = carbPer ? parseFloat((carbPer * qty).toFixed(1)) : 0;
+    const fat  = fatPer  ? parseFloat((fatPer  * qty).toFixed(1)) : 0;
+    addToPlate(type, id, name, qty, unit, kcal, prot, carb, fat);
+  };
+}
+
+document.getElementById('qty-confirm').addEventListener('click', () => { if (_qtyResolve) _qtyResolve(true); });
+document.getElementById('qty-cancel').addEventListener('click',  () => { if (_qtyResolve) _qtyResolve(false); });
+document.getElementById('qty-overlay').addEventListener('click', e => { if (e.target === document.getElementById('qty-overlay') && _qtyResolve) _qtyResolve(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && _qtyResolve) _qtyResolve(false); if (e.key === 'Enter' && document.getElementById('qty-overlay').style.display !== 'none' && _qtyResolve) _qtyResolve(true); });
+
+// --- Add / remove items ---
+function addToPlate(type, sourceId, name, qty, unit, kcal, prot, carb, fat) {
+  const today = dateStr(new Date());
+  const ap = activeProfile();
+  if (!ap.dailyLog) ap.dailyLog = [];
+  let entry = ap.dailyLog.find(l => l.date === today);
+  if (!entry) {
+    const dayMon0 = (new Date().getDay() + 6) % 7;
+    const t = dailyTargets(dayMon0);
+    entry = { date: today, consumed: 0, tdee: t.tdee, target: t.kcal, items: [] };
+    ap.dailyLog.push(entry);
+  }
+  if (!entry.items) entry.items = [];
+  entry.items.push({ id: Date.now().toString(), sourceId, type, name, qty, unit, kcal, prot, carb, fat });
+  entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
+  save();
+  renderPlate();
+  renderCalorieChart();
+  toast('✅ ' + name + ' added to today\'s plate');
+}
+
+window.removeFromPlate = (itemId) => {
+  const today = dateStr(new Date());
+  const ap = activeProfile();
+  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  if (!entry || !entry.items) return;
+  entry.items = entry.items.filter(i => i.id !== itemId);
+  entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
+  save();
+  renderPlate();
+  renderCalorieChart();
+};
+
+// --- Render plate panels ---
+function renderPlate() {
+  const today = dateStr(new Date());
+  const ap = activeProfile();
+  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  const items = entry ? (entry.items || []) : [];
+  const total = items.reduce((s, i) => s + (i.kcal || 0), 0);
+
+  const itemsHtml = items.length
+    ? items.map(item => `
+        <div class="plate-item-row">
+          <span class="pi-name" title="${item.name}">${item.name}</span>
+          <span class="pi-qty">${item.qty}${item.unit === 'servings' ? ' srv' : 'g'}</span>
+          <span class="pi-kcal">${item.kcal} kcal</span>
+          <button class="pi-del" onclick="removeFromPlate('${item.id}')">✕</button>
+        </div>`).join('')
+    : '<p style="font-size:.78rem;color:var(--muted);text-align:center;margin:.5rem 0;">Nothing logged yet today</p>';
+
+  ['products', 'meals'].forEach(sfx => {
+    const iEl = document.getElementById('plate-items-' + sfx);
+    const tEl = document.getElementById('plate-total-' + sfx);
+    const dEl = document.getElementById('plate-date-' + sfx);
+    if (iEl) iEl.innerHTML = itemsHtml;
+    if (tEl) { tEl.textContent = 'Total: ' + total + ' kcal'; tEl.style.display = items.length ? '' : 'none'; }
+    if (dEl) dEl.textContent = today;
+  });
+}
 
 // ============================================================
 // INIT

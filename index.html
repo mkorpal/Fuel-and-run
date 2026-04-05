@@ -626,7 +626,7 @@
           <input type="text" id="sync-code-input" placeholder="Enter code from another device" style="flex:1; min-width:200px; padding:.45rem .75rem; border:1px solid var(--border); border-radius:var(--radius); font-family:monospace; font-size:.88rem;" />
           <button class="btn btn-primary btn-sm" id="btn-join-sync">Connect</button>
         </div>
-        <p style="font-size:.75rem; color:var(--muted); margin-top:.6rem;">⚠️ Connecting with a different code will replace your local data with that device’s data.</p>
+        <p style="font-size:.75rem; color:var(--muted); margin-top:.6rem;">ℹ️ Connecting will merge both devices' data together — everything from both is kept.</p>
         <!-- Keep export/import as backup -->
         <div style="margin-top:.75rem; padding-top:.75rem; border-top:1px solid var(--border); display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">
           <span style="font-size:.78rem; color:var(--muted);">Manual backup:</span>
@@ -790,17 +790,68 @@ function applyParsed(parsed) {
   }
 }
 
+function mergeStates(local, remote) {
+  // Products: union by id, newer updatedAt wins
+  const prodMap = {};
+  [...(local.products || []), ...(remote.products || [])].forEach(p => {
+    const ex = prodMap[p.id];
+    if (!ex || (p.updatedAt || '') > (ex.updatedAt || '')) prodMap[p.id] = p;
+  });
+  // Meals: union by id, newer updatedAt wins
+  const mealMap = {};
+  [...(local.meals || []), ...(remote.meals || [])].forEach(m => {
+    const ex = mealMap[m.id];
+    if (!ex || (m.updatedAt || '') > (ex.updatedAt || '')) mealMap[m.id] = m;
+  });
+  // Profiles: union by id
+  const profMap = {};
+  [...(local.profiles || []), ...(remote.profiles || [])].forEach(p => {
+    if (!profMap[p.id]) {
+      profMap[p.id] = { ...p, sessions: [...(p.sessions || [])], dailyLog: [...(p.dailyLog || [])] };
+    } else {
+      const base = profMap[p.id];
+      // Sessions: one per day, newer updatedAt wins
+      const sessMap = {};
+      [...(base.sessions || []), ...(p.sessions || [])].forEach(s => {
+        const ex = sessMap[s.day];
+        if (!ex || (s.updatedAt || '') > (ex.updatedAt || '')) sessMap[s.day] = s;
+      });
+      // DailyLog: one per date, newer updatedAt wins
+      const logMap = {};
+      [...(base.dailyLog || []), ...(p.dailyLog || [])].forEach(entry => {
+        const ex = logMap[entry.date];
+        if (!ex || (entry.updatedAt || '') > (ex.updatedAt || '')) logMap[entry.date] = entry;
+      });
+      // Profile settings: newer updatedAt wins
+      const newer = ((p.updatedAt || '') > (base.updatedAt || '')) ? p : base;
+      profMap[p.id] = {
+        ...newer,
+        sessions: Object.values(sessMap),
+        dailyLog: Object.values(logMap).sort((a, b) => a.date < b.date ? -1 : 1)
+      };
+    }
+  });
+  return {
+    activeProfileId: local.activeProfileId || remote.activeProfileId || 'p1',
+    profiles: Object.values(profMap),
+    products: Object.values(prodMap),
+    meals: Object.values(mealMap)
+  };
+}
+
 function load() {
   try {
     const d = localStorage.getItem('fuelrun');
     if (d) applyParsed(JSON.parse(d));
   } catch(e) {}
-  // Async cloud sync: pull latest, or push local data if cloud is empty
+  // Async cloud sync: merge with cloud, or push local data if cloud is empty
   setSyncStatus('⏳ Checking cloud…');
   pullFromCloud(syncKey).then(remote => {
     if (remote) {
-      applyParsed(remote);
+      const merged = mergeStates(state, remote);
+      applyParsed(merged);
       localStorage.setItem('fuelrun', JSON.stringify(state));
+      pushToCloud(); // push merged data back so cloud stays up to date
       renderAll();
       setSyncStatus('✔ Synced from cloud');
     } else {
@@ -952,7 +1003,7 @@ document.getElementById('btn-add-session').addEventListener('click', () => {
   const intensity = document.getElementById('man-int').value;
   const ap = activeProfile();
   ap.sessions = ap.sessions.filter(s => s.day !== dayIdx);
-  ap.sessions.push({ day: dayIdx, type, dist, dur, intensity, title: type.charAt(0).toUpperCase()+type.slice(1) });
+  ap.sessions.push({ day: dayIdx, type, dist, dur, intensity, title: type.charAt(0).toUpperCase()+type.slice(1), updatedAt: new Date().toISOString() });
   save(); renderAll();
   toast('Session saved for ' + dayName);
 });
@@ -1162,6 +1213,7 @@ function saveProductFromForm() {
     fat:  +document.getElementById('p-fat').value || null,
     notes: document.getElementById('p-notes').value.trim(),
     url:   document.getElementById('p-url').value.trim(),
+    updatedAt: new Date().toISOString(),
   };
   state.products.unshift(product);
   save(); renderProducts();
@@ -1365,6 +1417,7 @@ document.getElementById('btn-save-meal').addEventListener('click', () => {
       id: Date.now().toString(), name, type: 'pantry',
       ingredients,
       kcal: m.kcal, prot: m.prot, carb: m.carb, fat: m.fat,
+      updatedAt: new Date().toISOString(),
     };
   } else {
     // Recipe meal — store macros per 100g for flexible portion logging
@@ -1378,6 +1431,7 @@ document.getElementById('btn-save-meal').addEventListener('click', () => {
       source: document.getElementById('meal-source').value.trim(),
       notes:  document.getElementById('meal-notes').value.trim(),
       kcal100, prot100, carb100, fat100,
+      updatedAt: new Date().toISOString(),
     };
   }
   state.meals.unshift(meal);
@@ -1758,15 +1812,16 @@ document.getElementById('btn-join-sync').addEventListener('click', async () => {
     toast('⚠️ No data found for that code');
     return;
   }
+  const merged = mergeStates(state, remote);
   syncKey = input;
   localStorage.setItem('fuelrun_sync_key', syncKey);
-  applyParsed(remote);
+  applyParsed(merged);
   save();
   renderAll();
   renderSyncCode();
   document.getElementById('sync-code-input').value = '';
-  setSyncStatus('✔ Connected and synced');
-  toast('✅ Connected to shared data');
+  setSyncStatus('✔ Merged and synced');
+  toast('✅ Data merged from both devices');
 });
 
 // EXPORT / IMPORT (manual backup)
@@ -1822,6 +1877,7 @@ document.getElementById('btn-save-profile').addEventListener('click', () => {
   ap.weeklyKm   = +document.getElementById('prof-km').value || 75;
   ap.diet       = document.getElementById('prof-diet').value;
   ap.notes      = document.getElementById('prof-notes').value.trim();
+  ap.updatedAt  = new Date().toISOString();
   save(); renderAll();
   toast('Profile saved: ' + ap.name);
 });

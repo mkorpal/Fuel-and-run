@@ -630,18 +630,27 @@
       </div>
       <div class="card" style="border-left: 4px solid var(--accent2);">
         <div class="card-title">☁️ Cloud Sync</div>
-        <p style="font-size:.85rem; color:var(--muted); margin-bottom:.75rem;">
-          Choose a passphrase and use the <strong>same passphrase on all your devices</strong>. Data syncs automatically whenever you save and checks for updates every 30 seconds.
-        </p>
-        <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.6rem;">
-          <input type="text" id="sync-passphrase-input" placeholder="e.g. marysia-runner-2024"
-                 autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
-                 style="flex:1; min-width:200px; padding:.45rem .75rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.88rem;" />
-          <button class="btn btn-primary btn-sm" id="btn-set-passphrase">Set & Sync</button>
+        <!-- Connected state (shown when passphrase already set) -->
+        <div id="sync-connected-state" style="display:none;">
+          <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-bottom:.5rem;">
+            <span style="font-size:1.1rem;">✅</span>
+            <span style="font-size:.88rem;">Syncing automatically as <strong id="sync-key-shown">—</strong></span>
+            <button class="btn btn-secondary btn-sm" id="btn-change-passphrase" style="font-size:.75rem; padding:.2rem .5rem;">Change</button>
+          </div>
+          <span id="sync-status" style="font-size:.8rem; color:var(--muted);"></span>
         </div>
-        <div style="font-size:.82rem; color:var(--muted); display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
-          <span>Current: <strong id="sync-key-shown">—</strong></span>
-          <span id="sync-status"></span>
+        <!-- Setup state (shown when no passphrase set, or changing) -->
+        <div id="sync-setup-state">
+          <p style="font-size:.85rem; color:var(--muted); margin-bottom:.75rem;">
+            Set a passphrase to enable sync. Use the <strong>same passphrase on all your devices</strong> — only needed once per device.
+          </p>
+          <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.6rem;">
+            <input type="text" id="sync-passphrase-input" placeholder="e.g. marysia-runner-2024"
+                   autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
+                   style="flex:1; min-width:200px; padding:.45rem .75rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.88rem;" />
+            <button class="btn btn-primary btn-sm" id="btn-set-passphrase">Set & Sync</button>
+          </div>
+          <span id="sync-status-setup" style="font-size:.8rem; color:var(--muted);"></span>
         </div>
         <!-- Manual backup -->
         <div style="margin-top:.75rem; padding-top:.75rem; border-top:1px solid var(--border); display:flex; gap:.5rem; flex-wrap:wrap; align-items:center;">
@@ -909,8 +918,11 @@ function startAutoSync() {
 }
 
 function setSyncStatus(msg) {
+  // Write to whichever status element is currently visible
   const el = document.getElementById('sync-status');
+  const el2 = document.getElementById('sync-status-setup');
   if (el) el.textContent = msg;
+  if (el2) el2.textContent = msg;
 }
 
 // ============================================================
@@ -1861,18 +1873,33 @@ window.deleteProfile = id => {
 // CLOUD SYNC UI
 // ============================================================
 function renderSyncCode() {
-  const el = document.getElementById('sync-key-shown');
-  if (el) el.textContent = syncKey ? syncKey.replace(/^fr-/, '') : '(none)';
-  const input = document.getElementById('sync-passphrase-input');
-  if (input && syncKey) input.placeholder = syncKey.replace(/^fr-/, '');
+  const connected = document.getElementById('sync-connected-state');
+  const setup = document.getElementById('sync-setup-state');
+  const label = document.getElementById('sync-key-shown');
+  if (syncKey) {
+    if (connected) connected.style.display = '';
+    if (setup) setup.style.display = 'none';
+    if (label) label.textContent = syncKey.replace(/^fr-/, '');
+  } else {
+    if (connected) connected.style.display = 'none';
+    if (setup) setup.style.display = '';
+  }
 }
+
+document.getElementById('btn-change-passphrase').addEventListener('click', () => {
+  const connected = document.getElementById('sync-connected-state');
+  const setup = document.getElementById('sync-setup-state');
+  if (connected) connected.style.display = 'none';
+  if (setup) setup.style.display = '';
+  const input = document.getElementById('sync-passphrase-input');
+  if (input) { input.value = ''; input.focus(); }
+});
 
 document.getElementById('btn-set-passphrase').addEventListener('click', async () => {
   const raw = document.getElementById('sync-passphrase-input').value.trim();
   if (!raw) { toast('Please enter a passphrase'); return; }
   const newKey = setSyncKey(raw);
   document.getElementById('sync-passphrase-input').value = '';
-  renderSyncCode();
   setSyncStatus('⏳ Connecting…');
   const remote = await pullFromCloud(newKey);
   if (remote) {
@@ -1885,9 +1912,10 @@ document.getElementById('btn-set-passphrase').addEventListener('click', async ()
     toast('✅ Connected — data merged from cloud');
   } else {
     await pushToCloud();
-    setSyncStatus('✔ Passphrase set · ' + new Date().toLocaleTimeString());
+    setSyncStatus('✔ Ready · ' + new Date().toLocaleTimeString());
     toast('✅ Passphrase set — use the same one on your other devices');
   }
+  renderSyncCode();
   startAutoSync();
 });
 

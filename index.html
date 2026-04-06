@@ -872,8 +872,12 @@
     <div id="meal-recipe-section" style="display:none;">
       <div class="form-row">
         <label>Recipe URL</label>
-        <input type="url" id="meal-url" placeholder="https://www.taste.com.au/..." />
+        <div style="display:flex; gap:.5rem;">
+          <input type="url" id="meal-url" placeholder="https://www.taste.com.au/..." style="flex:1;" />
+          <button class="btn btn-secondary" id="btn-fetch-recipe" style="white-space:nowrap;">🔍 Fetch</button>
+        </div>
       </div>
+      <div id="recipe-fetch-status" style="font-size:.82rem; margin-bottom:.5rem;"></div>
       <div class="form-row">
         <label>Source / Website</label>
         <input type="text" id="meal-source" placeholder="e.g. Taste, Delicious, Wholesome Patisserie" />

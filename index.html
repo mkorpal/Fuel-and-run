@@ -161,6 +161,37 @@
   .meal-slot-del { background:none; border:none; cursor:pointer; color:var(--muted); font-size:.75rem; padding:0 0 0 .4rem; flex-shrink:0; }
   .meal-slot-del:hover { color:#c0392b; }
 
+  /* ---- Workout detail overlay ---- */
+  .workout-detail-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:600; justify-content:center; align-items:center; }
+  .workout-detail-overlay.open { display:flex; }
+  .workout-detail-card { background:#fff; border-radius:var(--radius); padding:1.5rem; max-width:480px; width:94%; max-height:85vh; overflow-y:auto; box-shadow:0 8px 30px rgba(0,0,0,.18); }
+  .workout-detail-card h3 { margin:0 0 .5rem; font-size:1.05rem; }
+  .wo-summary { display:flex; flex-wrap:wrap; gap:.5rem .9rem; margin-bottom:.8rem; font-size:.85rem; }
+  .wo-summary .wo-stat { display:flex; flex-direction:column; }
+  .wo-summary .wo-stat-label { font-size:.68rem; text-transform:uppercase; color:var(--muted); font-weight:600; }
+  .wo-summary .wo-stat-val { font-weight:700; font-size:.95rem; }
+  .wo-class-badge { display:inline-block; padding:.25rem .65rem; border-radius:6px; font-size:.78rem; font-weight:700; margin-bottom:.6rem; }
+  .wo-class-easy { background:#d8f3dc; color:#1b4332; }
+  .wo-class-tempo { background:#fff3cd; color:#856404; }
+  .wo-class-threshold { background:#ffe0b2; color:#e65100; }
+  .wo-class-interval { background:#ffcdd2; color:#b71c1c; }
+  .wo-class-long { background:#d1ecf1; color:#0c5460; }
+  .wo-class-recovery { background:#e8f5e9; color:#2e7d32; }
+  .wo-class-race { background:#f3e5f5; color:#6a1b9a; }
+  .wo-class-unknown { background:var(--surface2); color:var(--muted); }
+  .wo-purpose { font-size:.82rem; color:var(--fg); margin-bottom:.8rem; padding:.5rem .7rem; background:var(--surface2); border-radius:6px; line-height:1.45; }
+  .splits-table { width:100%; border-collapse:collapse; font-size:.8rem; margin-top:.3rem; }
+  .splits-table th { text-align:left; padding:.35rem .4rem; font-size:.7rem; text-transform:uppercase; color:var(--muted); border-bottom:2px solid var(--border); }
+  .splits-table td { padding:.3rem .4rem; border-bottom:1px solid var(--surface2); }
+  .splits-table tr:last-child td { border-bottom:none; }
+  .splits-table .split-fast { color:#2d6a4f; font-weight:600; }
+  .splits-table .split-slow { color:#e76f51; }
+  .pace-bar { height:5px; background:var(--surface2); border-radius:3px; overflow:hidden; min-width:40px; }
+  .pace-bar-fill { height:100%; border-radius:3px; transition:width .3s; }
+  .hr-zones { display:flex; gap:2px; height:18px; border-radius:4px; overflow:hidden; margin:.4rem 0; }
+  .hr-zone-seg { height:100%; min-width:2px; transition:width .3s; }
+  .hr-zone-legend { display:flex; flex-wrap:wrap; gap:.4rem .8rem; font-size:.7rem; margin-top:.2rem; }
+
   /* ---- Macro bars ---- */
   .macro-bar-wrap { margin: .4rem 0; }
   .macro-label { display: flex; justify-content: space-between; font-size: .78rem; margin-bottom: .15rem; }
@@ -588,6 +619,11 @@
     <!-- Meal Day Detail Overlay -->
     <div class="meal-detail-overlay" id="meal-detail-overlay">
       <div class="meal-detail-card" id="meal-detail-card"></div>
+    </div>
+
+    <!-- Workout Detail Overlay -->
+    <div class="workout-detail-overlay" id="workout-detail-overlay">
+      <div class="workout-detail-card" id="workout-detail-card"></div>
     </div>
 
     <!-- NUTRITION TARGETS -->
@@ -1447,6 +1483,8 @@ document.getElementById('fit-input').addEventListener('change', async (e) => {
       }
 
       const sessions = data.sessions || [];
+      const allLaps = data.laps || [];
+
       for (const s of sessions) {
         const startUtc = new Date(s.start_time || s.timestamp);
         if (isNaN(startUtc.getTime())) continue;
@@ -1472,11 +1510,35 @@ document.getElementById('fit-input').addEventListener('change', async (e) => {
 
         const distKm = s.total_distance ? +(s.total_distance / 1000).toFixed(2) : 0;
         const durMin = s.total_elapsed_time ? Math.round(s.total_elapsed_time / 60) : 0;
+        const durSec = s.total_elapsed_time || 0;
         const sport = fitSportToType(s.sport || 'running');
         const avgHr = s.avg_heart_rate || s.average_heart_rate || null;
         const maxHrVal = s.max_heart_rate || null;
         const calories = s.total_calories || null;
         const speedMps = s.enhanced_avg_speed || s.avg_speed || null;
+        const avgCadence = s.avg_cadence || null;
+        const totalAscent = s.total_ascent || null;
+        const totalDescent = s.total_descent || null;
+
+        // Extract laps belonging to this session (by time window)
+        const sessionEnd = new Date(startUtc.getTime() + (durSec * 1000) + 60000);
+        const laps = allLaps
+          .filter(l => {
+            const lt = new Date(l.start_time || l.timestamp);
+            return lt >= startUtc && lt <= sessionEnd;
+          })
+          .map((l, i) => ({
+            num: i + 1,
+            dist: l.total_distance ? +(l.total_distance / 1000).toFixed(3) : 0,
+            time: l.total_elapsed_time || 0,
+            avgHr: l.avg_heart_rate || null,
+            maxHr: l.max_heart_rate || null,
+            pace: formatPace(l.enhanced_avg_speed || l.avg_speed || null),
+            avgCadence: l.avg_cadence || null,
+            calories: l.total_calories || null,
+            elevation: (l.total_ascent || 0) - (l.total_descent || 0),
+            ascent: l.total_ascent || 0,
+          }));
 
         const session = {
           day: dayMon0,
@@ -1489,6 +1551,10 @@ document.getElementById('fit-input').addEventListener('change', async (e) => {
           avgHr,
           maxHr: maxHrVal,
           pace: formatPace(speedMps),
+          avgCadence,
+          totalAscent,
+          totalDescent,
+          laps,
           updatedAt: new Date().toISOString()
         };
 
@@ -1715,19 +1781,254 @@ function renderWeekGrid() {
     const garminCal = s && s.calories ? `<div style="font-size:.7rem; color:var(--accent); font-weight:600;">🔥 ${s.calories} kcal burned</div>` : '';
     const garminHr = s && s.avgHr ? `<div style="font-size:.7rem; color:#e05050;">❤️ ${s.avgHr} avg · ${s.maxHr || '—'} max</div>` : '';
     const garminPace = s && s.pace ? `<div style="font-size:.7rem; color:var(--muted);">⏱ ${s.pace}/km</div>` : '';
+    // Show classification label for Garmin-imported sessions
+    const clsLabel = s && s.avgHr ? `<div style="font-size:.68rem; margin-top:.15rem;"><span class="wo-class-badge wo-class-${classifyWorkout(s).type}" style="padding:.1rem .4rem; font-size:.65rem;">${classifyWorkout(s).label}</span></div>` : '';
     cell.innerHTML = `
       <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
       <div class="day-date">${dateLabel}</div>
       <span class="workout-tag ${tagClass}">${tagLabel}</span>
       ${distInfo ? `<div style="font-size:.72rem; color:var(--muted);">${distInfo} ${durInfo}</div>` : ''}
       ${s && s.intensity !== 'easy' ? `<div><span class="badge ${s.intensity==='hard'||s.intensity==='race'?'badge-red':'badge-amber'}">${s.intensity}</span></div>` : ''}
-      ${garminCal}${garminHr}${garminPace}
+      ${garminCal}${garminHr}${garminPace}${clsLabel}
       <div style="margin-top:.4rem; font-size:.72rem; color:var(--muted);">${t.kcal} kcal target</div>
       <div style="font-size:.7rem; color:var(--muted);">${t.carb}g C · ${t.prot}g P · ${t.fat}g F</div>
     `;
+    if (s) {
+      cell.style.cursor = 'pointer';
+      cell.addEventListener('click', () => openWorkoutDetail(weekKey, d, dateLabel));
+    }
     grid.appendChild(cell);
   }
 }
+
+// ============================================================
+// WORKOUT CLASSIFICATION & DETAIL OVERLAY
+// ============================================================
+
+function classifyWorkout(s) {
+  const hrMax = 190; // TODO: could derive from profile age
+  const pctHr = s.avgHr ? s.avgHr / hrMax : null;
+  const distKm = s.dist || 0;
+  const durMin = s.dur || 0;
+  const laps = s.laps || [];
+
+  // Check pace variability across laps (for interval detection)
+  let paceVariability = 0;
+  if (laps.length >= 3) {
+    const paces = laps.filter(l => l.pace).map(l => {
+      const [m, sec] = l.pace.split(':').map(Number);
+      return m * 60 + sec;
+    });
+    if (paces.length >= 3) {
+      const avg = paces.reduce((a, b) => a + b, 0) / paces.length;
+      const variance = paces.reduce((sum, p) => sum + Math.pow(p - avg, 2), 0) / paces.length;
+      paceVariability = Math.sqrt(variance) / avg; // coefficient of variation
+    }
+  }
+
+  // User-tagged race
+  if (s.intensity === 'race') {
+    return {
+      type: 'race', label: '🏁 Race',
+      purpose: 'Race effort — maximum performance. Recovery should follow in the next 1–2 days.'
+    };
+  }
+  // Interval / speed work: high pace variability OR high HR with alternating fast/slow laps
+  if (paceVariability > 0.12 && pctHr && pctHr > 0.78) {
+    return {
+      type: 'interval', label: '⚡ Interval / Speed',
+      purpose: 'Develops VO₂max and running economy. The alternating fast and recovery segments train your body to clear lactate and sustain faster speeds. Key session for getting faster.'
+    };
+  }
+  // Threshold: HR in 85–92% zone, sustained effort (low pace variability)
+  if (pctHr && pctHr >= 0.85 && pctHr < 0.92 && paceVariability < 0.08) {
+    return {
+      type: 'threshold', label: '🔶 Threshold',
+      purpose: 'Comfortably hard effort near your lactate threshold. Improves the pace you can sustain for prolonged periods. This is the ceiling of "controlled discomfort" — training your body to buffer and clear lactate more efficiently.'
+    };
+  }
+  // Tempo: HR in 78–87% zone, steady pace
+  if (pctHr && pctHr >= 0.78 && pctHr < 0.87 && paceVariability < 0.08) {
+    return {
+      type: 'tempo', label: '🟡 Tempo',
+      purpose: 'Sustained moderate-hard effort. Builds aerobic power and mental toughness at a pace slightly faster than your easy runs. Teaches your body to use fat as fuel efficiently at higher intensities.'
+    };
+  }
+  // Long run: > 75 min, easy-moderate effort
+  if (durMin > 75 && (!pctHr || pctHr < 0.82)) {
+    return {
+      type: 'long', label: '🔵 Long Run',
+      purpose: 'Builds endurance and aerobic base. Trains your body to burn fat as fuel, strengthens muscles, tendons and joints, and builds the mental resilience needed for race day. The key weekly session for distance runners.'
+    };
+  }
+  // Recovery: short, very easy
+  if (pctHr && pctHr < 0.68 && distKm < 8) {
+    return {
+      type: 'recovery', label: '🟢 Recovery',
+      purpose: 'Very easy effort to promote blood flow and aid recovery from harder sessions. Should feel relaxed and conversational. Do not push the pace — the purpose is active rest.'
+    };
+  }
+  // Easy run: default for low HR
+  if (!pctHr || pctHr < 0.78) {
+    return {
+      type: 'easy', label: '💚 Easy Run',
+      purpose: 'Aerobic base building at a comfortable, conversational pace. Most of your weekly mileage should be at this effort. Builds the cardiovascular foundation that supports all other training.'
+    };
+  }
+  // Hard (catch-all for high HR)
+  if (pctHr >= 0.87) {
+    return {
+      type: 'threshold', label: '🔶 Threshold / Hard',
+      purpose: 'High-intensity effort above your comfort zone. Pushes your lactate threshold higher, enabling you to sustain faster speeds for longer. Requires good recovery afterward.'
+    };
+  }
+  return {
+    type: 'easy', label: '💚 Easy Run',
+    purpose: 'Aerobic base building at a comfortable effort. The backbone of distance running training.'
+  };
+}
+
+function formatDuration(totalSec) {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = Math.round(totalSec % 60);
+  if (h > 0) return `${h}h ${String(m).padStart(2,'0')}m`;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function openWorkoutDetail(weekKey, dayIdx, dateLabel) {
+  const s = sessionForWeekDay(weekKey, dayIdx);
+  if (!s || s.type === 'rest') return;
+
+  const cls = classifyWorkout(s);
+  const laps = s.laps || [];
+
+  let html = `<h3>🏃 ${DAYS[dayIdx]} ${dateLabel} — ${s.title || s.type}</h3>`;
+
+  // Classification badge + purpose
+  html += `<span class="wo-class-badge wo-class-${cls.type}">${cls.label}</span>`;
+  html += `<div class="wo-purpose">${cls.purpose}</div>`;
+
+  // Summary stats
+  html += `<div class="wo-summary">`;
+  if (s.dist) html += `<div class="wo-stat"><span class="wo-stat-label">Distance</span><span class="wo-stat-val">${s.dist} km</span></div>`;
+  if (s.dur) html += `<div class="wo-stat"><span class="wo-stat-label">Duration</span><span class="wo-stat-val">${s.dur} min</span></div>`;
+  if (s.pace) html += `<div class="wo-stat"><span class="wo-stat-label">Avg Pace</span><span class="wo-stat-val">${s.pace}/km</span></div>`;
+  if (s.avgHr) html += `<div class="wo-stat"><span class="wo-stat-label">Avg HR</span><span class="wo-stat-val">${s.avgHr} bpm</span></div>`;
+  if (s.maxHr) html += `<div class="wo-stat"><span class="wo-stat-label">Max HR</span><span class="wo-stat-val">${s.maxHr} bpm</span></div>`;
+  if (s.calories) html += `<div class="wo-stat"><span class="wo-stat-label">Calories</span><span class="wo-stat-val">${s.calories} kcal</span></div>`;
+  if (s.avgCadence) html += `<div class="wo-stat"><span class="wo-stat-label">Cadence</span><span class="wo-stat-val">${s.avgCadence * 2} spm</span></div>`;
+  if (s.totalAscent) html += `<div class="wo-stat"><span class="wo-stat-label">Elevation</span><span class="wo-stat-val">↑${s.totalAscent}m ↓${s.totalDescent || 0}m</span></div>`;
+  html += `</div>`;
+
+  // HR Zone distribution from laps
+  if (s.avgHr && laps.length) {
+    const hrMax = 190;
+    const zones = [
+      { name: 'Z1 Recovery', min: 0, max: 0.6, color: '#b0bec5' },
+      { name: 'Z2 Easy', min: 0.6, max: 0.72, color: '#66bb6a' },
+      { name: 'Z3 Aerobic', min: 0.72, max: 0.82, color: '#ffa726' },
+      { name: 'Z4 Threshold', min: 0.82, max: 0.9, color: '#ef5350' },
+      { name: 'Z5 VO₂max', min: 0.9, max: 1.0, color: '#ab47bc' },
+    ];
+    const zoneTimes = [0, 0, 0, 0, 0];
+    let totalTime = 0;
+    for (const l of laps) {
+      if (!l.avgHr || !l.time) continue;
+      const pct = l.avgHr / hrMax;
+      totalTime += l.time;
+      if (pct < 0.6) zoneTimes[0] += l.time;
+      else if (pct < 0.72) zoneTimes[1] += l.time;
+      else if (pct < 0.82) zoneTimes[2] += l.time;
+      else if (pct < 0.9) zoneTimes[3] += l.time;
+      else zoneTimes[4] += l.time;
+    }
+    if (totalTime > 0) {
+      html += `<div style="margin:.6rem 0 .3rem; font-size:.75rem; font-weight:700; text-transform:uppercase; color:var(--muted);">Heart Rate Zones</div>`;
+      html += `<div class="hr-zones">`;
+      zones.forEach((z, i) => {
+        const pct = (zoneTimes[i] / totalTime * 100).toFixed(1);
+        if (zoneTimes[i] > 0) html += `<div class="hr-zone-seg" style="width:${pct}%; background:${z.color};" title="${z.name}: ${formatDuration(zoneTimes[i])}"></div>`;
+      });
+      html += `</div><div class="hr-zone-legend">`;
+      zones.forEach((z, i) => {
+        if (zoneTimes[i] > 0) {
+          html += `<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${z.color};margin-right:3px;"></span>${z.name} ${formatDuration(zoneTimes[i])} (${(zoneTimes[i]/totalTime*100).toFixed(0)}%)</span>`;
+        }
+      });
+      html += `</div>`;
+    }
+  }
+
+  // Splits table
+  if (laps.length) {
+    // Calculate fastest/slowest pace for highlighting
+    const paceSecs = laps.filter(l => l.pace).map(l => {
+      const [m, sec] = l.pace.split(':').map(Number);
+      return m * 60 + sec;
+    });
+    const fastestPace = paceSecs.length ? Math.min(...paceSecs) : 0;
+    const slowestPace = paceSecs.length ? Math.max(...paceSecs) : 0;
+    const paceRange = slowestPace - fastestPace || 1;
+
+    html += `<div style="margin-top:.8rem; font-size:.75rem; font-weight:700; text-transform:uppercase; color:var(--muted);">Splits (${laps.length} laps)</div>`;
+    html += `<table class="splits-table"><thead><tr>
+      <th>#</th><th>Dist</th><th>Time</th><th>Pace</th><th></th><th>HR</th>${laps.some(l => l.avgCadence) ? '<th>Cad</th>' : ''}${laps.some(l => l.ascent) ? '<th>↑m</th>' : ''}
+    </tr></thead><tbody>`;
+
+    for (const l of laps) {
+      const distLabel = l.dist >= 1 ? l.dist.toFixed(2) + ' km' : Math.round(l.dist * 1000) + ' m';
+      const timeLabel = formatDuration(l.time);
+      let paceClass = '';
+      if (l.pace && paceSecs.length > 1) {
+        const [m, sec] = l.pace.split(':').map(Number);
+        const ps = m * 60 + sec;
+        if (ps <= fastestPace + paceRange * 0.15) paceClass = 'split-fast';
+        else if (ps >= slowestPace - paceRange * 0.15) paceClass = 'split-slow';
+      }
+      // Pace bar (visual representation)
+      let paceBar = '';
+      if (l.pace && paceRange > 0) {
+        const [m, sec] = l.pace.split(':').map(Number);
+        const ps = m * 60 + sec;
+        const fillPct = Math.max(15, 100 - ((ps - fastestPace) / paceRange * 70));
+        const barColor = paceClass === 'split-fast' ? '#2d6a4f' : paceClass === 'split-slow' ? '#e76f51' : 'var(--accent)';
+        paceBar = `<div class="pace-bar"><div class="pace-bar-fill" style="width:${fillPct}%; background:${barColor};"></div></div>`;
+      }
+
+      html += `<tr>
+        <td>${l.num}</td>
+        <td>${distLabel}</td>
+        <td>${timeLabel}</td>
+        <td class="${paceClass}">${l.pace || '—'}</td>
+        <td style="min-width:45px;">${paceBar}</td>
+        <td>${l.avgHr || '—'}</td>
+        ${laps.some(la => la.avgCadence) ? `<td>${l.avgCadence ? l.avgCadence * 2 : '—'}</td>` : ''}
+        ${laps.some(la => la.ascent) ? `<td>${l.ascent || '—'}</td>` : ''}
+      </tr>`;
+    }
+    html += `</tbody></table>`;
+  } else if (s.type !== 'rest') {
+    html += `<p style="font-size:.82rem; color:var(--muted); margin-top:.6rem;">No split data available. Import a Garmin .fit file to see detailed splits.</p>`;
+  }
+
+  html += `<div style="margin-top:1rem; text-align:center;">
+    <button class="btn btn-secondary btn-sm" onclick="closeWorkoutDetail()">Close</button>
+  </div>`;
+
+  document.getElementById('workout-detail-card').innerHTML = html;
+  document.getElementById('workout-detail-overlay').classList.add('open');
+}
+
+function closeWorkoutDetail() {
+  document.getElementById('workout-detail-overlay').classList.remove('open');
+}
+document.getElementById('workout-detail-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('workout-detail-overlay')) closeWorkoutDetail();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('workout-detail-overlay').classList.contains('open')) closeWorkoutDetail();
+});
 
 // ============================================================
 // WEEK NAV BUTTONS

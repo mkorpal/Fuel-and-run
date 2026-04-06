@@ -674,6 +674,14 @@
           </div>
           <div id="food-search-results" style="margin-top:.5rem;"></div>
         </div>
+        <div style="margin-bottom:1rem;">
+          <label style="font-size:.82rem; font-weight:600;">🛒 Search Woolworths &amp; Coles</label>
+          <div style="display:flex; gap:.4rem; margin-top:.3rem;">
+            <input type="text" id="super-search-input" placeholder="e.g. YoPro yoghurt, Weet-Bix, almond milk…" style="flex:1;" />
+            <button class="btn btn-primary btn-sm" type="button" id="btn-super-search" style="background:#1a8a3f; border-color:#1a8a3f;">Search</button>
+          </div>
+          <div id="super-search-results" style="margin-top:.5rem;"></div>
+        </div>
         <form id="product-form" onsubmit="return false;">
           <div class="form-inline">
             <div class="form-row" style="flex:2; min-width:200px;">
@@ -2894,6 +2902,93 @@ document.getElementById('food-search-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     e.preventDefault();
     document.getElementById('btn-food-search').click();
+  }
+});
+
+// ============================================================
+// SUPERMARKET SEARCH (Woolworths + Coles via Edge Function)
+// ============================================================
+const SUPERMARKET_EDGE_FN = SUPABASE_URL + '/functions/v1/supermarket-search';
+
+async function searchSupermarkets(query) {
+  try {
+    const res = await fetch(SUPERMARKET_EDGE_FN, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + SUPABASE_ANON,
+      },
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) throw new Error('Search failed: ' + res.status);
+    const data = await res.json();
+    return data.results || [];
+  } catch(e) {
+    console.error('Supermarket search error:', e);
+    return [];
+  }
+}
+
+function renderSuperSearchResults(results) {
+  const el = document.getElementById('super-search-results');
+  if (!results.length) {
+    el.innerHTML = '<p style="font-size:.8rem; color:var(--muted);">No results found. Try a different search term.</p>';
+    return;
+  }
+
+  const storeColors = { Woolworths: '#1a8a3f', Coles: '#e01a22' };
+
+  el.innerHTML = results.map((r, i) => {
+    const hasNutrition = r.kcal > 0;
+    const nutritionLine = hasNutrition
+      ? `${r.kcal} kcal · ${r.prot}g P · ${r.carb}g C · ${r.fat}g F <span style="opacity:.5;">per ${r.serve}g</span>`
+      : '<span style="color:var(--accent2);">Nutrition not available — you can edit after adding</span>';
+
+    return `
+    <div style="display:flex; align-items:center; gap:.6rem; padding:.5rem; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:.3rem; cursor:pointer; background:var(--surface);"
+         onclick="fillProductFromSuper(${i})" class="food-result-row">
+      ${r.img ? `<img src="${r.img}" style="width:36px; height:36px; border-radius:4px; object-fit:cover;" alt="" onerror="this.style.display='none'" />` : '<div style="width:36px;height:36px;border-radius:4px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🛒</div>'}
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}</div>
+        <div style="font-size:.72rem; color:var(--muted);">${r.brand ? r.brand + ' · ' : ''}${nutritionLine}</div>
+      </div>
+      <span style="font-size:.65rem; color:#fff; background:${storeColors[r.store] || 'var(--muted)'}; padding:.1rem .35rem; border-radius:4px; white-space:nowrap;">${r.store}</span>
+    </div>`;
+  }).join('');
+}
+
+window._superSearchResults = [];
+
+window.fillProductFromSuper = idx => {
+  const r = window._superSearchResults[idx];
+  if (!r) return;
+  document.getElementById('p-name').value = r.name;
+  document.getElementById('p-brand').value = r.brand || r.store;
+  document.getElementById('p-serve').value = r.serve || 100;
+  if (r.kcal) document.getElementById('p-kcal').value = r.kcal;
+  if (r.prot) document.getElementById('p-prot').value = r.prot;
+  if (r.carb) document.getElementById('p-carb').value = r.carb;
+  if (r.fat) document.getElementById('p-fat').value = r.fat;
+  document.getElementById('p-cat').value = guessCategory(r.name, '');
+  if (r.url) document.getElementById('p-url').value = r.url;
+  document.getElementById('super-search-results').innerHTML = '<p style="font-size:.8rem; color:var(--accent);">✔ Form filled — edit if needed, then save.</p>';
+  document.getElementById('p-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+document.getElementById('btn-super-search').addEventListener('click', async () => {
+  const q = document.getElementById('super-search-input').value.trim();
+  if (!q) return;
+  const el = document.getElementById('super-search-results');
+  el.innerHTML = '<p style="font-size:.8rem; color:var(--muted);">⏳ Searching Woolworths &amp; Coles…</p>';
+  const results = await searchSupermarkets(q);
+  window._superSearchResults = results;
+  renderSuperSearchResults(results);
+});
+
+document.getElementById('super-search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('btn-super-search').click();
   }
 });
 

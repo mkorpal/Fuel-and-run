@@ -877,6 +877,13 @@
   <div class="qty-modal">
     <h3 id="qty-modal-title">Add to Today's Plate</h3>
     <div class="qty-preview" id="qty-preview"></div>
+    <div id="qty-unit-toggle" style="display:none; margin-bottom:.5rem;">
+      <div style="display:flex; gap:0; border:1.5px solid var(--border); border-radius:6px; overflow:hidden; font-size:.82rem;">
+        <button class="qty-unit-btn" data-qunit="grams" style="flex:1; padding:.35rem .6rem; border:none; cursor:pointer; font-weight:600; background:var(--accent); color:#fff;">Grams</button>
+        <button class="qty-unit-btn" data-qunit="eaches" style="flex:1; padding:.35rem .6rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--fg);">Eaches</button>
+      </div>
+      <div id="qty-each-hint" style="font-size:.72rem; color:var(--muted); margin-top:.25rem;"></div>
+    </div>
     <div class="form-row">
       <label id="qty-label">Quantity (g)</label>
       <input type="number" id="qty-input" min="1" step="1" style="font-size:1rem;" />
@@ -3612,14 +3619,58 @@ function handleDrop(e, zoneId) {
 // --- Quantity modal ---
 let _qtyResolve = null;
 
+// Average weights for common produce (grams per piece)
+const PRODUCE_EACH_WEIGHTS = {
+  banana:    120,
+  apple:     180,
+  orange:    150,
+  pear:      170,
+  peach:     150,
+  nectarine: 140,
+  plum:      70,
+  kiwi:      75,
+  kiwifruit: 75,
+  lemon:     60,
+  lime:      45,
+  mandarin:  80,
+  tangerine: 80,
+  clementine:70,
+  grapefruit:250,
+  mango:     200,
+  avocado:   170,
+  tomato:    125,
+  potato:    175,
+  'sweet potato': 130,
+  onion:     150,
+  carrot:    75,
+  zucchini:  200,
+  capsicum:  160,
+  'bell pepper': 160,
+  cucumber:  300,
+  corn:      175,
+  egg:       50,
+};
+
+function getEachWeight(productName) {
+  const n = (productName || '').toLowerCase();
+  for (const [key, weight] of Object.entries(PRODUCE_EACH_WEIGHTS)) {
+    if (n.includes(key)) return { key, weight };
+  }
+  return null;
+}
+
 function openQtyModal(type, id) {
   const overlay = document.getElementById('qty-overlay');
   const titleEl = document.getElementById('qty-modal-title');
   const labelEl = document.getElementById('qty-label');
   const previewEl = document.getElementById('qty-preview');
   const input = document.getElementById('qty-input');
+  const toggleEl = document.getElementById('qty-unit-toggle');
+  const hintEl = document.getElementById('qty-each-hint');
 
   let name, defaultQty, unit, kcalPer, protPer, carbPer, fatPer;
+  let eachInfo = null; // { key, weight } if product supports eaches
+  let currentUnit = 'grams'; // 'grams' or 'eaches'
 
   if (type === 'product') {
     const p = state.products.find(x => x.id === id);
@@ -3631,6 +3682,7 @@ function openQtyModal(type, id) {
     protPer = p.prot && p.serve ? p.prot / p.serve : (p.prot ? p.prot / 100 : null);
     carbPer = p.carb && p.serve ? p.carb / p.serve : (p.carb ? p.carb / 100 : null);
     fatPer  = p.fat  && p.serve ? p.fat  / p.serve : (p.fat  ? p.fat  / 100 : null);
+    eachInfo = getEachWeight(p.name);
   } else {
     const m = state.meals.find(x => x.id === id);
     if (!m) return;
@@ -3648,19 +3700,65 @@ function openQtyModal(type, id) {
   }
 
   titleEl.textContent = 'Add to Today\'s Plate: ' + name;
-  labelEl.textContent = 'Quantity (' + unit + ')';
-  input.value = defaultQty;
+
+  // Unit toggle for eligible products
+  if (eachInfo) {
+    toggleEl.style.display = '';
+    hintEl.textContent = `1 avg ${eachInfo.key} ≈ ${eachInfo.weight}g`;
+    currentUnit = 'grams';
+  } else {
+    toggleEl.style.display = 'none';
+  }
+
+  function applyUnit(u) {
+    currentUnit = u;
+    document.querySelectorAll('.qty-unit-btn').forEach(b => {
+      const active = b.dataset.qunit === u;
+      b.style.background = active ? 'var(--accent)' : 'var(--surface)';
+      b.style.color = active ? '#fff' : 'var(--fg)';
+    });
+    if (u === 'eaches') {
+      labelEl.textContent = 'How many?';
+      input.value = 1;
+      input.step = '1';
+      input.min = '1';
+    } else {
+      labelEl.textContent = 'Quantity (' + unit + ')';
+      input.value = defaultQty;
+      input.step = '1';
+      input.min = '1';
+    }
+    updatePreview();
+  }
+
+  // Wire up toggle buttons
+  document.querySelectorAll('.qty-unit-btn').forEach(btn => {
+    btn.onclick = () => applyUnit(btn.dataset.qunit);
+  });
+
+  function getEffectiveQtyGrams() {
+    const raw = parseFloat(input.value) || 0;
+    if (currentUnit === 'eaches' && eachInfo) return raw * eachInfo.weight;
+    return raw;
+  }
 
   function updatePreview() {
-    const qty = parseFloat(input.value) || 0;
-    if (!qty || !kcalPer) { previewEl.textContent = ''; return; }
-    const kcal = Math.round(kcalPer * qty);
+    const grams = getEffectiveQtyGrams();
+    if (!grams || !kcalPer) { previewEl.textContent = ''; return; }
+    const kcal = Math.round(kcalPer * grams);
     const parts = [kcal + ' kcal'];
-    if (protPer) parts.push('P ' + (protPer * qty).toFixed(1) + 'g');
-    if (carbPer) parts.push('C ' + (carbPer * qty).toFixed(1) + 'g');
-    if (fatPer)  parts.push('F ' + (fatPer  * qty).toFixed(1) + 'g');
+    if (protPer) parts.push('P ' + (protPer * grams).toFixed(1) + 'g');
+    if (carbPer) parts.push('C ' + (carbPer * grams).toFixed(1) + 'g');
+    if (fatPer)  parts.push('F ' + (fatPer  * grams).toFixed(1) + 'g');
+    if (currentUnit === 'eaches' && eachInfo) {
+      parts.push('(' + grams + 'g)');
+    }
     previewEl.textContent = parts.join(' · ');
   }
+
+  // Set initial state
+  labelEl.textContent = 'Quantity (' + unit + ')';
+  input.value = defaultQty;
   input.oninput = updatePreview;
   updatePreview();
   overlay.style.display = 'flex';
@@ -3670,13 +3768,15 @@ function openQtyModal(type, id) {
     overlay.style.display = 'none';
     input.oninput = null;
     if (!confirmed) return;
-    const qty = parseFloat(input.value) || 0;
-    if (!qty) { toast('Enter a quantity first'); return; }
-    const kcal = kcalPer ? Math.round(kcalPer * qty) : 0;
-    const prot = protPer ? parseFloat((protPer * qty).toFixed(1)) : 0;
-    const carb = carbPer ? parseFloat((carbPer * qty).toFixed(1)) : 0;
-    const fat  = fatPer  ? parseFloat((fatPer  * qty).toFixed(1)) : 0;
-    addToPlate(type, id, name, qty, unit, kcal, prot, carb, fat);
+    const rawQty = parseFloat(input.value) || 0;
+    if (!rawQty) { toast('Enter a quantity first'); return; }
+    const grams = getEffectiveQtyGrams();
+    const kcal = kcalPer ? Math.round(kcalPer * grams) : 0;
+    const prot = protPer ? parseFloat((protPer * grams).toFixed(1)) : 0;
+    const carb = carbPer ? parseFloat((carbPer * grams).toFixed(1)) : 0;
+    const fat  = fatPer  ? parseFloat((fatPer  * grams).toFixed(1)) : 0;
+    const displayUnit = currentUnit === 'eaches' ? 'eaches' : unit;
+    addToPlate(type, id, name, rawQty, displayUnit, kcal, prot, carb, fat);
   };
 }
 
@@ -3727,13 +3827,19 @@ function renderPlate() {
   const total = items.reduce((s, i) => s + (i.kcal || 0), 0);
 
   const itemsHtml = items.length
-    ? items.map(item => `
+    ? items.map(item => {
+        let qtyLabel;
+        if (item.unit === 'eaches') qtyLabel = '× ' + item.qty;
+        else if (item.unit === 'servings') qtyLabel = item.qty + ' srv';
+        else qtyLabel = item.qty + 'g';
+        return `
         <div class="plate-item-row">
           <span class="pi-name" title="${item.name}">${item.name}</span>
-          <span class="pi-qty">${item.qty}${item.unit === 'servings' ? ' srv' : 'g'}</span>
+          <span class="pi-qty">${qtyLabel}</span>
           <span class="pi-kcal">${item.kcal} kcal</span>
           <button class="pi-del" onclick="removeFromPlate('${item.id}')">✕</button>
-        </div>`).join('')
+        </div>`;
+      }).join('')
     : '<p style="font-size:.78rem;color:var(--muted);text-align:center;margin:.5rem 0;">Nothing logged yet today</p>';
 
   ['products', 'meals'].forEach(sfx => {

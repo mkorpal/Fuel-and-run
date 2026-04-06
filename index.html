@@ -799,6 +799,25 @@
           </div>
         </div>
         <div class="form-row">
+          <label>Current Training Goal <span style="font-weight:400; color:var(--muted);">(optional)</span></label>
+          <select id="prof-training-goal">
+            <option value="">— not set —</option>
+            <option value="marathon">Marathon</option>
+            <option value="half">Half Marathon</option>
+            <option value="10k">10 km</option>
+            <option value="5k">5 km</option>
+            <option value="ultra">Ultra / Trail</option>
+            <option value="base">General fitness / base building</option>
+          </select>
+        </div>
+        <div style="margin:.6rem 0 .2rem; font-size:.82rem; font-weight:600; color:var(--muted);">Personal Bests <span style="font-weight:400;">(optional — used for training insights)</span></div>
+        <div class="form-inline">
+          <div class="form-row"><label>Marathon PB</label><input type="text" id="prof-pb-marathon" placeholder="e.g. 3:45:00" /></div>
+          <div class="form-row"><label>Half Marathon PB</label><input type="text" id="prof-pb-half" placeholder="e.g. 1:42:00" /></div>
+          <div class="form-row"><label>10 km PB</label><input type="text" id="prof-pb-10k" placeholder="e.g. 45:30" /></div>
+          <div class="form-row"><label>5 km PB</label><input type="text" id="prof-pb-5k" placeholder="e.g. 21:15" /></div>
+        </div>
+        <div class="form-row">
           <label>Health notes / conditions</label>
           <textarea id="prof-notes" rows="3" placeholder="e.g. Iron-deficient, lactose tolerant, no nut allergy"></textarea>
         </div>
@@ -960,7 +979,9 @@
 // ============================================================
 function newProfile(id, name) {
   return { id, name: name||'Runner '+(id), age: '', sex: 'male', weight: 72,
-    goalWeight: 69.5, height: 175, weeklyKm: 75, diet: 'plantforward', notes: '', sessions: [], dailyLog: [],
+    goalWeight: 69.5, height: 175, weeklyKm: 75, diet: 'plantforward', notes: '',
+    trainingGoal: '', pbMarathon: '', pbHalf: '', pb10k: '', pb5k: '',
+    sessions: [], dailyLog: [],
     weekSessions: {}, weekMeals: {} };
 }
 
@@ -1441,7 +1462,9 @@ function fitSportToType(sport) {
 
 function fitIntensity(avgHr, maxHr, userMaxHr) {
   if (!avgHr) return 'moderate';
-  const pct = avgHr / (userMaxHr || 190);
+  const ap = activeProfile();
+  const hrMax = ap.age ? Math.round(220 - ap.age) : (userMaxHr || 190);
+  const pct = avgHr / hrMax;
   if (pct < 0.72) return 'easy';
   if (pct < 0.85) return 'moderate';
   return 'hard';
@@ -1805,12 +1828,46 @@ function renderWeekGrid() {
 // WORKOUT CLASSIFICATION & DETAIL OVERLAY
 // ============================================================
 
+// Parse a PB string like "3:45:00" or "45:30" into seconds
+function pbToSeconds(pb) {
+  if (!pb) return null;
+  const parts = pb.split(':').map(Number);
+  if (parts.some(isNaN)) return null;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return null;
+}
+
+// Derive race pace (sec/km) from a PB and distance
+function pbPacePerKm(pb, distKm) {
+  const secs = pbToSeconds(pb);
+  if (!secs) return null;
+  return secs / distKm;
+}
+
 function classifyWorkout(s) {
-  const hrMax = 190; // TODO: could derive from profile age
+  const ap = activeProfile();
+  const age = ap.age || 35;
+  const hrMax = ap.age ? Math.round(220 - ap.age) : 190;
   const pctHr = s.avgHr ? s.avgHr / hrMax : null;
   const distKm = s.dist || 0;
   const durMin = s.dur || 0;
   const laps = s.laps || [];
+  const goal = ap.trainingGoal || '';
+
+  // Avg pace in sec/km from session
+  let avgPaceSec = null;
+  if (s.pace) {
+    const [m, sec] = s.pace.split(':').map(Number);
+    avgPaceSec = m * 60 + sec;
+  }
+
+  // Best available race pace for context (use goal-distance PB, else longest PB)
+  const goalPace = goal === 'marathon' ? pbPacePerKm(ap.pbMarathon, 42.195) :
+                   goal === 'half' ? pbPacePerKm(ap.pbHalf, 21.0975) :
+                   goal === '10k' ? pbPacePerKm(ap.pb10k, 10) :
+                   goal === '5k' ? pbPacePerKm(ap.pb5k, 5) : null;
+  const refPace = goalPace || pbPacePerKm(ap.pbMarathon, 42.195) || pbPacePerKm(ap.pbHalf, 21.0975) || pbPacePerKm(ap.pb10k, 10) || pbPacePerKm(ap.pb5k, 5);
 
   // Check pace variability across laps (for interval detection)
   let paceVariability = 0;
@@ -1822,70 +1879,108 @@ function classifyWorkout(s) {
     if (paces.length >= 3) {
       const avg = paces.reduce((a, b) => a + b, 0) / paces.length;
       const variance = paces.reduce((sum, p) => sum + Math.pow(p - avg, 2), 0) / paces.length;
-      paceVariability = Math.sqrt(variance) / avg; // coefficient of variation
+      paceVariability = Math.sqrt(variance) / avg;
     }
   }
 
+  // Goal-aware purpose enrichment
+  const goalLabels = { marathon: 'marathon', half: 'half marathon', '10k': '10 km', '5k': '5 km', ultra: 'ultra/trail', base: 'general fitness' };
+  const goalStr = goal ? goalLabels[goal] || goal : null;
+
+  // Pace context string (how this session's pace compares to race pace)
+  let paceContext = '';
+  if (avgPaceSec && refPace) {
+    const diff = avgPaceSec - refPace;
+    const pctDiff = Math.abs(diff / refPace * 100).toFixed(0);
+    if (diff > 30) paceContext = ` This was about ${pctDiff}% slower than your ${goalStr || 'race'} pace — good for building aerobic base without excess stress.`;
+    else if (diff > 10) paceContext = ` Pace was ~${pctDiff}% slower than your ${goalStr || 'race'} pace.`;
+    else if (diff > -10) paceContext = ` Very close to your ${goalStr || 'race'} pace — strong session.`;
+    else paceContext = ` About ${pctDiff}% faster than your ${goalStr || 'race'} pace — impressive effort!`;
+  }
+
+  // PB comparison for races
+  let pbNote = '';
+
   // User-tagged race
   if (s.intensity === 'race') {
+    if (distKm >= 40 && ap.pbMarathon) pbNote = compareToPB(distKm, durMin * 60, ap.pbMarathon, 42.195, 'marathon');
+    else if (distKm >= 19 && distKm <= 23 && ap.pbHalf) pbNote = compareToPB(distKm, durMin * 60, ap.pbHalf, 21.0975, 'half marathon');
+    else if (distKm >= 9 && distKm <= 11 && ap.pb10k) pbNote = compareToPB(distKm, durMin * 60, ap.pb10k, 10, '10 km');
+    else if (distKm >= 4.5 && distKm <= 5.5 && ap.pb5k) pbNote = compareToPB(distKm, durMin * 60, ap.pb5k, 5, '5 km');
     return {
       type: 'race', label: '🏁 Race',
-      purpose: 'Race effort — maximum performance. Recovery should follow in the next 1–2 days.'
+      purpose: `Race effort — maximum performance.${pbNote}${goalStr ? ' Key race experience for your ' + goalStr + ' goal.' : ''} Recovery should follow in the next 1–2 days.`
     };
   }
-  // Interval / speed work: high pace variability OR high HR with alternating fast/slow laps
+  // Interval / speed work
   if (paceVariability > 0.12 && pctHr && pctHr > 0.78) {
     return {
       type: 'interval', label: '⚡ Interval / Speed',
-      purpose: 'Develops VO₂max and running economy. The alternating fast and recovery segments train your body to clear lactate and sustain faster speeds. Key session for getting faster.'
+      purpose: `Develops VO₂max and running economy. The alternating fast and recovery segments train your body to clear lactate and sustain faster speeds.${goalStr ? ' Critical for ' + goalStr + ' preparation — builds the top-end speed that makes race pace feel easier.' : ''}${paceContext}`
     };
   }
-  // Threshold: HR in 85–92% zone, sustained effort (low pace variability)
+  // Threshold
   if (pctHr && pctHr >= 0.85 && pctHr < 0.92 && paceVariability < 0.08) {
     return {
       type: 'threshold', label: '🔶 Threshold',
-      purpose: 'Comfortably hard effort near your lactate threshold. Improves the pace you can sustain for prolonged periods. This is the ceiling of "controlled discomfort" — training your body to buffer and clear lactate more efficiently.'
+      purpose: `Comfortably hard effort near your lactate threshold (${Math.round(pctHr*100)}% max HR). Improves the pace you can sustain for prolonged periods.${goalStr ? ' Directly improves your ' + goalStr + ' race pace — this is where race fitness is built.' : ''}${paceContext}`
     };
   }
-  // Tempo: HR in 78–87% zone, steady pace
+  // Tempo
   if (pctHr && pctHr >= 0.78 && pctHr < 0.87 && paceVariability < 0.08) {
     return {
       type: 'tempo', label: '🟡 Tempo',
-      purpose: 'Sustained moderate-hard effort. Builds aerobic power and mental toughness at a pace slightly faster than your easy runs. Teaches your body to use fat as fuel efficiently at higher intensities.'
+      purpose: `Sustained moderate-hard effort (${Math.round(pctHr*100)}% max HR). Builds aerobic power and mental toughness at controlled discomfort.${goalStr ? ' For ' + goalStr + ' training, tempo runs teach your body to hold pace under fatigue.' : ''}${paceContext}`
     };
   }
-  // Long run: > 75 min, easy-moderate effort
+  // Long run
   if (durMin > 75 && (!pctHr || pctHr < 0.82)) {
+    let longPurpose = `Builds endurance and aerobic base over ${distKm} km. Trains fat metabolism, strengthens muscles and joints, and builds mental resilience.`;
+    if (goal === 'marathon') longPurpose += ' The most important weekly session for marathon preparation — simulates the sustained effort of race day.';
+    else if (goal === 'half') longPurpose += ' Essential for half marathon readiness — builds the stamina to maintain pace through the second half.';
+    else if (goalStr) longPurpose += ` Builds the endurance foundation for your ${goalStr} goal.`;
+    longPurpose += paceContext;
     return {
       type: 'long', label: '🔵 Long Run',
-      purpose: 'Builds endurance and aerobic base. Trains your body to burn fat as fuel, strengthens muscles, tendons and joints, and builds the mental resilience needed for race day. The key weekly session for distance runners.'
+      purpose: longPurpose
     };
   }
-  // Recovery: short, very easy
+  // Recovery
   if (pctHr && pctHr < 0.68 && distKm < 8) {
     return {
       type: 'recovery', label: '🟢 Recovery',
-      purpose: 'Very easy effort to promote blood flow and aid recovery from harder sessions. Should feel relaxed and conversational. Do not push the pace — the purpose is active rest.'
+      purpose: `Very easy effort (${Math.round(pctHr*100)}% max HR) to promote blood flow and recovery. Should feel relaxed and conversational.${goalStr ? ' Recovery runs let your body absorb the training load from harder sessions — essential for ' + goalStr + ' progression.' : ''}${paceContext}`
     };
   }
-  // Easy run: default for low HR
+  // Easy
   if (!pctHr || pctHr < 0.78) {
     return {
       type: 'easy', label: '💚 Easy Run',
-      purpose: 'Aerobic base building at a comfortable, conversational pace. Most of your weekly mileage should be at this effort. Builds the cardiovascular foundation that supports all other training.'
+      purpose: `Aerobic base building at a comfortable pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''}. Most weekly mileage should be at this effort.${goalStr ? ' For ' + goalStr + ' training, easy runs build the cardiovascular foundation that makes all other sessions possible.' : ''}${paceContext}`
     };
   }
-  // Hard (catch-all for high HR)
+  // Hard catch-all
   if (pctHr >= 0.87) {
     return {
       type: 'threshold', label: '🔶 Threshold / Hard',
-      purpose: 'High-intensity effort above your comfort zone. Pushes your lactate threshold higher, enabling you to sustain faster speeds for longer. Requires good recovery afterward.'
+      purpose: `High-intensity effort at ${Math.round(pctHr*100)}% max HR. Pushes your lactate threshold higher.${goalStr ? ' Important quality session for ' + goalStr + ' performance.' : ''}${paceContext}`
     };
   }
   return {
     type: 'easy', label: '💚 Easy Run',
-    purpose: 'Aerobic base building at a comfortable effort. The backbone of distance running training.'
+    purpose: `Aerobic base building at a comfortable effort.${goalStr ? ' Supports your ' + goalStr + ' training plan.' : ''}${paceContext}`
   };
+}
+
+function compareToPB(distKm, timeSec, pbStr, pbDist, label) {
+  const pbSec = pbToSeconds(pbStr);
+  if (!pbSec || !timeSec || distKm < pbDist * 0.9) return '';
+  // Normalise to the PB distance for fair comparison
+  const normalised = timeSec * (pbDist / distKm);
+  const diff = normalised - pbSec;
+  if (Math.abs(diff) < 5) return ` Matched your ${label} PB of ${pbStr}!`;
+  if (diff < 0) return ` New PB territory! ~${formatDuration(Math.abs(diff))} faster than your ${label} PB of ${pbStr}.`;
+  return ` About ${formatDuration(diff)} off your ${label} PB of ${pbStr}.`;
 }
 
 function formatDuration(totalSec) {
@@ -1900,13 +1995,18 @@ function openWorkoutDetail(weekKey, dayIdx, dateLabel) {
   const s = sessionForWeekDay(weekKey, dayIdx);
   if (!s || s.type === 'rest') return;
 
+  const ap = activeProfile();
   const cls = classifyWorkout(s);
   const laps = s.laps || [];
+  const hrMax = ap.age ? Math.round(220 - ap.age) : 190;
+  const goal = ap.trainingGoal || '';
+  const goalLabels = { marathon: 'Marathon', half: 'Half Marathon', '10k': '10 km', '5k': '5 km', ultra: 'Ultra / Trail', base: 'General fitness' };
 
   let html = `<h3>🏃 ${DAYS[dayIdx]} ${dateLabel} — ${s.title || s.type}</h3>`;
 
   // Classification badge + purpose
   html += `<span class="wo-class-badge wo-class-${cls.type}">${cls.label}</span>`;
+  if (goal) html += `<span style="font-size:.72rem; color:var(--muted); margin-left:.5rem;">🎯 ${goalLabels[goal] || goal}</span>`;
   html += `<div class="wo-purpose">${cls.purpose}</div>`;
 
   // Summary stats
@@ -1921,9 +2021,27 @@ function openWorkoutDetail(weekKey, dayIdx, dateLabel) {
   if (s.totalAscent) html += `<div class="wo-stat"><span class="wo-stat-label">Elevation</span><span class="wo-stat-val">↑${s.totalAscent}m ↓${s.totalDescent || 0}m</span></div>`;
   html += `</div>`;
 
+  // PB pace reference line
+  const refPBs = [
+    { label: 'Marathon PB pace', pb: ap.pbMarathon, dist: 42.195 },
+    { label: 'Half PB pace', pb: ap.pbHalf, dist: 21.0975 },
+    { label: '10k PB pace', pb: ap.pb10k, dist: 10 },
+    { label: '5k PB pace', pb: ap.pb5k, dist: 5 },
+  ].filter(x => x.pb);
+  if (refPBs.length && s.pace) {
+    html += `<div style="font-size:.75rem; color:var(--muted); margin-bottom:.5rem;">`;
+    refPBs.forEach(r => {
+      const pace = pbPacePerKm(r.pb, r.dist);
+      if (pace) {
+        const m = Math.floor(pace / 60), sec = Math.round(pace % 60);
+        html += `<span style="margin-right:.8rem;">${r.label}: <strong>${m}:${String(sec).padStart(2,'0')}/km</strong></span>`;
+      }
+    });
+    html += `</div>`;
+  }
+
   // HR Zone distribution from laps
   if (s.avgHr && laps.length) {
-    const hrMax = 190;
     const zones = [
       { name: 'Z1 Recovery', min: 0, max: 0.6, color: '#b0bec5' },
       { name: 'Z2 Easy', min: 0.6, max: 0.72, color: '#66bb6a' },
@@ -1944,7 +2062,7 @@ function openWorkoutDetail(weekKey, dayIdx, dateLabel) {
       else zoneTimes[4] += l.time;
     }
     if (totalTime > 0) {
-      html += `<div style="margin:.6rem 0 .3rem; font-size:.75rem; font-weight:700; text-transform:uppercase; color:var(--muted);">Heart Rate Zones</div>`;
+      html += `<div style="margin:.6rem 0 .3rem; font-size:.75rem; font-weight:700; text-transform:uppercase; color:var(--muted);">Heart Rate Zones (max HR: ${hrMax} bpm)</div>`;
       html += `<div class="hr-zones">`;
       zones.forEach((z, i) => {
         const pct = (zoneTimes[i] / totalTime * 100).toFixed(1);
@@ -1962,7 +2080,6 @@ function openWorkoutDetail(weekKey, dayIdx, dateLabel) {
 
   // Splits table
   if (laps.length) {
-    // Calculate fastest/slowest pace for highlighting
     const paceSecs = laps.filter(l => l.pace).map(l => {
       const [m, sec] = l.pace.split(':').map(Number);
       return m * 60 + sec;
@@ -1986,7 +2103,6 @@ function openWorkoutDetail(weekKey, dayIdx, dateLabel) {
         if (ps <= fastestPace + paceRange * 0.15) paceClass = 'split-fast';
         else if (ps >= slowestPace - paceRange * 0.15) paceClass = 'split-slow';
       }
-      // Pace bar (visual representation)
       let paceBar = '';
       if (l.pace && paceRange > 0) {
         const [m, sec] = l.pace.split(':').map(Number);
@@ -3293,6 +3409,11 @@ document.getElementById('btn-save-profile').addEventListener('click', () => {
   ap.height     = +document.getElementById('prof-height').value || 175;
   ap.weeklyKm   = +document.getElementById('prof-km').value || 75;
   ap.diet       = document.getElementById('prof-diet').value;
+  ap.trainingGoal = document.getElementById('prof-training-goal').value;
+  ap.pbMarathon = document.getElementById('prof-pb-marathon').value.trim();
+  ap.pbHalf     = document.getElementById('prof-pb-half').value.trim();
+  ap.pb10k      = document.getElementById('prof-pb-10k').value.trim();
+  ap.pb5k       = document.getElementById('prof-pb-5k').value.trim();
   ap.notes      = document.getElementById('prof-notes').value.trim();
   ap.updatedAt  = new Date().toISOString();
   save(); renderAll();
@@ -3325,6 +3446,11 @@ function loadProfileForm() {
   document.getElementById('prof-height').value = p.height || '';
   document.getElementById('prof-km').value = p.weeklyKm || 75;
   document.getElementById('prof-diet').value = p.diet || 'plantforward';
+  document.getElementById('prof-training-goal').value = p.trainingGoal || '';
+  document.getElementById('prof-pb-marathon').value = p.pbMarathon || '';
+  document.getElementById('prof-pb-half').value = p.pbHalf || '';
+  document.getElementById('prof-pb-10k').value = p.pb10k || '';
+  document.getElementById('prof-pb-5k').value = p.pb5k || '';
   document.getElementById('prof-notes').value = p.notes || '';
 }
 
@@ -3333,9 +3459,18 @@ function renderProfileSummary() {
   const el = document.getElementById('prof-summary');
   if (!el) return;
   const bmi = p.height ? (p.weight / Math.pow(p.height/100, 2)).toFixed(1) : '—';
+  const goalLabels = { marathon: 'Marathon', half: 'Half Marathon', '10k': '10 km', '5k': '5 km', ultra: 'Ultra / Trail', base: 'General fitness' };
+  const pbs = [
+    p.pbMarathon ? `Marathon ${p.pbMarathon}` : null,
+    p.pbHalf ? `Half ${p.pbHalf}` : null,
+    p.pb10k ? `10k ${p.pb10k}` : null,
+    p.pb5k ? `5k ${p.pb5k}` : null,
+  ].filter(Boolean);
   el.innerHTML = `
     <p><strong>BMI:</strong> ${bmi} · <strong>Target protein:</strong> ${Math.round(1.8*(p.weight||72))}g/day · <strong>Weekly km:</strong> ${p.weeklyKm||75}km</p>
     <p style="margin-top:.3rem;"><strong>Diet style:</strong> ${p.diet} · <strong>Goal:</strong> ${p.weight||72}kg → ${p.goalWeight||69.5}kg (${Math.max(0,((p.weight||72)-(p.goalWeight||69.5))).toFixed(1)}kg over ~${Math.ceil(Math.max(0,((p.weight||72)-(p.goalWeight||69.5)))*1000/250)} weeks at 250g/week)</p>
+    ${p.trainingGoal ? `<p style="margin-top:.3rem;"><strong>Training goal:</strong> ${goalLabels[p.trainingGoal] || p.trainingGoal}</p>` : ''}
+    ${pbs.length ? `<p style="margin-top:.3rem;"><strong>PBs:</strong> ${pbs.join(' · ')}</p>` : ''}
     ${p.notes ? `<p style="margin-top:.3rem;"><strong>Notes:</strong> ${p.notes}</p>` : ''}
   `;
   // Show RED-S warning if deficit >3kg or very high volume

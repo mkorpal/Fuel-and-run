@@ -930,7 +930,53 @@ function setSyncKey(passphrase) {
   return key;
 }
 
-let syncKey = getSyncKey();
+// Migrate old-format keys (no "fr-" prefix, or uppercase) to normalised form
+function ensureNormalisedSyncKey() {
+  let raw = localStorage.getItem('fuelrun_sync_key') || '';
+  if (!raw) return '';
+  const stripped = raw.replace(/^fr-/, '');
+  const normalised = 'fr-' + normalisePassphrase(stripped);
+  if (raw !== normalised) {
+    localStorage.setItem('fuelrun_sync_key', normalised);
+    console.log('Migrated sync key:', raw, '→', normalised);
+  }
+  return normalised;
+}
+
+let syncKey = ensureNormalisedSyncKey() || getSyncKey();
+
+// Migrate data from old key format to new normalised key
+async function migrateOldSyncKey(oldKey, newKey) {
+  if (!oldKey || !newKey || oldKey === newKey) return;
+  try {
+    const { data, error } = await sb.from('fuelrun_data')
+      .select('data')
+      .eq('sync_key', oldKey)
+      .limit(1);
+    if (error || !data || data.length === 0) return;
+    const oldData = data[0].data;
+    // Pull new key data too if it exists
+    const { data: newData } = await sb.from('fuelrun_data')
+      .select('data')
+      .eq('sync_key', newKey)
+      .limit(1);
+    if (newData && newData.length > 0 && newData[0].data) {
+      // Merge old into new, new wins on conflict
+      const merged = mergeStates(newData[0].data, oldData);
+      await sb.from('fuelrun_data').upsert({
+        sync_key: newKey, data: merged, updated_at: new Date().toISOString()
+      }, { onConflict: 'sync_key' });
+    } else {
+      // No new key row yet — copy old data under new key
+      await sb.from('fuelrun_data').upsert({
+        sync_key: newKey, data: oldData, updated_at: new Date().toISOString()
+      }, { onConflict: 'sync_key' });
+    }
+    // Delete the old row
+    await sb.from('fuelrun_data').delete().eq('sync_key', oldKey);
+    console.log('Migrated cloud data from', oldKey, 'to', newKey);
+  } catch(e) { console.error('Key migration error:', e); }
+}
 
 async function pushToCloud() {
   if (!syncKey) return;
@@ -1080,21 +1126,6 @@ function mergeStates(local, remote) {
   };
 }
 
-// Clean up duplicate rows from prior upsert bug (keeps newest, deletes rest)
-async function cleanupDuplicateRows(key) {
-  try {
-    const { data, error } = await sb.from('fuelrun_data')
-      .select('id, updated_at')
-      .eq('sync_key', key)
-      .order('updated_at', { ascending: false });
-    if (error || !data || data.length <= 1) return;
-    // Delete all but the newest row
-    const idsToDelete = data.slice(1).map(r => r.id);
-    await sb.from('fuelrun_data').delete().in('id', idsToDelete);
-    console.log('Cleaned up', idsToDelete.length, 'duplicate sync rows');
-  } catch(e) { /* ignore cleanup errors */ }
-}
-
 function load() {
   try {
     const d = localStorage.getItem('fuelrun');
@@ -1102,8 +1133,16 @@ function load() {
   } catch(e) {}
   if (syncKey) {
     setSyncStatus('⏳ Checking cloud…');
-    cleanupDuplicateRows(syncKey); // fire-and-forget: remove stale duplicates
-    pullFromCloud(syncKey).then(async remote => {
+    // Check for old-format keys in cloud and migrate
+    const possibleOldKeys = [];
+    const stripped = syncKey.replace(/^fr-/, '');
+    const upper = stripped.toUpperCase();
+    if (upper !== stripped) possibleOldKeys.push(upper);
+    possibleOldKeys.push(stripped); // without fr- prefix
+    const migrationDone = Promise.all(
+      possibleOldKeys.map(old => migrateOldSyncKey(old, syncKey))
+    );
+    migrationDone.then(() => pullFromCloud(syncKey)).then(async remote => {
       if (remote) {
         const merged = mergeStates(state, remote);
         applyParsed(merged);

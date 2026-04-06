@@ -1964,7 +1964,10 @@ function renderProducts() {
         <div class="nutrient-row"><span>Carbs</span><span>${p.carb || '—'}g</span></div>
         <div class="nutrient-row"><span>Fat</span><span>${p.fat || '—'}g</span></div>
         ${p.url ? `<div style="margin-top:.4rem;"><a href="${p.url}" target="_blank" style="font-size:.74rem;">View product ↗</a></div>` : ''}
-        <button class="plog-btn" onclick="openQtyModal('product','${p.id}')">＋ Log today</button>
+        <div style="display:flex; gap:.4rem; margin-top:.4rem;">
+          <button class="plog-btn" onclick="openQtyModal('product','${p.id}')">＋ Log today</button>
+          <button class="plog-btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border);" onclick="renameProduct('${p.id}')">✏️ Rename</button>
+        </div>
       </div>
     </div>
   `;
@@ -1997,6 +2000,18 @@ window.deleteProduct = id => {
   if (p) { p.deletedAt = new Date().toISOString(); p.updatedAt = new Date().toISOString(); }
   save(); renderProducts();
   toast('Product removed');
+};
+
+window.renameProduct = id => {
+  const p = state.products.find(x => x.id === id);
+  if (!p) return;
+  const current = p.nickname || p.name;
+  const newName = prompt('Rename product:', current);
+  if (newName === null || !newName.trim()) return;
+  p.nickname = newName.trim();
+  p.updatedAt = new Date().toISOString();
+  save(); renderProducts();
+  toast('Renamed to: ' + p.nickname);
 };
 
 function saveProductFromForm() {

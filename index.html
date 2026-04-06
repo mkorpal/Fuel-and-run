@@ -1370,7 +1370,7 @@ document.getElementById('btn-clear-training').addEventListener('click', () => {
 let _fitParserModule = null;
 async function loadFitParser() {
   if (_fitParserModule) return _fitParserModule;
-  _fitParserModule = (await import('https://esm.sh/fit-file-parser@1.17.3')).default;
+  _fitParserModule = (await import('https://esm.sh/fit-file-parser@2.3.3')).default;
   return _fitParserModule;
 }
 
@@ -1500,7 +1500,8 @@ document.getElementById('fit-input').addEventListener('change', async (e) => {
     if (ap.weekSessions[curWk]) ap.sessions = ap.weekSessions[curWk];
 
     save(); renderAll();
-    toast('✅ Imported ' + imported + ' Garmin session(s)' + (imported > 0 ? ' — navigated to that week' : ''));
+    const weekLabel = imported > 0 ? ' → ' + weekRangeLabel(mondayOfOffset(weekOffset)) : '';
+    toast('✅ Imported ' + imported + ' Garmin session(s)' + weekLabel);
   } catch (err) {
     console.error('FIT parse error:', err);
     toast('❌ Failed to parse .fit file — check console');

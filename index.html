@@ -386,6 +386,7 @@
   .meal-type-badge { display: inline-block; font-size: .7rem; font-weight: 600; padding: .15rem .5rem; border-radius: 20px; margin-bottom: .5rem; }
   .meal-type-pantry { background: #d4edda; color: #155724; }
   .meal-type-recipe { background: #cce5ff; color: #004085; }
+  .meal-type-manual { background: #fff3cd; color: #856404; }
   .meal-ingredients { font-size: .8rem; color: var(--muted); margin-bottom: .4rem; line-height: 1.5; }
   .meal-macros { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .4rem; }
   .meal-macro-chip { background: var(--surface2); border-radius: 4px; padding: .15rem .5rem; font-size: .78rem; }
@@ -700,6 +701,7 @@
             <button class="btn btn-secondary btn-sm meal-filter-btn active" data-filter="all">All meals</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="pantry">🛒 From Pantry</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="recipe">🌐 From Recipe</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="manual">✍️ Manual</button>
           </div>
           <div class="meal-grid" id="meal-grid"></div>
           <p id="no-meals" style="color:var(--muted); font-size:.85rem;">No meals saved yet. Create your first meal above.</p>
@@ -848,8 +850,9 @@
     <button id="meal-modal-close" title="Close">✕</button>
     <h3>🍽️ Create a Meal</h3>
     <div class="meal-type-tabs">
-      <button class="meal-type-tab active" data-mtype="pantry">🛒 Build from my pantry</button>
-      <button class="meal-type-tab" data-mtype="recipe">🌐 From internet recipe</button>
+      <button class="meal-type-tab active" data-mtype="pantry">🛒 From my pantry</button>
+      <button class="meal-type-tab" data-mtype="recipe">🌐 Internet recipe</button>
+      <button class="meal-type-tab" data-mtype="manual">✍️ Manual</button>
     </div>
     <div class="form-row">
       <label>Meal Name</label>
@@ -885,6 +888,21 @@
         <div class="form-row"><label>Protein (g/100g)</label><input type="number" id="meal-r-prot" min="0" step=".1" /></div>
         <div class="form-row"><label>Carbs (g/100g)</label><input type="number" id="meal-r-carb" min="0" step=".1" /></div>
         <div class="form-row"><label>Fat (g/100g)</label><input type="number" id="meal-r-fat" min="0" step=".1" /></div>
+      </div>
+    </div>
+    <!-- Manual section -->
+    <div id="meal-manual-section" style="display:none;">
+      <p style="font-size:.81rem; color:var(--muted); margin-bottom:.75rem;">Enter nutrition per <strong>serving</strong>.</p>
+      <div class="form-inline">
+        <div class="form-row"><label>Serving size (g)</label><input type="number" id="meal-m-serve" min="1" placeholder="e.g. 250" /></div>
+        <div class="form-row"><label>Calories (kcal)</label><input type="number" id="meal-m-kcal" min="0" placeholder="e.g. 450" /></div>
+        <div class="form-row"><label>Protein (g)</label><input type="number" id="meal-m-prot" min="0" step=".1" /></div>
+        <div class="form-row"><label>Carbs (g)</label><input type="number" id="meal-m-carb" min="0" step=".1" /></div>
+        <div class="form-row"><label>Fat (g)</label><input type="number" id="meal-m-fat" min="0" step=".1" /></div>
+      </div>
+      <div class="form-row">
+        <label>Notes <span style="font-weight:400; color:var(--muted);">(optional)</span></label>
+        <input type="text" id="meal-m-notes" placeholder="e.g. Quick weeknight dinner, high protein" />
       </div>
     </div>
     <div style="display:flex; gap:.75rem; margin-top:.5rem;">
@@ -2231,7 +2249,7 @@ const TIPS = [
 // ============================================================
 
 // ---- State for the builder modal ----
-let mealBuilderType = 'pantry'; // 'pantry' | 'recipe'
+let mealBuilderType = 'pantry'; // 'pantry' | 'recipe' | 'manual'
 let mealIngredients = []; // [{ productId, qty }]
 
 function openMealModal() {
@@ -2245,6 +2263,14 @@ function openMealModal() {
   document.getElementById('meal-r-prot').value = '';
   document.getElementById('meal-r-carb').value = '';
   document.getElementById('meal-r-fat').value = '';
+  document.getElementById('meal-m-serve').value = '';
+  document.getElementById('meal-m-kcal').value = '';
+  document.getElementById('meal-m-prot').value = '';
+  document.getElementById('meal-m-carb').value = '';
+  document.getElementById('meal-m-fat').value = '';
+  document.getElementById('meal-m-notes').value = '';
+  const fetchStatus = document.getElementById('recipe-fetch-status');
+  if (fetchStatus) fetchStatus.textContent = '';
   setMealBuilderType('pantry');
   renderIngredientRows();
   addIngredientRow(); // start with one row
@@ -2262,6 +2288,7 @@ function setMealBuilderType(type) {
   });
   document.getElementById('meal-pantry-section').style.display = type === 'pantry' ? '' : 'none';
   document.getElementById('meal-recipe-section').style.display = type === 'recipe' ? '' : 'none';
+  document.getElementById('meal-manual-section').style.display = type === 'manual' ? '' : 'none';
 }
 
 function addIngredientRow(productId, qty) {
@@ -2451,7 +2478,7 @@ document.getElementById('btn-save-meal').addEventListener('click', () => {
       kcal: m.kcal, prot: m.prot, carb: m.carb, fat: m.fat,
       updatedAt: new Date().toISOString(),
     };
-  } else {
+  } else if (mealBuilderType === 'recipe') {
     // Recipe meal — store macros per 100g for flexible portion logging
     const kcal100 = +document.getElementById('meal-r-kcal').value || null;
     const prot100 = +document.getElementById('meal-r-prot').value || null;
@@ -2463,6 +2490,19 @@ document.getElementById('btn-save-meal').addEventListener('click', () => {
       source: document.getElementById('meal-source').value.trim(),
       notes:  document.getElementById('meal-notes').value.trim(),
       kcal100, prot100, carb100, fat100,
+      updatedAt: new Date().toISOString(),
+    };
+  } else {
+    // Manual meal — store macros per serving
+    const kcal = +document.getElementById('meal-m-kcal').value || null;
+    const prot = +document.getElementById('meal-m-prot').value || null;
+    const carb = +document.getElementById('meal-m-carb').value || null;
+    const fat  = +document.getElementById('meal-m-fat').value  || null;
+    meal = {
+      id: Date.now().toString(), name, type: 'manual',
+      serve: +document.getElementById('meal-m-serve').value || null,
+      notes: document.getElementById('meal-m-notes').value.trim(),
+      kcal, prot, carb, fat,
       updatedAt: new Date().toISOString(),
     };
   }
@@ -2507,8 +2547,8 @@ function renderMeals() {
   none.style.display = 'none';
 
   grid.innerHTML = filtered.map(m => {
-    const badgeClass = m.type === 'pantry' ? 'meal-type-pantry' : 'meal-type-recipe';
-    const badgeLabel = m.type === 'pantry' ? '🛒 From Pantry' : '🌐 From Recipe';
+    const badgeClass = m.type === 'pantry' ? 'meal-type-pantry' : m.type === 'manual' ? 'meal-type-manual' : 'meal-type-recipe';
+    const badgeLabel = m.type === 'pantry' ? '🛒 From Pantry' : m.type === 'manual' ? '✍️ Manual' : '🌐 From Recipe';
 
     let ingredientLines = '';
     let macroHtml = '';
@@ -2523,6 +2563,16 @@ function renderMeals() {
           <span class="meal-macro-chip">P ${m.prot}g</span>
           <span class="meal-macro-chip">C ${m.carb}g</span>
           <span class="meal-macro-chip">F ${m.fat}g</span>
+        </div>`;
+    } else if (m.type === 'manual') {
+      if (m.notes) ingredientLines = m.notes;
+      macroHtml = `
+        <div class="meal-macros">
+          <span class="meal-macro-chip">🔥 ${m.kcal||'?'} kcal</span>
+          <span class="meal-macro-chip">P ${m.prot||'?'}g</span>
+          <span class="meal-macro-chip">C ${m.carb||'?'}g</span>
+          <span class="meal-macro-chip">F ${m.fat||'?'}g</span>
+          ${m.serve ? `<span class="meal-macro-chip" style="opacity:.7;">per ${m.serve}g</span>` : ''}
         </div>`;
     } else {
       // Recipe: show per-100g + portion calculator

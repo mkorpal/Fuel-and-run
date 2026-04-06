@@ -626,6 +626,14 @@
       </div>
       <div class="card">
         <div class="card-title">Add a Product</div>
+        <div style="margin-bottom:1rem;">
+          <label style="font-size:.82rem; font-weight:600;">🔍 Search food database</label>
+          <div style="display:flex; gap:.4rem; margin-top:.3rem;">
+            <input type="text" id="food-search-input" placeholder="e.g. banana, oat milk, Vegemite…" style="flex:1;" />
+            <button class="btn btn-primary btn-sm" type="button" id="btn-food-search">Search</button>
+          </div>
+          <div id="food-search-results" style="margin-top:.5rem;"></div>
+        </div>
         <form id="product-form" onsubmit="return false;">
           <div class="form-inline">
             <div class="form-row" style="flex:2; min-width:200px;">
@@ -2013,6 +2021,126 @@ window.renameProduct = id => {
   save(); renderProducts();
   toast('Renamed to: ' + p.nickname);
 };
+
+// ============================================================
+// FOOD DATABASE SEARCH (Open Food Facts + USDA)
+// ============================================================
+function guessCategory(name, cats) {
+  const n = (name + ' ' + (cats || '')).toLowerCase();
+  if (/milk|yogh|cheese|butter|cream/.test(n)) return 'Dairy';
+  if (/meat|chicken|fish|egg|tofu|bean|lentil|protein/.test(n)) return 'Protein';
+  if (/bread|rice|pasta|oat|cereal|flour|potato/.test(n)) return 'Carbs';
+  if (/fruit|veg|banana|apple|berry|spinach|broccoli|carrot|tomato|avocado|mango|orange/.test(n)) return 'Fruit & Veg';
+  if (/chip|biscuit|chocolate|bar|cookie|candy|snack/.test(n)) return 'Snack';
+  if (/juice|water|soda|beer|wine|coffee|tea|drink|kombucha/.test(n)) return 'Drink';
+  if (/vitamin|supplement|whey|creatine|electrolyte/.test(n)) return 'Supplement';
+  return 'Other';
+}
+
+async function searchFoodDB(query) {
+  const results = [];
+  // Search Open Food Facts
+  try {
+    const offRes = await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(query) + '&search_simple=1&action=process&json=1&page_size=5&fields=product_name,brands,nutriments,serving_quantity,categories_tags,image_front_small_url');
+    const offData = await offRes.json();
+    for (const p of (offData.products || [])) {
+      if (!p.product_name) continue;
+      const n = p.nutriments || {};
+      results.push({
+        source: 'OFF',
+        name: p.product_name,
+        brand: p.brands || '',
+        serve: p.serving_quantity || 100,
+        kcal: Math.round(n['energy-kcal_100g'] || n['energy-kcal'] || 0),
+        prot: +(n.proteins_100g || 0).toFixed(1),
+        carb: +(n.carbohydrates_100g || 0).toFixed(1),
+        fat: +(n.fat_100g || 0).toFixed(1),
+        cats: (p.categories_tags || []).join(' '),
+        img: p.image_front_small_url || ''
+      });
+    }
+  } catch(e) { console.warn('OFF search error:', e); }
+  // Search USDA FoodData Central (generic foods)
+  try {
+    const usdaRes = await fetch('https://api.nal.usda.gov/fdc/v1/foods/search?query=' + encodeURIComponent(query) + '&pageSize=5&dataType=SR%20Legacy,Foundation&api_key=DEMO_KEY');
+    const usdaData = await usdaRes.json();
+    for (const f of (usdaData.foods || [])) {
+      const nuts = {};
+      for (const n of (f.foodNutrients || [])) {
+        if (n.nutrientName === 'Energy' && n.unitName === 'KCAL') nuts.kcal = Math.round(n.value || 0);
+        if (n.nutrientName === 'Protein') nuts.prot = +(n.value || 0).toFixed(1);
+        if (n.nutrientName === 'Carbohydrate, by difference') nuts.carb = +(n.value || 0).toFixed(1);
+        if (n.nutrientName === 'Total lipid (fat)') nuts.fat = +(n.value || 0).toFixed(1);
+      }
+      results.push({
+        source: 'USDA',
+        name: f.description || '',
+        brand: f.brandName || '',
+        serve: 100,
+        kcal: nuts.kcal || 0,
+        prot: nuts.prot || 0,
+        carb: nuts.carb || 0,
+        fat: nuts.fat || 0,
+        cats: (f.foodCategory || ''),
+        img: ''
+      });
+    }
+  } catch(e) { console.warn('USDA search error:', e); }
+  return results;
+}
+
+function renderFoodSearchResults(results) {
+  const el = document.getElementById('food-search-results');
+  if (!results.length) {
+    el.innerHTML = '<p style="font-size:.8rem; color:var(--muted);">No results found. Try a different search term.</p>';
+    return;
+  }
+  el.innerHTML = results.map((r, i) => `
+    <div style="display:flex; align-items:center; gap:.6rem; padding:.5rem; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:.3rem; cursor:pointer; background:var(--surface);"
+         onclick="fillProductFromSearch(${i})" class="food-result-row">
+      ${r.img ? `<img src="${r.img}" style="width:36px; height:36px; border-radius:4px; object-fit:cover;" alt="" />` : '<div style="width:36px;height:36px;border-radius:4px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🥑</div>'}
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}</div>
+        <div style="font-size:.72rem; color:var(--muted);">${r.brand ? r.brand + ' · ' : ''}${r.kcal} kcal · ${r.prot}g P · ${r.carb}g C · ${r.fat}g F <span style="opacity:.5;">per ${r.serve}g</span></div>
+      </div>
+      <span style="font-size:.65rem; color:var(--muted); background:var(--bg); padding:.1rem .35rem; border-radius:4px;">${r.source}</span>
+    </div>
+  `).join('');
+}
+
+window._foodSearchResults = [];
+
+window.fillProductFromSearch = idx => {
+  const r = window._foodSearchResults[idx];
+  if (!r) return;
+  document.getElementById('p-name').value = r.name;
+  document.getElementById('p-brand').value = r.brand;
+  document.getElementById('p-serve').value = r.serve;
+  document.getElementById('p-kcal').value = r.kcal;
+  document.getElementById('p-prot').value = r.prot;
+  document.getElementById('p-carb').value = r.carb;
+  document.getElementById('p-fat').value = r.fat;
+  document.getElementById('p-cat').value = guessCategory(r.name, r.cats);
+  document.getElementById('food-search-results').innerHTML = '<p style="font-size:.8rem; color:var(--accent);">✔ Form filled — edit if needed, then save.</p>';
+  document.getElementById('p-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+document.getElementById('btn-food-search').addEventListener('click', async () => {
+  const q = document.getElementById('food-search-input').value.trim();
+  if (!q) return;
+  const el = document.getElementById('food-search-results');
+  el.innerHTML = '<p style="font-size:.8rem; color:var(--muted);">⏳ Searching…</p>';
+  const results = await searchFoodDB(q);
+  window._foodSearchResults = results;
+  renderFoodSearchResults(results);
+});
+
+document.getElementById('food-search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('btn-food-search').click();
+  }
+});
 
 function saveProductFromForm() {
   const name = document.getElementById('p-name').value.trim();

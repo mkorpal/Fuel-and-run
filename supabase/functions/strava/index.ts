@@ -48,15 +48,27 @@ serve(async (req) => {
       return json(await res.json());
     }
 
-    /* ── 3. Fetch recent activities ───────────────────── */
+    /* ── 3. Fetch recent activities (paginated) ────────── */
     if (action === "activities") {
-      const url = new URL("https://www.strava.com/api/v3/athlete/activities");
-      url.searchParams.set("per_page", "30");
-      if (after) url.searchParams.set("after", String(after));
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${access_token}` },
-      });
-      return json(await res.json());
+      const perPage = 100;
+      let page = 1;
+      const allActivities: unknown[] = [];
+      while (true) {
+        const url = new URL("https://www.strava.com/api/v3/athlete/activities");
+        url.searchParams.set("per_page", String(perPage));
+        url.searchParams.set("page", String(page));
+        if (after) url.searchParams.set("after", String(after));
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${access_token}` },
+        });
+        const batch = await res.json();
+        if (!Array.isArray(batch) || batch.length === 0) break;
+        allActivities.push(...batch);
+        if (batch.length < perPage) break;
+        page++;
+        if (page > 5) break; // safety cap at 500 activities
+      }
+      return json(allActivities);
     }
 
     /* ── 4. Fetch laps for a single activity ──────────── */

@@ -1518,11 +1518,33 @@ function fitSportToType(sport) {
 function fitIntensity(avgHr, maxHr, userMaxHr) {
   if (!avgHr) return 'moderate';
   const ap = activeProfile();
-  const hrMax = ap.age ? Math.round(220 - ap.age) : (userMaxHr || 190);
+  const hrMax = getEffectiveMaxHr(ap);
   const pct = avgHr / hrMax;
-  if (pct < 0.72) return 'easy';
-  if (pct < 0.85) return 'moderate';
+  if (pct < 0.75) return 'easy';
+  if (pct < 0.87) return 'moderate';
   return 'hard';
+}
+
+// Auto-detect effective max HR: use observed max from sessions, fallback to 220-age
+function getEffectiveMaxHr(ap) {
+  if (!ap) ap = activeProfile();
+  // Check all weekSessions for highest observed maxHr
+  let observedMax = 0;
+  if (ap.weekSessions) {
+    for (const wk of Object.values(ap.weekSessions)) {
+      for (const s of wk) {
+        if (s.maxHr && s.maxHr > observedMax) observedMax = s.maxHr;
+      }
+    }
+  }
+  // Also check legacy sessions array
+  if (ap.sessions) {
+    for (const s of ap.sessions) {
+      if (s.maxHr && s.maxHr > observedMax) observedMax = s.maxHr;
+    }
+  }
+  if (observedMax > 150) return observedMax; // use observed if reasonable
+  return ap.age ? Math.round(220 - ap.age) : 190;
 }
 
 function formatPace(speedMps) {
@@ -1618,6 +1640,7 @@ document.getElementById('fit-input').addEventListener('change', async (e) => {
             ascent: l.total_ascent || 0,
           }));
 
+        const fitStartTime = startUtc.toISOString();
         const session = {
           day: dayMon0,
           type: sport,
@@ -1633,11 +1656,16 @@ document.getElementById('fit-input').addEventListener('change', async (e) => {
           totalAscent,
           totalDescent,
           laps,
+          startTime: fitStartTime,
           updatedAt: new Date().toISOString()
         };
 
         if (!ap.weekSessions[weekKey]) ap.weekSessions[weekKey] = [];
-        ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(x => x.day !== dayMon0);
+        // Remove duplicates: same startTime (re-import) or same day+type+dist (legacy)
+        ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(x =>
+          !(x.startTime && x.startTime === fitStartTime) &&
+          !(x.day === dayMon0 && x.type === sport && x.dist === distKm && !x.stravaId && !x.startTime)
+        );
         ap.weekSessions[weekKey].push(session);
         importedWeekKeys.add(weekKey);
         imported++;
@@ -1767,9 +1795,9 @@ async function stravaSyncActivities() {
       monday.setHours(0, 0, 0, 0);
       const weekKey = isoWeekKey(monday);
 
-      // Skip if this day already has a session with same or newer timestamp
+      // Skip if already imported (same Strava activity ID with same or newer timestamp)
       if (!ap.weekSessions[weekKey]) ap.weekSessions[weekKey] = [];
-      const existing = ap.weekSessions[weekKey].find(x => x.day === dayMon0);
+      const existing = ap.weekSessions[weekKey].find(x => x.stravaId && x.stravaId === act.id);
       if (existing && existing.updatedAt && existing.updatedAt >= new Date(act.start_date).toISOString()) continue;
 
       const distKm = act.distance ? +(act.distance / 1000).toFixed(2) : 0;
@@ -1820,7 +1848,7 @@ async function stravaSyncActivities() {
         updatedAt: new Date(act.start_date).toISOString()
       };
 
-      ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(x => x.day !== dayMon0);
+      ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(x => !(x.stravaId && x.stravaId === act.id));
       ap.weekSessions[weekKey].push(session);
       importedWeekKeys.add(weekKey);
       imported++;
@@ -1971,11 +1999,15 @@ document.getElementById('btn-add-session').addEventListener('click', () => {
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const ABBR = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
-function sessionForDay(dayIdx) {
+function sessionsForDay(dayIdx) {
   const ap = activeProfile();
   const wk = isoWeekKey(mondayOfOffset(weekOffset));
   const sessions = (ap.weekSessions && ap.weekSessions[wk]) || ap.sessions || [];
-  return sessions.find(s => s.day === dayIdx) || null;
+  return sessions.filter(s => s.day === dayIdx);
+}
+function sessionForDay(dayIdx) {
+  const all = sessionsForDay(dayIdx);
+  return all.length ? all[0] : null;
 }
 
 function intensityMult(intensity) {
@@ -2001,8 +2033,12 @@ function estimateBurn(session) {
 function dailyTargets(dayIdx) {
   const ap = activeProfile();
   const w = ap.weight || 72;
-  const s = sessionForDay(dayIdx);
-  const burn = estimateBurn(s);
+  const daySess = sessionsForDay(dayIdx);
+  const burn = daySess.reduce((sum, s) => sum + estimateBurn(s), 0);
+  const s = daySess.length ? daySess.reduce((hardest, x) => {
+    const order = { race: 4, hard: 3, moderate: 2, easy: 1 };
+    return (order[x.intensity] || 0) > (order[hardest.intensity] || 0) ? x : hardest;
+  }) : null;
   const isHard = s && (s.intensity === 'hard' || s.intensity === 'race');
   const isRest = !s || s.type === 'rest';
 
@@ -2089,10 +2125,14 @@ let weekOffset = 0;
 // ============================================================
 // RENDER WEEK GRID
 // ============================================================
-function sessionForWeekDay(weekKey, dayIdx) {
+function sessionsForWeekDay(weekKey, dayIdx) {
   const ap = activeProfile();
   const sessions = (ap.weekSessions && ap.weekSessions[weekKey]) || ap.sessions || [];
-  return sessions.find(s => s.day === dayIdx) || null;
+  return sessions.filter(s => s.day === dayIdx);
+}
+function sessionForWeekDay(weekKey, dayIdx) {
+  const all = sessionsForWeekDay(weekKey, dayIdx);
+  return all.length ? all[0] : null;
 }
 
 function renderWeekGrid() {
@@ -2112,7 +2152,7 @@ function renderWeekGrid() {
   grid.innerHTML = '';
 
   for (let d = 0; d < 7; d++) {
-    const s = sessionForWeekDay(weekKey, d);
+    const daySessions = sessionsForWeekDay(weekKey, d);
     const t = dailyTargets(d);
     const cellDate = new Date(monday); cellDate.setDate(monday.getDate() + d);
     const isToday = weekOffset === 0 && d === todayMon0;
@@ -2120,26 +2160,39 @@ function renderWeekGrid() {
     const cell = document.createElement('div');
     cell.className = 'day-cell';
     if (isToday) cell.style.borderColor = 'var(--accent)';
-    const tagClass = s ? `tag-${s.type}` : 'tag-rest';
-    const tagLabel = s ? (s.type.charAt(0).toUpperCase() + s.type.slice(1)) : 'Rest';
-    const distInfo = s && s.dist ? `${s.dist}km` : '';
-    const durInfo = s && s.dur ? `${s.dur}min` : '';
-    const garminCal = s && s.calories ? `<div style="font-size:.7rem; color:var(--accent); font-weight:600;">🔥 ${s.calories} kcal burned</div>` : '';
-    const garminHr = s && s.avgHr ? `<div style="font-size:.7rem; color:#e05050;">❤️ ${s.avgHr} avg · ${s.maxHr || '—'} max</div>` : '';
-    const garminPace = s && s.pace ? `<div style="font-size:.7rem; color:var(--muted);">⏱ ${s.pace}/km</div>` : '';
-    // Show classification label for Garmin-imported sessions
-    const clsLabel = s && s.avgHr ? `<div style="font-size:.68rem; margin-top:.15rem;"><span class="wo-class-badge wo-class-${classifyWorkout(s).type}" style="padding:.1rem .4rem; font-size:.65rem;">${classifyWorkout(s).label}</span></div>` : '';
+
+    let sessionsHtml = '';
+    if (daySessions.length === 0) {
+      sessionsHtml = `<span class="workout-tag tag-rest">Rest</span>`;
+    } else {
+      for (const s of daySessions) {
+        const tagClass = `tag-${s.type}`;
+        const tagLabel = s.type.charAt(0).toUpperCase() + s.type.slice(1);
+        const distInfo = s.dist ? `${s.dist}km` : '';
+        const durInfo = s.dur ? `${s.dur}min` : '';
+        const garminCal = s.calories ? `<div style="font-size:.7rem; color:var(--accent); font-weight:600;">🔥 ${s.calories} kcal burned</div>` : '';
+        const garminHr = s.avgHr ? `<div style="font-size:.7rem; color:#e05050;">❤️ ${s.avgHr} avg · ${s.maxHr || '—'} max</div>` : '';
+        const garminPace = s.pace ? `<div style="font-size:.7rem; color:var(--muted);">⏱ ${s.pace}/km</div>` : '';
+        const cls = classifyWorkout(s);
+        const clsLabel = s.avgHr || s.pace ? `<div style="font-size:.68rem; margin-top:.15rem;"><span class="wo-class-badge wo-class-${cls.type}" style="padding:.1rem .4rem; font-size:.65rem;">${cls.label}</span></div>` : '';
+        const title = s.title && daySessions.length > 1 ? `<div style="font-size:.68rem; color:var(--muted); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${s.title}</div>` : '';
+        sessionsHtml += `<div style="${daySessions.length > 1 ? 'border-bottom:1px solid var(--border); padding-bottom:.3rem; margin-bottom:.3rem;' : ''}">
+          ${title}
+          <span class="workout-tag ${tagClass}">${tagLabel}</span>
+          ${distInfo ? `<div style="font-size:.72rem; color:var(--muted);">${distInfo} ${durInfo}</div>` : ''}
+          ${garminCal}${garminHr}${garminPace}${clsLabel}
+        </div>`;
+      }
+    }
+
     cell.innerHTML = `
       <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
       <div class="day-date">${dateLabel}</div>
-      <span class="workout-tag ${tagClass}">${tagLabel}</span>
-      ${distInfo ? `<div style="font-size:.72rem; color:var(--muted);">${distInfo} ${durInfo}</div>` : ''}
-      ${s && s.intensity !== 'easy' ? `<div><span class="badge ${s.intensity==='hard'||s.intensity==='race'?'badge-red':'badge-amber'}">${s.intensity}</span></div>` : ''}
-      ${garminCal}${garminHr}${garminPace}${clsLabel}
+      ${sessionsHtml}
       <div style="margin-top:.4rem; font-size:.72rem; color:var(--muted);">${t.kcal} kcal target</div>
       <div style="font-size:.7rem; color:var(--muted);">${t.carb}g C · ${t.prot}g P · ${t.fat}g F</div>
     `;
-    if (s) {
+    if (daySessions.length) {
       cell.style.cursor = 'pointer';
       cell.addEventListener('click', () => openWorkoutDetail(weekKey, d, dateLabel));
     }
@@ -2170,8 +2223,7 @@ function pbPacePerKm(pb, distKm) {
 
 function classifyWorkout(s) {
   const ap = activeProfile();
-  const age = ap.age || 35;
-  const hrMax = ap.age ? Math.round(220 - ap.age) : 190;
+  const hrMax = getEffectiveMaxHr(ap);
   const pctHr = s.avgHr ? s.avgHr / hrMax : null;
   const distKm = s.dist || 0;
   const durMin = s.dur || 0;
@@ -2185,12 +2237,35 @@ function classifyWorkout(s) {
     avgPaceSec = m * 60 + sec;
   }
 
-  // Best available race pace for context (use goal-distance PB, else longest PB)
-  const goalPace = goal === 'marathon' ? pbPacePerKm(ap.pbMarathon, 42.195) :
-                   goal === 'half' ? pbPacePerKm(ap.pbHalf, 21.0975) :
-                   goal === '10k' ? pbPacePerKm(ap.pb10k, 10) :
-                   goal === '5k' ? pbPacePerKm(ap.pb5k, 5) : null;
-  const refPace = goalPace || pbPacePerKm(ap.pbMarathon, 42.195) || pbPacePerKm(ap.pbHalf, 21.0975) || pbPacePerKm(ap.pb10k, 10) || pbPacePerKm(ap.pb5k, 5);
+  // PB-derived reference paces (sec/km)
+  const marathonPace = pbPacePerKm(ap.pbMarathon, 42.195);
+  const halfPace = pbPacePerKm(ap.pbHalf, 21.0975);
+  const tenKPace = pbPacePerKm(ap.pb10k, 10);
+  const fiveKPace = pbPacePerKm(ap.pb5k, 5);
+
+  // Easy pace = marathon PB pace + ~15-20% (e.g. 5:00/km marathon → 5:45-6:00 easy)
+  const easyPaceRef = marathonPace ? marathonPace * 1.18 : halfPace ? halfPace * 1.28 : null;
+  // Tempo pace ≈ half marathon race pace
+  const tempoPaceRef = halfPace || (marathonPace ? marathonPace * 0.93 : null);
+  // Threshold pace ≈ 10k race pace
+  const thresholdPaceRef = tenKPace || (halfPace ? halfPace * 0.93 : null);
+
+  // Goal-aware purpose enrichment
+  const goalLabels = { marathon: 'marathon', half: 'half marathon', '10k': '10 km', '5k': '5 km', ultra: 'ultra/trail', base: 'general fitness' };
+  const goalStr = goal ? goalLabels[goal] || goal : null;
+
+  // Pace context string (how this session's pace compares to race pace)
+  const goalPace = goal === 'marathon' ? marathonPace : goal === 'half' ? halfPace : goal === '10k' ? tenKPace : goal === '5k' ? fiveKPace : null;
+  const refPace = goalPace || marathonPace || halfPace || tenKPace || fiveKPace;
+  let paceContext = '';
+  if (avgPaceSec && refPace) {
+    const diff = avgPaceSec - refPace;
+    const pctDiff = Math.abs(diff / refPace * 100).toFixed(0);
+    if (diff > 30) paceContext = ` This was about ${pctDiff}% slower than your ${goalStr || 'race'} pace — good for building aerobic base.`;
+    else if (diff > 10) paceContext = ` Pace was ~${pctDiff}% slower than your ${goalStr || 'race'} pace.`;
+    else if (diff > -10) paceContext = ` Very close to your ${goalStr || 'race'} pace — strong session.`;
+    else paceContext = ` About ${pctDiff}% faster than your ${goalStr || 'race'} pace — impressive effort!`;
+  }
 
   // Check pace variability across laps (for interval detection)
   let paceVariability = 0;
@@ -2206,22 +2281,18 @@ function classifyWorkout(s) {
     }
   }
 
-  // Goal-aware purpose enrichment
-  const goalLabels = { marathon: 'marathon', half: 'half marathon', '10k': '10 km', '5k': '5 km', ultra: 'ultra/trail', base: 'general fitness' };
-  const goalStr = goal ? goalLabels[goal] || goal : null;
-
-  // Pace context string (how this session's pace compares to race pace)
-  let paceContext = '';
-  if (avgPaceSec && refPace) {
-    const diff = avgPaceSec - refPace;
-    const pctDiff = Math.abs(diff / refPace * 100).toFixed(0);
-    if (diff > 30) paceContext = ` This was about ${pctDiff}% slower than your ${goalStr || 'race'} pace — good for building aerobic base without excess stress.`;
-    else if (diff > 10) paceContext = ` Pace was ~${pctDiff}% slower than your ${goalStr || 'race'} pace.`;
-    else if (diff > -10) paceContext = ` Very close to your ${goalStr || 'race'} pace — strong session.`;
-    else paceContext = ` About ${pctDiff}% faster than your ${goalStr || 'race'} pace — impressive effort!`;
+  // Determine pace zone (primary signal when PBs are available)
+  let paceZone = null; // 'recovery', 'easy', 'tempo', 'threshold', 'fast'
+  if (avgPaceSec && easyPaceRef) {
+    if (avgPaceSec > easyPaceRef * 1.08) paceZone = 'recovery';
+    else if (avgPaceSec >= easyPaceRef * 0.95) paceZone = 'easy';
+    else if (tempoPaceRef && avgPaceSec < tempoPaceRef * 1.05 && avgPaceSec >= tempoPaceRef * 0.95) paceZone = 'tempo';
+    else if (thresholdPaceRef && avgPaceSec < thresholdPaceRef * 1.05) paceZone = 'threshold';
+    else if (avgPaceSec < easyPaceRef * 0.95 && (!tempoPaceRef || avgPaceSec >= tempoPaceRef * 1.05)) paceZone = 'moderate';
+    else paceZone = 'fast';
   }
 
-  // PB comparison for races
+  // PB notes for races
   let pbNote = '';
 
   // User-tagged race
@@ -2235,57 +2306,98 @@ function classifyWorkout(s) {
       purpose: `Race effort — maximum performance.${pbNote}${goalStr ? ' Key race experience for your ' + goalStr + ' goal.' : ''} Recovery should follow in the next 1–2 days.`
     };
   }
-  // Interval / speed work
-  if (paceVariability > 0.12 && pctHr && pctHr > 0.78) {
+
+  // Interval / speed work: high pace variability
+  if (paceVariability > 0.12 && (pctHr ? pctHr > 0.75 : true)) {
     return {
       type: 'interval', label: '⚡ Interval / Speed',
       purpose: `Develops VO₂max and running economy. The alternating fast and recovery segments train your body to clear lactate and sustain faster speeds.${goalStr ? ' Critical for ' + goalStr + ' preparation — builds the top-end speed that makes race pace feel easier.' : ''}${paceContext}`
     };
   }
-  // Threshold
-  if (pctHr && pctHr >= 0.85 && pctHr < 0.92 && paceVariability < 0.08) {
+
+  // Use PACE as primary signal when PBs are available
+  if (paceZone) {
+    // Recovery run
+    if (paceZone === 'recovery') {
+      return {
+        type: 'recovery', label: '🟢 Recovery',
+        purpose: `Very easy effort${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''} to promote blood flow and recovery. Should feel relaxed and conversational.${goalStr ? ' Recovery runs let your body absorb the training load — essential for ' + goalStr + ' progression.' : ''}${paceContext}`
+      };
+    }
+    // Easy run
+    if (paceZone === 'easy') {
+      if (durMin > 75) {
+        let longPurpose = `Builds endurance and aerobic base over ${distKm} km. Trains fat metabolism, strengthens muscles and joints, and builds mental resilience.`;
+        if (goal === 'marathon') longPurpose += ' The most important weekly session for marathon preparation — simulates the sustained effort of race day.';
+        else if (goal === 'half') longPurpose += ' Essential for half marathon readiness — builds the stamina to maintain pace through the second half.';
+        else if (goalStr) longPurpose += ` Builds the endurance foundation for your ${goalStr} goal.`;
+        longPurpose += paceContext;
+        return { type: 'long', label: '🔵 Long Run', purpose: longPurpose };
+      }
+      return {
+        type: 'easy', label: '💚 Easy Run',
+        purpose: `Aerobic base building at a comfortable pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''}. Most weekly mileage should be at this effort.${goalStr ? ' For ' + goalStr + ' training, easy runs build the cardiovascular foundation that makes all other sessions possible.' : ''}${paceContext}`
+      };
+    }
+    // Moderate (between easy and tempo)
+    if (paceZone === 'moderate') {
+      return {
+        type: 'easy', label: '💚 Steady Run',
+        purpose: `Steady aerobic effort${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''} — slightly quicker than easy pace but still comfortable. Good for building general aerobic fitness.${goalStr ? ' Part of your ' + goalStr + ' aerobic foundation.' : ''}${paceContext}`
+      };
+    }
+    // Tempo
+    if (paceZone === 'tempo') {
+      return {
+        type: 'tempo', label: '🟡 Tempo',
+        purpose: `Sustained effort close to half-marathon pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''}. Builds aerobic power and mental toughness at controlled discomfort.${goalStr ? ' For ' + goalStr + ' training, tempo runs teach your body to hold pace under fatigue.' : ''}${paceContext}`
+      };
+    }
+    // Threshold
+    if (paceZone === 'threshold' || paceZone === 'fast') {
+      return {
+        type: 'threshold', label: '🔶 Threshold',
+        purpose: `Hard effort near 10k race pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''}. Improves the pace you can sustain for prolonged periods.${goalStr ? ' Directly improves your ' + goalStr + ' race pace — this is where race fitness is built.' : ''}${paceContext}`
+      };
+    }
+  }
+
+  // FALLBACK: HR-only classification (no PBs available)
+  // Use wider zones and be conservative — better to underclassify than overclassify
+
+  // Long run by duration
+  if (durMin > 75 && (!pctHr || pctHr < 0.85)) {
+    let longPurpose = `Builds endurance and aerobic base over ${distKm} km. Trains fat metabolism, strengthens muscles and joints, and builds mental resilience.`;
+    if (goal === 'marathon') longPurpose += ' The most important weekly session for marathon preparation.';
+    else if (goalStr) longPurpose += ` Builds the endurance foundation for your ${goalStr} goal.`;
+    longPurpose += paceContext;
+    return { type: 'long', label: '🔵 Long Run', purpose: longPurpose };
+  }
+  // Recovery
+  if (pctHr && pctHr < 0.65 && distKm < 10) {
     return {
-      type: 'threshold', label: '🔶 Threshold',
-      purpose: `Comfortably hard effort near your lactate threshold (${Math.round(pctHr*100)}% max HR). Improves the pace you can sustain for prolonged periods.${goalStr ? ' Directly improves your ' + goalStr + ' race pace — this is where race fitness is built.' : ''}${paceContext}`
+      type: 'recovery', label: '🟢 Recovery',
+      purpose: `Very easy effort (${Math.round(pctHr*100)}% max HR) to promote blood flow and recovery.${goalStr ? ' Essential recovery for ' + goalStr + ' training.' : ''}${paceContext}`
+    };
+  }
+  // Easy (wide zone)
+  if (!pctHr || pctHr < 0.80) {
+    return {
+      type: 'easy', label: '💚 Easy Run',
+      purpose: `Aerobic base building at a comfortable effort${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''}. Most weekly mileage should be at this effort.${goalStr ? ' For ' + goalStr + ' training, easy runs build the cardiovascular foundation.' : ''}${paceContext}`
     };
   }
   // Tempo
-  if (pctHr && pctHr >= 0.78 && pctHr < 0.87 && paceVariability < 0.08) {
+  if (pctHr >= 0.80 && pctHr < 0.88 && paceVariability < 0.08) {
     return {
       type: 'tempo', label: '🟡 Tempo',
-      purpose: `Sustained moderate-hard effort (${Math.round(pctHr*100)}% max HR). Builds aerobic power and mental toughness at controlled discomfort.${goalStr ? ' For ' + goalStr + ' training, tempo runs teach your body to hold pace under fatigue.' : ''}${paceContext}`
+      purpose: `Sustained moderate-hard effort (${Math.round(pctHr*100)}% max HR). Builds aerobic power and mental toughness.${goalStr ? ' For ' + goalStr + ' training, tempo runs teach your body to hold pace under fatigue.' : ''}${paceContext}`
     };
   }
-  // Long run
-  if (durMin > 75 && (!pctHr || pctHr < 0.82)) {
-    let longPurpose = `Builds endurance and aerobic base over ${distKm} km. Trains fat metabolism, strengthens muscles and joints, and builds mental resilience.`;
-    if (goal === 'marathon') longPurpose += ' The most important weekly session for marathon preparation — simulates the sustained effort of race day.';
-    else if (goal === 'half') longPurpose += ' Essential for half marathon readiness — builds the stamina to maintain pace through the second half.';
-    else if (goalStr) longPurpose += ` Builds the endurance foundation for your ${goalStr} goal.`;
-    longPurpose += paceContext;
+  // Threshold
+  if (pctHr >= 0.88) {
     return {
-      type: 'long', label: '🔵 Long Run',
-      purpose: longPurpose
-    };
-  }
-  // Recovery
-  if (pctHr && pctHr < 0.68 && distKm < 8) {
-    return {
-      type: 'recovery', label: '🟢 Recovery',
-      purpose: `Very easy effort (${Math.round(pctHr*100)}% max HR) to promote blood flow and recovery. Should feel relaxed and conversational.${goalStr ? ' Recovery runs let your body absorb the training load from harder sessions — essential for ' + goalStr + ' progression.' : ''}${paceContext}`
-    };
-  }
-  // Easy
-  if (!pctHr || pctHr < 0.78) {
-    return {
-      type: 'easy', label: '💚 Easy Run',
-      purpose: `Aerobic base building at a comfortable pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''}. Most weekly mileage should be at this effort.${goalStr ? ' For ' + goalStr + ' training, easy runs build the cardiovascular foundation that makes all other sessions possible.' : ''}${paceContext}`
-    };
-  }
-  // Hard catch-all
-  if (pctHr >= 0.87) {
-    return {
-      type: 'threshold', label: '🔶 Threshold / Hard',
+      type: 'threshold', label: '🔶 Threshold',
       purpose: `High-intensity effort at ${Math.round(pctHr*100)}% max HR. Pushes your lactate threshold higher.${goalStr ? ' Important quality session for ' + goalStr + ' performance.' : ''}${paceContext}`
     };
   }
@@ -2315,8 +2427,21 @@ function formatDuration(totalSec) {
 }
 
 function openWorkoutDetail(weekKey, dayIdx, dateLabel) {
-  const s = sessionForWeekDay(weekKey, dayIdx);
-  if (!s || s.type === 'rest') return;
+  const daySessions = sessionsForWeekDay(weekKey, dayIdx).filter(s => s.type !== 'rest');
+  if (!daySessions.length) return;
+  // Show all sessions for this day
+  let fullHtml = '';
+  for (const s of daySessions) {
+  fullHtml += renderSingleWorkoutDetail(s, dayIdx, dateLabel);
+  if (daySessions.length > 1) fullHtml += '<hr style="margin:1rem 0; border-color:var(--border);">';
+  }
+  fullHtml += `<div style="margin-top:1rem; text-align:center;"><button class="btn btn-secondary btn-sm" onclick="closeWorkoutDetail()">Close</button></div>`;
+  document.getElementById('workout-detail-card').innerHTML = fullHtml;
+  document.getElementById('workout-detail-overlay').classList.add('open');
+}
+
+function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
+  if (!s || s.type === 'rest') return '';
 
   const ap = activeProfile();
   const cls = classifyWorkout(s);
@@ -2451,12 +2576,7 @@ function openWorkoutDetail(weekKey, dayIdx, dateLabel) {
     html += `<p style="font-size:.82rem; color:var(--muted); margin-top:.6rem;">No split data available. Import a Garmin .fit file to see detailed splits.</p>`;
   }
 
-  html += `<div style="margin-top:1rem; text-align:center;">
-    <button class="btn btn-secondary btn-sm" onclick="closeWorkoutDetail()">Close</button>
-  </div>`;
-
-  document.getElementById('workout-detail-card').innerHTML = html;
-  document.getElementById('workout-detail-overlay').classList.add('open');
+  return html;
 }
 
 function closeWorkoutDetail() {

@@ -542,7 +542,10 @@
       <div class="card">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem;">
           <span>📅 My Week</span>
-          <button class="btn btn-secondary btn-sm" id="btn-import-fit" onclick="document.getElementById('fit-input').click()" style="font-size:.72rem;">⌚ Import Garmin .fit</button>
+          <div style="display:flex; gap:.4rem; align-items:center;">
+            <button class="btn btn-secondary btn-sm" id="btn-strava-sync" style="font-size:.72rem; display:none;">🔄 Sync Strava</button>
+            <button class="btn btn-secondary btn-sm" id="btn-import-fit" onclick="document.getElementById('fit-input').click()" style="font-size:.72rem;">⌚ Import .fit</button>
+          </div>
           <input type="file" id="fit-input" accept=".fit" multiple style="display:none" />
         </div>
         <div class="week-nav">
@@ -866,9 +869,43 @@
           <span id="import-status" style="font-size:.82rem; color:var(--muted);"></span>
         </div>
       </div>
-    </section>
 
-  </main>
+      <!-- ── Strava Integration ──────────────────────── -->
+      <div class="card" style="border-left: 4px solid #fc4c02;">
+        <div class="card-title" style="display:flex; align-items:center; gap:.5rem;">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="#fc4c02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066l-2.084 4.116zM7.474 13.828L12 3l4.525 10.828h-9.05z"/></svg>
+          Strava
+        </div>
+        <!-- Not connected -->
+        <div id="strava-disconnected">
+          <p style="font-size:.82rem; color:var(--muted); margin-bottom:.6rem;">
+            Connect to auto-import workouts from Strava (synced from your Garmin).
+          </p>
+          <div id="strava-setup-fields">
+            <p style="font-size:.78rem; color:var(--muted); margin-bottom:.5rem;">
+              One-time setup: create a free Strava API app at
+              <a href="https://www.strava.com/settings/api" target="_blank" style="color:var(--accent);">strava.com/settings/api</a>
+              then paste your Client ID and Secret below.
+            </p>
+            <div style="display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.5rem;">
+              <input type="text" id="strava-client-id" placeholder="Client ID" style="flex:1; min-width:80px; padding:.35rem .6rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.82rem;" />
+              <input type="password" id="strava-client-secret" placeholder="Client Secret" style="flex:2; min-width:140px; padding:.35rem .6rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.82rem;" />
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-strava-connect" style="background:#fc4c02; border-color:#fc4c02;">Connect Strava</button>
+          </div>
+        </div>
+        <!-- Connected -->
+        <div id="strava-connected" style="display:none;">
+          <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-bottom:.4rem;">
+            <span style="font-size:1rem;">✅</span>
+            <span style="font-size:.85rem;">Connected as <strong id="strava-athlete-name">—</strong></span>
+            <button class="btn btn-secondary btn-sm" id="btn-strava-disconnect" style="font-size:.72rem; padding:.15rem .45rem;">Disconnect</button>
+          </div>
+          <span id="strava-sync-status" style="font-size:.78rem; color:var(--muted);"></span>
+        </div>
+      </div>
+
+    </section>
   <footer>Fuel &amp; Run — personalised nutrition for active lifestyles · Data stored locally in your browser only</footer>
 </div>
 
@@ -1216,7 +1253,10 @@ function mergeStates(local, remote) {
     activeProfileId: local.activeProfileId || remote.activeProfileId || 'p1',
     profiles: Object.values(profMap),
     products: Object.values(prodMap),
-    meals: Object.values(mealMap)
+    meals: Object.values(mealMap),
+    _strava: (local._strava && local._strava.access_token) ? local._strava
+           : (remote._strava && remote._strava.access_token) ? remote._strava
+           : local._strava || remote._strava || {}
   };
 }
 
@@ -1625,6 +1665,274 @@ document.getElementById('fit-input').addEventListener('change', async (e) => {
     toast('❌ Failed to parse .fit file — check console');
   }
   e.target.value = ''; // reset so same file can be re-imported
+});
+
+// ============================================================
+// STRAVA INTEGRATION
+// ============================================================
+const STRAVA_EDGE_FN = SUPABASE_URL + '/functions/v1/strava';
+const STRAVA_REDIRECT = location.origin + location.pathname;
+
+function getStravaConfig() {
+  return state._strava || {};
+}
+function setStravaConfig(cfg) {
+  state._strava = cfg;
+  save();
+}
+
+// Strava sport type → our type
+function stravaSportToType(sportType) {
+  const map = {
+    Run: 'run', TrailRun: 'run', VirtualRun: 'run', Walk: 'run', Hike: 'run',
+    Ride: 'bike', MountainBikeRide: 'bike', VirtualRide: 'bike', EBikeRide: 'bike',
+    Swim: 'swim',
+    WeightTraining: 'strength', Workout: 'strength', Crossfit: 'strength',
+  };
+  return map[sportType] || 'cross';
+}
+
+async function stravaCall(body) {
+  const res = await fetch(STRAVA_EDGE_FN, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + SUPABASE_ANON,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error('Strava API error: ' + txt);
+  }
+  return res.json();
+}
+
+async function stravaEnsureToken() {
+  const cfg = getStravaConfig();
+  if (!cfg.access_token) throw new Error('Not connected to Strava');
+  // Refresh if token expires within 5 minutes
+  if (cfg.expires_at && cfg.expires_at < Math.floor(Date.now() / 1000) + 300) {
+    const data = await stravaCall({
+      action: 'refresh',
+      client_id: cfg.client_id,
+      client_secret: cfg.client_secret,
+      refresh_token: cfg.refresh_token,
+    });
+    if (data.errors || data.message) throw new Error(data.message || 'Refresh failed');
+    cfg.access_token = data.access_token;
+    cfg.refresh_token = data.refresh_token;
+    cfg.expires_at = data.expires_at;
+    setStravaConfig(cfg);
+  }
+  return cfg.access_token;
+}
+
+async function stravaSyncActivities() {
+  const cfg = getStravaConfig();
+  if (!cfg.access_token) return;
+  const statusEl = document.getElementById('strava-sync-status');
+  statusEl.textContent = 'Syncing…';
+
+  try {
+    const token = await stravaEnsureToken();
+    // Fetch activities from the last 8 weeks
+    const after = Math.floor(Date.now() / 1000) - (8 * 7 * 86400);
+    const activities = await stravaCall({ action: 'activities', access_token: token, after });
+
+    if (!Array.isArray(activities)) {
+      throw new Error(activities.message || 'Unexpected response');
+    }
+
+    const ap = activeProfile();
+    if (!ap.weekSessions) ap.weekSessions = {};
+    let imported = 0;
+    const importedWeekKeys = new Set();
+
+    for (const act of activities) {
+      const startLocal = new Date(act.start_date_local);
+      if (isNaN(startLocal.getTime())) continue;
+
+      const dayMon0 = (startLocal.getDay() + 6) % 7;
+      const monday = new Date(startLocal);
+      monday.setDate(startLocal.getDate() - dayMon0);
+      monday.setHours(0, 0, 0, 0);
+      const weekKey = isoWeekKey(monday);
+
+      // Skip if this day already has a session with same or newer timestamp
+      if (!ap.weekSessions[weekKey]) ap.weekSessions[weekKey] = [];
+      const existing = ap.weekSessions[weekKey].find(x => x.day === dayMon0);
+      if (existing && existing.updatedAt && existing.updatedAt >= new Date(act.start_date).toISOString()) continue;
+
+      const distKm = act.distance ? +(act.distance / 1000).toFixed(2) : 0;
+      const durMin = act.moving_time ? Math.round(act.moving_time / 60) : 0;
+      const sport = stravaSportToType(act.sport_type || act.type);
+      const avgHr = act.average_heartrate || null;
+      const maxHrVal = act.max_heartrate || null;
+      const speedMps = act.average_speed || null;
+
+      // Fetch laps for runs with HR data
+      let laps = [];
+      if (sport === 'run' && distKm >= 1) {
+        try {
+          const lapData = await stravaCall({ action: 'laps', activity_id: act.id, access_token: token });
+          if (Array.isArray(lapData)) {
+            laps = lapData.map((l, i) => ({
+              num: i + 1,
+              dist: l.distance ? +(l.distance / 1000).toFixed(3) : 0,
+              time: l.elapsed_time || 0,
+              avgHr: l.average_heartrate || null,
+              maxHr: l.max_heartrate || null,
+              pace: formatPace(l.average_speed || null),
+              avgCadence: l.average_cadence ? Math.round(l.average_cadence * 2) : null, // Strava reports half-cadence
+              calories: null, // Not in Strava laps
+              elevation: (l.total_elevation_gain || 0),
+              ascent: l.total_elevation_gain || 0,
+            }));
+          }
+        } catch(e) { console.warn('Lap fetch failed for', act.id, e); }
+      }
+
+      const session = {
+        day: dayMon0,
+        type: sport,
+        dist: distKm,
+        dur: durMin,
+        intensity: fitIntensity(avgHr, maxHrVal, 190),
+        title: act.name || act.sport_type || 'Activity',
+        calories: act.calories || null,
+        avgHr,
+        maxHr: maxHrVal,
+        pace: formatPace(speedMps),
+        avgCadence: act.average_cadence ? Math.round(act.average_cadence * 2) : null,
+        totalAscent: act.total_elevation_gain || null,
+        totalDescent: null, // Not in Strava summary
+        laps,
+        stravaId: act.id,
+        updatedAt: new Date(act.start_date).toISOString()
+      };
+
+      ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(x => x.day !== dayMon0);
+      ap.weekSessions[weekKey].push(session);
+      importedWeekKeys.add(weekKey);
+      imported++;
+    }
+
+    // Navigate to most recent imported week
+    if (imported > 0 && importedWeekKeys.size > 0) {
+      const sortedImported = [...importedWeekKeys].sort();
+      const thisMonday = mondayOfOffset(0);
+      const thisWeekKey = isoWeekKey(thisMonday);
+      const targetKey = sortedImported[sortedImported.length - 1];
+      if (targetKey < thisWeekKey) {
+        const diff = Math.round((thisMonday - mondayFromWeekKey(targetKey)) / (7 * 86400000));
+        weekOffset = -diff;
+      } else if (targetKey > thisWeekKey) {
+        const diff = Math.round((mondayFromWeekKey(targetKey) - thisMonday) / (7 * 86400000));
+        weekOffset = diff;
+      } else {
+        weekOffset = 0;
+      }
+    }
+
+    const curWk = isoWeekKey(mondayOfOffset(0));
+    if (ap.weekSessions[curWk]) ap.sessions = ap.weekSessions[curWk];
+
+    cfg.lastSync = new Date().toISOString();
+    setStravaConfig(cfg);
+    save(); renderAll();
+    statusEl.textContent = 'Last sync: just now · ' + imported + ' workout(s) imported';
+    if (imported > 0) toast('✅ Synced ' + imported + ' workout(s) from Strava');
+    else toast('Strava up to date — no new workouts');
+  } catch(err) {
+    console.error('Strava sync error:', err);
+    statusEl.textContent = '⚠️ Sync failed: ' + err.message;
+    toast('❌ Strava sync failed');
+  }
+}
+
+function renderStravaUI() {
+  const cfg = getStravaConfig();
+  const connected = !!cfg.access_token;
+  document.getElementById('strava-disconnected').style.display = connected ? 'none' : '';
+  document.getElementById('strava-connected').style.display = connected ? '' : 'none';
+  document.getElementById('btn-strava-sync').style.display = connected ? '' : 'none';
+  if (connected) {
+    document.getElementById('strava-athlete-name').textContent = cfg.athlete_name || 'Strava athlete';
+    const statusEl = document.getElementById('strava-sync-status');
+    if (cfg.lastSync) {
+      statusEl.textContent = 'Last sync: ' + new Date(cfg.lastSync).toLocaleString();
+    } else {
+      statusEl.textContent = 'Connected — tap Sync Strava to import workouts';
+    }
+  }
+}
+
+// Handle OAuth redirect
+function handleStravaOAuthRedirect() {
+  const params = new URLSearchParams(location.search);
+  const code = params.get('code');
+  const scope = params.get('scope');
+  if (!code) return;
+  // Clean URL
+  history.replaceState({}, '', location.pathname);
+  // Need client_id from stored config
+  const cfg = getStravaConfig();
+  if (!cfg.client_id) {
+    toast('Strava authorization received but no Client ID stored — please reconnect');
+    return;
+  }
+  toast('Completing Strava connection…');
+  stravaCall({ action: 'exchange', client_id: cfg.client_id, client_secret: cfg.client_secret, code })
+    .then(data => {
+      if (data.errors || !data.access_token) {
+        toast('❌ Strava auth failed: ' + (data.message || 'unknown error'));
+        return;
+      }
+      cfg.access_token = data.access_token;
+      cfg.refresh_token = data.refresh_token;
+      cfg.expires_at = data.expires_at;
+      cfg.athlete_name = data.athlete ? (data.athlete.firstname + ' ' + data.athlete.lastname) : 'Connected';
+      setStravaConfig(cfg);
+      renderStravaUI();
+      toast('✅ Strava connected! Tap "Sync Strava" to import workouts.');
+      // Auto-sync on first connect
+      stravaSyncActivities();
+    })
+    .catch(err => {
+      console.error('Strava exchange error:', err);
+      toast('❌ Strava connection failed — check console');
+    });
+}
+
+// Connect button
+document.getElementById('btn-strava-connect').addEventListener('click', () => {
+  const clientId = document.getElementById('strava-client-id').value.trim();
+  const clientSecret = document.getElementById('strava-client-secret').value.trim();
+  if (!clientId) { toast('Enter your Strava Client ID'); return; }
+  if (!clientSecret) { toast('Enter your Strava Client Secret'); return; }
+  // Store both — secret is needed for token exchange & refresh
+  setStravaConfig({ client_id: clientId, client_secret: clientSecret });
+  // Redirect to Strava OAuth
+  const scope = 'activity:read_all';
+  const url = 'https://www.strava.com/oauth/authorize?client_id=' + clientId
+    + '&redirect_uri=' + encodeURIComponent(STRAVA_REDIRECT)
+    + '&response_type=code&scope=' + scope
+    + '&approval_prompt=auto';
+  location.href = url;
+});
+
+// Disconnect button
+document.getElementById('btn-strava-disconnect').addEventListener('click', () => {
+  if (!confirm('Disconnect from Strava? Your imported workouts will remain.')) return;
+  setStravaConfig({});
+  renderStravaUI();
+  toast('Strava disconnected');
+});
+
+// Sync button (in My Week header)
+document.getElementById('btn-strava-sync').addEventListener('click', () => {
+  stravaSyncActivities();
 });
 
 // ============================================================
@@ -3857,6 +4165,8 @@ function renderPlate() {
 // ============================================================
 load();
 renderAll();
+renderStravaUI();
+handleStravaOAuthRedirect();
 </script>
 </body>
 </html>

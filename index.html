@@ -2344,6 +2344,93 @@ document.querySelectorAll('.meal-type-tab').forEach(btn => {
   btn.addEventListener('click', () => setMealBuilderType(btn.dataset.mtype));
 });
 
+// ---- Fetch nutrition from recipe URL ----
+document.getElementById('btn-fetch-recipe').addEventListener('click', async () => {
+  const url = document.getElementById('meal-url').value.trim();
+  if (!url) { toast('Enter a recipe URL first'); return; }
+  const statusEl = document.getElementById('recipe-fetch-status');
+  statusEl.textContent = '⏳ Fetching recipe page…';
+  try {
+    // Use allorigins.win as CORS proxy
+    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const html = await res.text();
+
+    // Try JSON-LD (schema.org Recipe) first — most recipe sites use this
+    let recipe = null;
+    const ldMatches = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+    for (const block of ldMatches) {
+      try {
+        const jsonStr = block.replace(/<script[^>]*>/i, '').replace(/<\/script>/i, '');
+        let parsed = JSON.parse(jsonStr);
+        // Handle @graph arrays
+        if (parsed['@graph']) parsed = parsed['@graph'];
+        const candidates = Array.isArray(parsed) ? parsed : [parsed];
+        for (const c of candidates) {
+          const t = (c['@type'] || '').toString().toLowerCase();
+          if (t === 'recipe' || t.includes('recipe')) { recipe = c; break; }
+        }
+        if (recipe) break;
+      } catch(e) { /* skip invalid JSON-LD blocks */ }
+    }
+
+    // Extract recipe info
+    if (recipe) {
+      // Name
+      if (recipe.name && !document.getElementById('meal-name').value.trim()) {
+        document.getElementById('meal-name').value = recipe.name;
+      }
+      // Source
+      const domain = new URL(url).hostname.replace('www.', '');
+      document.getElementById('meal-source').value = domain;
+
+      // Notes: servings + cook time
+      const notes = [];
+      if (recipe.recipeYield) notes.push('Serves ' + (Array.isArray(recipe.recipeYield) ? recipe.recipeYield[0] : recipe.recipeYield));
+      if (recipe.totalTime) {
+        const dur = recipe.totalTime.replace('PT','').replace('H','h ').replace('M','min').toLowerCase();
+        notes.push(dur.trim());
+      } else if (recipe.cookTime) {
+        const dur = recipe.cookTime.replace('PT','').replace('H','h ').replace('M','min').toLowerCase();
+        notes.push('Cook ' + dur.trim());
+      }
+      if (recipe.recipeCategory) {
+        const cats = Array.isArray(recipe.recipeCategory) ? recipe.recipeCategory : [recipe.recipeCategory];
+        notes.push(cats.join(', '));
+      }
+      if (notes.length) document.getElementById('meal-notes').value = notes.join(' · ');
+
+      // Nutrition
+      const n = recipe.nutrition || {};
+      const parseNum = v => { if (!v) return null; const m = String(v).match(/([\d.]+)/); return m ? +m[1] : null; };
+      const kcal = parseNum(n.calories);
+      const prot = parseNum(n.proteinContent);
+      const carb = parseNum(n.carbohydrateContent);
+      const fat  = parseNum(n.fatContent);
+      if (kcal !== null) document.getElementById('meal-r-kcal').value = Math.round(kcal);
+      if (prot !== null) document.getElementById('meal-r-prot').value = prot;
+      if (carb !== null) document.getElementById('meal-r-carb').value = carb;
+      if (fat !== null)  document.getElementById('meal-r-fat').value = fat;
+
+      const filled = [kcal !== null ? kcal+'kcal' : null, prot !== null ? prot+'g P' : null, carb !== null ? carb+'g C' : null, fat !== null ? fat+'g F' : null].filter(Boolean);
+      statusEl.innerHTML = '✅ Found: <strong>' + (recipe.name || 'Recipe') + '</strong>' + (filled.length ? ' — ' + filled.join(' · ') : ' — no nutrition data on page, enter manually');
+    } else {
+      // Fallback: try to extract from meta tags or microdata
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+      if (titleMatch && !document.getElementById('meal-name').value.trim()) {
+        document.getElementById('meal-name').value = titleMatch[1].replace(/\s*[-|–].*$/, '').trim();
+      }
+      const domain = new URL(url).hostname.replace('www.', '');
+      document.getElementById('meal-source').value = domain;
+      statusEl.textContent = '⚠️ No structured recipe data found — name extracted, enter nutrition manually.';
+    }
+  } catch(e) {
+    console.error('Recipe fetch error:', e);
+    statusEl.textContent = '❌ Could not fetch page — enter details manually.';
+  }
+});
+
 // ---- Save meal ----
 document.getElementById('btn-save-meal').addEventListener('click', () => {
   const name = document.getElementById('meal-name').value.trim();

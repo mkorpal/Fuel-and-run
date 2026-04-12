@@ -727,7 +727,8 @@
             <label>Product URL (optional)</label>
             <input type="url" id="p-url" placeholder="https://www.woolworths.com.au/..." />
           </div>
-          <button class="btn btn-primary" type="submit" id="btn-save-product">Save Product</button>
+          <button class="btn btn-primary" type="submit" id="btn-save-product">💾 Save Product</button>
+          <button class="btn btn-secondary" type="button" id="btn-cancel-edit-product" style="display:none;" onclick="cancelProductEdit()">Cancel Edit</button>
           <button class="btn btn-secondary" type="button" id="btn-scan-barcode">📷 Scan Barcode</button>
         </form>
       </div>
@@ -2865,8 +2866,7 @@ function renderProducts() {
         ${p.url ? `<div style="margin-top:.4rem;"><a href="${p.url}" target="_blank" style="font-size:.74rem;">View product ↗</a></div>` : ''}
         <div style="display:flex; gap:.4rem; margin-top:.4rem; flex-wrap:wrap;">
           <button class="plog-btn" onclick="openQtyModal('product','${p.id}')">＋ Log today</button>
-          <button class="plog-btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border);" onclick="renameProduct('${p.id}')">✏️ Rename</button>
-          <button class="plog-btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border);" onclick="editProductNutrition('${p.id}')">🔢 Edit nutrition</button>
+          <button class="plog-btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border);" onclick="editProductNutrition('${p.id}')">✏️ Edit</button>
         </div>
       </div>
     </div>
@@ -2897,7 +2897,9 @@ document.addEventListener('click', e => {
 
 window.deleteProduct = id => {
   const p = state.products.find(x => x.id === id);
-  if (p) { p.deletedAt = new Date().toISOString(); p.updatedAt = new Date().toISOString(); }
+  if (!p) return;
+  if (!confirm(`Delete "${p.nickname || p.name}"? This cannot be undone.`)) return;
+  p.deletedAt = new Date().toISOString(); p.updatedAt = new Date().toISOString();
   save(); renderProducts();
   toast('Product removed');
 };
@@ -2914,32 +2916,33 @@ window.renameProduct = id => {
   toast('Renamed to: ' + p.nickname);
 };
 
+// ---- Edit product (full inline modal) ----
+let editingProductId = null;
 window.editProductNutrition = id => {
   const p = state.products.find(x => x.id === id);
   if (!p) return;
-  const currentPer = p.nutrPer || '100g';
-  const perLabel = currentPer === '100g' ? 'per 100g' : `per ${p.serve||'?'}g serving`;
-  const newServe = prompt(`Serving size (g/ml) [current: ${p.serve || '?'}]:`, p.serve || 100);
-  if (newServe === null) return;
-  const newPer = prompt(`Nutrition expressed as:\n  1 = per 100g (e.g. from food label "per 100g" column)\n  2 = per serving (e.g. from "per serve" column)\nEnter 1 or 2 [current: ${currentPer}]`, currentPer === '100g' ? '1' : '2');
-  if (newPer === null) return;
-  const newKcal = prompt(`Calories (kcal ${newPer === '2' ? 'per serving' : 'per 100g'}) [current: ${p.kcal || 0}]:`, p.kcal || '');
-  if (newKcal === null) return;
-  const newProt = prompt(`Protein g (${newPer === '2' ? 'per serving' : 'per 100g'}) [current: ${p.prot || 0}]:`, p.prot || '');
-  if (newProt === null) return;
-  const newCarb = prompt(`Carbs g (${newPer === '2' ? 'per serving' : 'per 100g'}) [current: ${p.carb || 0}]:`, p.carb || '');
-  if (newCarb === null) return;
-  const newFat = prompt(`Fat g (${newPer === '2' ? 'per serving' : 'per 100g'}) [current: ${p.fat || 0}]:`, p.fat || '');
-  if (newFat === null) return;
-  p.serve   = +newServe || p.serve || null;
-  p.nutrPer = newPer === '2' ? 'serving' : '100g';
-  p.kcal    = +newKcal || null;
-  p.prot    = +newProt || null;
-  p.carb    = +newCarb || null;
-  p.fat     = +newFat  || null;
-  p.updatedAt = new Date().toISOString();
-  save(); renderProducts();
-  toast('Nutrition updated for: ' + (p.nickname || p.name));
+  editingProductId = id;
+  // Pre-fill the product form with existing values
+  document.getElementById('p-name').value     = p.name || '';
+  document.getElementById('p-nickname').value  = p.nickname || '';
+  document.getElementById('p-brand').value     = p.brand || '';
+  document.getElementById('p-cat').value       = p.cat || '';
+  document.getElementById('p-serve').value     = p.serve || '';
+  document.getElementById('p-nutr-per').value  = p.nutrPer || '100g';
+  updateNutrLabels();
+  document.getElementById('p-kcal').value = p.kcal || '';
+  document.getElementById('p-prot').value = p.prot || '';
+  document.getElementById('p-carb').value = p.carb || '';
+  document.getElementById('p-fat').value  = p.fat  || '';
+  document.getElementById('p-notes').value = p.notes || '';
+  document.getElementById('p-url').value   = p.url || '';
+  // Update save button text and show cancel
+  const saveBtn = document.getElementById('btn-save-product');
+  if (saveBtn) saveBtn.textContent = '💾 Update product';
+  const cancelBtn = document.getElementById('btn-cancel-edit-product');
+  if (cancelBtn) cancelBtn.style.display = '';
+  // Scroll form into view
+  document.getElementById('p-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
 };
 
 // Helper: get per-gram macros for a product, respecting nutrPer flag
@@ -3183,8 +3186,7 @@ function updateNutrLabels() {
 function saveProductFromForm() {
   const name = document.getElementById('p-name').value.trim();
   if (!name) return;
-  const product = {
-    id: Date.now().toString(),
+  const fields = {
     name, nickname: document.getElementById('p-nickname').value.trim(),
     brand: document.getElementById('p-brand').value.trim(),
     cat: document.getElementById('p-cat').value,
@@ -3198,20 +3200,42 @@ function saveProductFromForm() {
     url:   document.getElementById('p-url').value.trim(),
     updatedAt: new Date().toISOString(),
   };
-  state.products.unshift(product);
+  if (editingProductId) {
+    // Update existing product
+    const existing = state.products.find(x => x.id === editingProductId);
+    if (existing) Object.assign(existing, fields);
+    editingProductId = null;
+    const saveBtn = document.getElementById('btn-save-product');
+    if (saveBtn) saveBtn.textContent = '💾 Save product';
+    const cancelBtn = document.getElementById('btn-cancel-edit-product');
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    toast('Product updated: ' + name);
+  } else {
+    // Create new product
+    state.products.unshift({ id: Date.now().toString(), ...fields });
+    toast('Product saved: ' + name);
+  }
   save(); renderProducts();
   document.getElementById('product-form').reset();
-  updateNutrLabels(); // reset labels after form reset
-  // Scroll product list into view so user can see the saved card
+  updateNutrLabels();
   const list = document.getElementById('product-list');
   if (list) list.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  toast('Product saved: ' + name);
 }
 
 document.getElementById('product-form').addEventListener('submit', e => {
   e.preventDefault();
   saveProductFromForm();
 });
+
+window.cancelProductEdit = () => {
+  editingProductId = null;
+  document.getElementById('product-form').reset();
+  updateNutrLabels();
+  const saveBtn = document.getElementById('btn-save-product');
+  if (saveBtn) saveBtn.textContent = '💾 Save Product';
+  const cancelBtn = document.getElementById('btn-cancel-edit-product');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+};
 
 // ============================================================
 // RECOMMENDATIONS
@@ -3272,8 +3296,10 @@ const TIPS = [
 // ---- State for the builder modal ----
 let mealBuilderType = 'pantry'; // 'pantry' | 'recipe' | 'manual'
 let mealIngredients = []; // [{ productId, qty }]
+let editingMealId = null;
 
 function openMealModal() {
+  editingMealId = null;
   mealBuilderType = 'pantry';
   mealIngredients = [];
   document.getElementById('meal-name').value = '';
@@ -3295,8 +3321,62 @@ function openMealModal() {
   setMealBuilderType('pantry');
   renderIngredientRows();
   addIngredientRow(); // start with one row
+  const heading = document.querySelector('#meal-box > h3');
+  if (heading) heading.textContent = '\ud83c\udf7d\ufe0f Create a Meal';
+  const saveBtn = document.getElementById('btn-save-meal');
+  if (saveBtn) saveBtn.textContent = 'Save Meal';
   document.getElementById('meal-modal').classList.add('open');
 }
+
+window.editMeal = id => {
+  const m = state.meals.find(x => x.id === id);
+  if (!m) return;
+  editingMealId = id;
+  mealIngredients = [];
+  // Clear all fields first
+  document.getElementById('meal-name').value = m.name || '';
+  document.getElementById('meal-url').value = m.url || '';
+  document.getElementById('meal-source').value = m.source || '';
+  document.getElementById('meal-notes').value = m.notes || '';
+  document.getElementById('meal-r-kcal').value = '';
+  document.getElementById('meal-r-prot').value = '';
+  document.getElementById('meal-r-carb').value = '';
+  document.getElementById('meal-r-fat').value = '';
+  document.getElementById('meal-m-serve').value = '';
+  document.getElementById('meal-m-kcal').value = '';
+  document.getElementById('meal-m-prot').value = '';
+  document.getElementById('meal-m-carb').value = '';
+  document.getElementById('meal-m-fat').value = '';
+  document.getElementById('meal-m-notes').value = '';
+  const fetchStatus = document.getElementById('recipe-fetch-status');
+  if (fetchStatus) fetchStatus.textContent = '';
+
+  if (m.type === 'pantry') {
+    // Rebuild ingredient rows from saved data
+    mealIngredients = (m.ingredients || []).map(i => ({ productId: i.productId, qty: String(i.qty) }));
+    setMealBuilderType('pantry');
+    renderIngredientRows();
+  } else if (m.type === 'recipe') {
+    setMealBuilderType('recipe');
+    document.getElementById('meal-r-kcal').value = m.kcal100 || '';
+    document.getElementById('meal-r-prot').value = m.prot100 || '';
+    document.getElementById('meal-r-carb').value = m.carb100 || '';
+    document.getElementById('meal-r-fat').value  = m.fat100  || '';
+  } else {
+    setMealBuilderType('manual');
+    document.getElementById('meal-m-serve').value = m.serve || '';
+    document.getElementById('meal-m-kcal').value = m.kcal || '';
+    document.getElementById('meal-m-prot').value = m.prot || '';
+    document.getElementById('meal-m-carb').value = m.carb || '';
+    document.getElementById('meal-m-fat').value  = m.fat  || '';
+    document.getElementById('meal-m-notes').value = m.notes || '';
+  }
+  const heading = document.querySelector('#meal-box > h3');
+  if (heading) heading.textContent = '\u270f\ufe0f Edit Meal';
+  const saveBtn = document.getElementById('btn-save-meal');
+  if (saveBtn) saveBtn.textContent = '\ud83d\udcbe Update Meal';
+  document.getElementById('meal-modal').classList.add('open');
+};
 
 function closeMealModal() {
   document.getElementById('meal-modal').classList.remove('open');
@@ -3500,7 +3580,7 @@ document.getElementById('btn-save-meal').addEventListener('click', () => {
   const name = document.getElementById('meal-name').value.trim();
   if (!name) { toast('Please enter a meal name'); return; }
 
-  let meal;
+  let mealData;
   if (mealBuilderType === 'pantry') {
     const validIngs = mealIngredients.filter(i => i.productId && i.qty);
     if (!validIngs.length) { toast('Add at least one ingredient'); return; }
@@ -3509,20 +3589,19 @@ document.getElementById('btn-save-meal').addEventListener('click', () => {
       const p = state.products.find(x => x.id === i.productId);
       return { productId: i.productId, name: p ? p.name : '', qty: +i.qty };
     });
-    meal = {
-      id: Date.now().toString(), name, type: 'pantry',
+    mealData = {
+      name, type: 'pantry',
       ingredients,
       kcal: m.kcal, prot: m.prot, carb: m.carb, fat: m.fat,
       updatedAt: new Date().toISOString(),
     };
   } else if (mealBuilderType === 'recipe') {
-    // Recipe meal — store macros per 100g for flexible portion logging
     const kcal100 = +document.getElementById('meal-r-kcal').value || null;
     const prot100 = +document.getElementById('meal-r-prot').value || null;
     const carb100 = +document.getElementById('meal-r-carb').value || null;
     const fat100  = +document.getElementById('meal-r-fat').value  || null;
-    meal = {
-      id: Date.now().toString(), name, type: 'recipe',
+    mealData = {
+      name, type: 'recipe',
       url:    document.getElementById('meal-url').value.trim(),
       source: document.getElementById('meal-source').value.trim(),
       notes:  document.getElementById('meal-notes').value.trim(),
@@ -3530,30 +3609,38 @@ document.getElementById('btn-save-meal').addEventListener('click', () => {
       updatedAt: new Date().toISOString(),
     };
   } else {
-    // Manual meal — store macros per serving
     const kcal = +document.getElementById('meal-m-kcal').value || null;
     const prot = +document.getElementById('meal-m-prot').value || null;
     const carb = +document.getElementById('meal-m-carb').value || null;
     const fat  = +document.getElementById('meal-m-fat').value  || null;
-    meal = {
-      id: Date.now().toString(), name, type: 'manual',
+    mealData = {
+      name, type: 'manual',
       serve: +document.getElementById('meal-m-serve').value || null,
       notes: document.getElementById('meal-m-notes').value.trim(),
       kcal, prot, carb, fat,
       updatedAt: new Date().toISOString(),
     };
   }
-  state.meals.unshift(meal);
+  if (editingMealId) {
+    const existing = state.meals.find(x => x.id === editingMealId);
+    if (existing) Object.assign(existing, mealData);
+    editingMealId = null;
+    toast('✅ Meal updated: ' + name);
+  } else {
+    state.meals.unshift({ id: Date.now().toString(), ...mealData });
+    toast('✅ Meal saved: ' + name);
+  }
   save();
   renderMeals();
   closeMealModal();
-  toast('✅ Meal saved: ' + name);
 });
 
 // ---- Delete meal ----
 window.deleteMeal = id => {
   const m = state.meals.find(x => x.id === id);
-  if (m) { m.deletedAt = new Date().toISOString(); m.updatedAt = new Date().toISOString(); }
+  if (!m) return;
+  if (!confirm(`Delete meal "${m.name}"? This cannot be undone.`)) return;
+  m.deletedAt = new Date().toISOString(); m.updatedAt = new Date().toISOString();
   save(); renderMeals();
   toast('Meal removed');
 };
@@ -3638,8 +3725,12 @@ function renderMeals() {
         ${ingredientLines ? `<div class="meal-ingredients">${ingredientLines}</div>` : ''}
         ${macroHtml}
         ${m.url ? `<div style="margin-top:.5rem;"><a href="${m.url}" target="_blank" style="font-size:.76rem;">View recipe ↗</a></div>` : ''}
-        <button class="plog-btn" style="margin-top:.5rem;" onclick="openQtyModal('meal','${m.id}')"
-                ondragstart="event.stopPropagation()">＋ Log today</button>
+        <div style="display:flex; gap:.4rem; margin-top:.5rem; flex-wrap:wrap;">
+          <button class="plog-btn" onclick="openQtyModal('meal','${m.id}')"
+                  ondragstart="event.stopPropagation()">＋ Log today</button>
+          <button class="plog-btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border);"
+                  onclick="editMeal('${m.id}')" ondragstart="event.stopPropagation()">✏️ Edit</button>
+        </div>
       </div>`;
   }).join('');
 }

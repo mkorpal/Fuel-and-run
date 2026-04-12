@@ -1209,6 +1209,50 @@ function applyParsed(parsed) {
       }
     });
   }
+  // Recompute pantry meal macros from current product data
+  if (state.meals && state.products) {
+    state.meals.forEach(m => {
+      if (m.type !== 'pantry' || !m.ingredients || !m.ingredients.length) return;
+      let kcal = 0, prot = 0, carb = 0, fat = 0;
+      for (const ing of m.ingredients) {
+        if (!ing.productId || !ing.qty) continue;
+        const p = state.products.find(x => x.id === ing.productId);
+        if (!p) continue;
+        const per = p.nutrPer || '100g';
+        const divisor = per === 'serving' ? (p.serve || 100) : 100;
+        const pgKcal = (p.kcal || 0) / divisor;
+        const pgProt = (p.prot || 0) / divisor;
+        const pgCarb = (p.carb || 0) / divisor;
+        const pgFat  = (p.fat  || 0) / divisor;
+        const ingUnit = ing.unit || 'g';
+        const qtyG = ingUnit === 'serves' ? parseFloat(ing.qty) * (p.serve || 100) : parseFloat(ing.qty) || 0;
+        kcal += pgKcal * qtyG;
+        prot += pgProt * qtyG;
+        carb += pgCarb * qtyG;
+        fat  += pgFat  * qtyG;
+      }
+      m.kcal = Math.round(kcal); m.prot = +prot.toFixed(1); m.carb = +carb.toFixed(1); m.fat = +fat.toFixed(1);
+    });
+  }
+  // Remove ghost sessions in the future (beyond today)
+  if (state.profiles) {
+    const now = new Date();
+    const todayMon0 = (now.getDay() + 6) % 7;
+    const curMonday = new Date(now);
+    curMonday.setDate(now.getDate() - todayMon0);
+    curMonday.setHours(0, 0, 0, 0);
+    const curWeekKey = isoWeekKey(curMonday);
+    state.profiles.forEach(prof => {
+      if (!prof.weekSessions) return;
+      for (const wk of Object.keys(prof.weekSessions)) {
+        if (wk > curWeekKey) {
+          delete prof.weekSessions[wk];
+        } else if (wk === curWeekKey) {
+          prof.weekSessions[wk] = prof.weekSessions[wk].filter(s => s.day <= todayMon0);
+        }
+      }
+    });
+  }
 }
 
 function mergeStates(local, remote) {
@@ -1879,9 +1923,10 @@ async function stravaSyncActivities() {
         pace: formatPace(speedMps),
         avgCadence: act.average_cadence ? Math.round(act.average_cadence * 2) : null,
         totalAscent: act.total_elevation_gain || null,
-        totalDescent: null, // Not in Strava summary
+        totalDescent: null,
         laps,
         stravaId: act.id,
+        startDate: (act.start_date_local || '').replace(/Z$/i, ''),
         updatedAt: new Date(act.start_date).toISOString()
       };
 
@@ -2344,14 +2389,19 @@ function classifyWorkout(s) {
     };
   }
 
+  // Detect elevation profile for hill repeat / stride detection
+  let totalElev = s.totalAscent || 0;
+  let lapElevations = laps.map(l => l.elevation || l.ascent || 0);
+  const hasSignificantElev = totalElev > 30; // >30m total ascent suggests hills
+
   // Interval / speed work: high pace variability
   if (paceVariability > 0.12 && (pctHr ? pctHr > 0.75 : true)) {
     // Analyze individual laps to identify fast (work) vs recovery segments
     let intervalDetail = '';
     if (laps.length >= 3) {
-      const lapData = laps.filter(l => l.pace && l.dist).map(l => {
+      const lapData = laps.filter(l => l.pace && l.dist).map((l, idx) => {
         const [m, sec] = l.pace.split(':').map(Number);
-        return { paceSec: m * 60 + sec, dist: l.dist, hr: l.avgHr, time: l.time, pace: l.pace };
+        return { paceSec: m * 60 + sec, dist: l.dist, hr: l.avgHr, time: l.time, pace: l.pace, elev: lapElevations[idx] || 0 };
       });
       if (lapData.length >= 3) {
         const medianPace = [...lapData].sort((a, b) => a.paceSec - b.paceSec)[Math.floor(lapData.length / 2)].paceSec;
@@ -2360,19 +2410,56 @@ function classifyWorkout(s) {
         if (workLaps.length >= 2) {
           const avgWork = workLaps.reduce((s, l) => s + l.paceSec, 0) / workLaps.length;
           const wm = Math.floor(avgWork / 60), ws = Math.round(avgWork % 60);
-          const avgWorkDist = (workLaps.reduce((s, l) => s + l.dist, 0) / workLaps.length).toFixed(2);
+          const avgWorkDist = workLaps.reduce((s, l) => s + l.dist, 0) / workLaps.length;
+          const avgWorkDistM = Math.round(avgWorkDist * 1000);
+          const avgWorkElev = workLaps.reduce((s, l) => s + l.elev, 0) / workLaps.length;
+
+          // Detect workout sub-type: hill repeats vs strides vs flat intervals
+          let workoutSubType = 'intervals';
+          let subTypeDetail = '';
+          if (avgWorkElev > 3 && hasSignificantElev) {
+            // Significant elevation gain per work lap → hill repeats
+            if (avgWorkDistM <= 150) {
+              workoutSubType = 'hill_strides';
+              subTypeDetail = `Hill strides (~${avgWorkDistM}m, ~${Math.round(avgWorkElev)}m gain each)`;
+            } else {
+              workoutSubType = 'hill_repeats';
+              subTypeDetail = `Hill repeats (~${avgWorkDistM}m, ~${Math.round(avgWorkElev)}m gain each)`;
+            }
+          } else if (avgWorkDistM <= 150) {
+            workoutSubType = 'strides';
+            subTypeDetail = `Strides (~${avgWorkDistM}m each)`;
+          }
+
           // Daniels zone classification for work segments
           let danielsZone = '';
-          if (fiveKPace && avgWork <= fiveKPace * 0.95) danielsZone = ' (R-pace — repetition/speed)';
+          if (workoutSubType === 'hill_repeats' || workoutSubType === 'hill_strides') {
+            danielsZone = ''; // Pace zones not meaningful on hills
+          } else if (fiveKPace && avgWork <= fiveKPace * 0.95) danielsZone = ' (R-pace — repetition/speed)';
           else if (fiveKPace && avgWork <= fiveKPace * 1.05) danielsZone = ' (I-pace — VO₂max intervals)';
           else if (thresholdPaceRef && avgWork <= thresholdPaceRef * 1.05) danielsZone = ' (T-pace — threshold)';
-          intervalDetail = ` ${workLaps.length} work segments at avg ${wm}:${String(ws).padStart(2,'0')}/km${danielsZone} (~${avgWorkDist}km each)`;
+
+          if (subTypeDetail) {
+            intervalDetail = ` ${workLaps.length}× ${subTypeDetail}`;
+          } else {
+            intervalDetail = ` ${workLaps.length} work segments at avg ${wm}:${String(ws).padStart(2,'0')}/km${danielsZone} (~${avgWorkDist.toFixed(2)}km each)`;
+          }
           if (recoveryLaps.length) {
             const avgRec = recoveryLaps.reduce((s, l) => s + l.paceSec, 0) / recoveryLaps.length;
             const rm = Math.floor(avgRec / 60), rs = Math.round(avgRec % 60);
             intervalDetail += `, recovery at avg ${rm}:${String(rs).padStart(2,'0')}/km`;
           }
           intervalDetail += '.';
+
+          // Elevation context for hill work
+          if ((workoutSubType === 'hill_repeats' || workoutSubType === 'hill_strides') && totalElev) {
+            intervalDetail += ` Total elevation gain: ${Math.round(totalElev)}m.`;
+            // HR is expected to be higher on hills — note this
+            if (pctHr && pctHr > 0.82) {
+              intervalDetail += ` Elevated HR (${Math.round(pctHr*100)}% max) is expected for uphill efforts — effort is driven by gradient, not pace.`;
+            }
+          }
+
           // Work lap HR analysis
           const workHrs = workLaps.filter(l => l.hr).map(l => l.hr);
           if (workHrs.length && pctHr) {
@@ -2391,12 +2478,39 @@ function classifyWorkout(s) {
             else if (secondAvg < firstAvg * 0.98) intervalDetail += ` Negative split across reps — strong finishing.`;
             else intervalDetail += ` Consistent pacing throughout — well-executed.`;
           }
+
+          // Detect warm-up / cool-down structure (easy laps before and after work laps)
+          const firstWorkIdx = lapData.indexOf(workLaps[0]);
+          const lastWorkIdx = lapData.indexOf(workLaps[workLaps.length - 1]);
+          if (firstWorkIdx >= 2) {
+            const warmUpLaps = lapData.slice(0, firstWorkIdx);
+            const warmUpDist = warmUpLaps.reduce((s, l) => s + l.dist, 0).toFixed(1);
+            intervalDetail += ` Warm-up: ${warmUpDist}km easy.`;
+          }
+          if (lastWorkIdx < lapData.length - 2) {
+            const coolDownLaps = lapData.slice(lastWorkIdx + 1);
+            const coolDownDist = coolDownLaps.reduce((s, l) => s + l.dist, 0).toFixed(1);
+            intervalDetail += ` Cool-down: ${coolDownDist}km easy.`;
+          }
         }
       }
     }
+    // Customize label based on sub-type
+    let intervalLabel = '⚡ Interval / Speed';
+    let intervalPurpose = `Develops VO₂max and running economy through alternating work and recovery segments.`;
+    if (intervalDetail.includes('Hill repeats')) {
+      intervalLabel = '⛰️ Hill Repeats';
+      intervalPurpose = `Builds power, strength and running economy through uphill efforts. Hill repeats develop leg strength that translates to faster flat running (Daniels, Pfitzinger). The gradient adds resistance without the joint impact of flat sprinting.`;
+    } else if (intervalDetail.includes('Hill strides')) {
+      intervalLabel = '⛰️ Hill Strides';
+      intervalPurpose = `Short, controlled uphill accelerations to build power and neuromuscular coordination. Less taxing than full hill repeats — excellent for integrating into easy run days.`;
+    } else if (intervalDetail.includes('Strides')) {
+      intervalLabel = '🦶 Strides';
+      intervalPurpose = `Short accelerations (~60-100m) at fast but controlled effort to maintain neuromuscular speed and running form. Per Daniels and Pfitzinger, strides keep the legs "sharp" without adding training stress.`;
+    }
     return {
-      type: 'interval', label: '⚡ Interval / Speed',
-      purpose: `Develops VO₂max and running economy through alternating work and recovery segments.${intervalDetail}${goalStr ? ' Critical for ' + goalStr + ' preparation — builds the top-end speed that makes race pace feel easier.' : ''}`
+      type: 'interval', label: intervalLabel,
+      purpose: `${intervalPurpose}${intervalDetail}${goalStr ? ' Critical for ' + goalStr + ' preparation — builds the top-end speed that makes race pace feel easier.' : ''}`
     };
   }
 
@@ -2430,17 +2544,24 @@ function classifyWorkout(s) {
         if (spm < 160) cadenceNote = ` Cadence was ${spm} spm — quite low; aiming for 170+ may improve running economy.`;
         else if (spm >= 170) cadenceNote = ` Good cadence at ${spm} spm.`;
       }
+      // Elevation context
+      let elevNote = '';
+      if (totalElev > 50) {
+        elevNote = ` Total elevation gain: ${Math.round(totalElev)}m — hilly route. Expect higher HR and slower pace on uphills; pace/km is less meaningful on undulating terrain.`;
+      } else if (totalElev > 20) {
+        elevNote = ` Elevation gain: ${Math.round(totalElev)}m — some undulation.`;
+      }
       if (durMin > 75) {
         let longPurpose = `Builds endurance and aerobic base over ${distKm} km. Trains fat metabolism, strengthens muscles and joints, and builds mental resilience.`;
         if (goal === 'marathon') longPurpose += ' The most important weekly session for marathon preparation — simulates the sustained effort of race day (Pfitzinger).';
         else if (goal === 'half') longPurpose += ' Essential for half marathon readiness — builds the stamina to maintain pace through the second half.';
         else if (goalStr) longPurpose += ` Builds the endurance foundation for your ${goalStr} goal.`;
-        longPurpose += driftNote + cadenceNote + paceContext;
+        longPurpose += driftNote + cadenceNote + elevNote + paceContext;
         return { type: 'long', label: '🔵 Long Run', purpose: longPurpose };
       }
       return {
         type: 'easy', label: '💚 Easy Run',
-        purpose: `Aerobic base building at a comfortable pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''} — in Daniels' system this is E-pace, targeting Zone 1–2. Per the 80/20 principle, most weekly mileage should be at this effort.${goalStr ? ' For ' + goalStr + ' training, easy runs build the cardiovascular foundation that makes all other sessions possible.' : ''}${driftNote}${cadenceNote}${paceContext}`
+        purpose: `Aerobic base building at a comfortable pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''} — in Daniels' system this is E-pace, targeting Zone 1–2. Per the 80/20 principle, most weekly mileage should be at this effort.${goalStr ? ' For ' + goalStr + ' training, easy runs build the cardiovascular foundation that makes all other sessions possible.' : ''}${driftNote}${cadenceNote}${elevNote}${paceContext}`
       };
     }
     // Moderate (between easy and tempo)
@@ -2953,7 +3074,8 @@ function renderProducts() {
         ${p.nickname ? `<div style="font-size:.74rem; color:var(--muted);">${p.name}</div>` : ''}
         ${p.brand ? `<div style="font-size:.74rem; color:var(--muted);">${p.brand}</div>` : ''}
         ${p.notes ? `<div style="font-size:.73rem; color:var(--muted); margin:.2rem 0;">${p.notes}</div>` : ''}
-        ${(() => { const per = p.nutrPer || '100g'; const lbl = per === 'serving' ? `per ${p.serve||'?'}g serving` : 'per 100g'; return `
+        ${(() => { const per = p.nutrPer || '100g'; const lbl = per === 'serving' ? `per ${p.serve||'?'}g serving` : 'per 100g'; const typeBadge = per === 'serving' ? '<span style=\"font-size:.65rem; background:#fff3e0; color:#e65100; padding:.1rem .35rem; border-radius:3px; font-weight:600;\">PER SERVING</span>' : '<span style=\"font-size:.65rem; background:#e8f5e9; color:#2e7d32; padding:.1rem .35rem; border-radius:3px; font-weight:600;\">PER 100g</span>'; return `
+        <div style="margin:.3rem 0;">${typeBadge}</div>
         <div class="nutrient-row"><span>Serving size</span><span>${p.serve || '—'}g/ml</span></div>
         <div class="nutrient-row"><span>Calories</span><span><b>${p.kcal || '—'}</b> kcal <span style="font-size:.7rem;color:var(--muted);">${lbl}</span></span></div>
         <div class="nutrient-row"><span>Protein</span><span>${p.prot || '—'}g <span style="font-size:.7rem;color:var(--muted);">${lbl}</span></span></div>
@@ -3550,6 +3672,13 @@ function renderIngredientRows() {
 
 window.updateIngredient = (idx, field, val) => {
   mealIngredients[idx][field] = val;
+  // Auto-set unit when product changes based on product's nutrPer
+  if (field === 'productId' && val) {
+    const p = state.products.find(x => x.id === val);
+    if (p) {
+      mealIngredients[idx].unit = (p.nutrPer === 'serving') ? 'serves' : 'g';
+    }
+  }
   renderIngredientRows();
 };
 
@@ -3788,15 +3917,33 @@ function renderMeals() {
     let macroHtml = '';
 
     if (m.type === 'pantry') {
-      ingredientLines = (m.ingredients || []).map(i =>
-        `<span>${i.name} — ${i.qty}${i.unit === 'serves' ? ' serves' : 'g'}</span>`
-      ).join('<br>');
+      // Dynamically recompute macros from current product data
+      let liveKcal = 0, liveProt = 0, liveCarb = 0, liveFat = 0;
+      for (const ing of (m.ingredients || [])) {
+        if (!ing.productId || !ing.qty) continue;
+        const p = state.products.find(x => x.id === ing.productId);
+        if (!p) continue;
+        const per = p.nutrPer || '100g';
+        const divisor = per === 'serving' ? (p.serve || 100) : 100;
+        const ingUnit = ing.unit || 'g';
+        const qtyG = ingUnit === 'serves' ? parseFloat(ing.qty) * (p.serve || 100) : parseFloat(ing.qty) || 0;
+        liveKcal += (p.kcal || 0) / divisor * qtyG;
+        liveProt += (p.prot || 0) / divisor * qtyG;
+        liveCarb += (p.carb || 0) / divisor * qtyG;
+        liveFat  += (p.fat  || 0) / divisor * qtyG;
+      }
+      liveKcal = Math.round(liveKcal); liveProt = +liveProt.toFixed(1); liveCarb = +liveCarb.toFixed(1); liveFat = +liveFat.toFixed(1);
+      ingredientLines = (m.ingredients || []).map(i => {
+        const p = state.products.find(x => x.id === i.productId);
+        const perLabel = p ? (p.nutrPer === 'serving' ? 'per-serving' : 'per-100g') : '';
+        return `<span>${i.name} — ${i.qty}${i.unit === 'serves' ? ' serves' : 'g'}</span>`;
+      }).join('<br>');
       macroHtml = `
         <div class="meal-macros">
-          <span class="meal-macro-chip">🔥 ${m.kcal} kcal</span>
-          <span class="meal-macro-chip">P ${m.prot}g</span>
-          <span class="meal-macro-chip">C ${m.carb}g</span>
-          <span class="meal-macro-chip">F ${m.fat}g</span>
+          <span class="meal-macro-chip">🔥 ${liveKcal} kcal</span>
+          <span class="meal-macro-chip">P ${liveProt}g</span>
+          <span class="meal-macro-chip">C ${liveCarb}g</span>
+          <span class="meal-macro-chip">F ${liveFat}g</span>
         </div>`;
     } else if (m.type === 'manual') {
       if (m.notes) ingredientLines = m.notes;

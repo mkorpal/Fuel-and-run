@@ -3723,7 +3723,7 @@ function removeIngredientRow(idx) {
 function renderIngredientRows() {
   const container = document.getElementById('meal-ingredient-rows');
   if (!container) return;
-  const products = state.products;
+  const products = state.products.filter(p => !p.deletedAt);
   if (!products.length) {
     container.innerHTML = '<p style="font-size:.83rem; color:var(--muted); margin-bottom:.6rem;">⚠️ No products in your pantry yet. Add products first, then build meals from them.</p>';
     updateMealPreview();

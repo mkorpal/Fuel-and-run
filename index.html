@@ -1201,6 +1201,14 @@ function applyParsed(parsed) {
       if (!p.weekMeals) p.weekMeals = {};
     });
   }
+  // Migrate corrupted product serve values (old barcode scan set serve=1)
+  if (state.products) {
+    state.products.forEach(p => {
+      if ((p.nutrPer || '100g') === '100g' && p.serve && p.serve < 5) {
+        p.serve = 100;
+      }
+    });
+  }
 }
 
 function mergeStates(local, remote) {
@@ -1807,7 +1815,9 @@ async function stravaSyncActivities() {
     const importedWeekKeys = new Set();
 
     for (const act of activities) {
-      const startLocal = new Date(act.start_date_local);
+      // Strip trailing Z to prevent unwanted UTC→local timezone shift
+      // Strava's start_date_local is already in athlete's timezone but has a Z suffix
+      const startLocal = new Date((act.start_date_local || '').replace(/Z$/i, ''));
       if (isNaN(startLocal.getTime())) continue;
 
       const dayMon0 = (startLocal.getDay() + 6) % 7;
@@ -1816,10 +1826,16 @@ async function stravaSyncActivities() {
       monday.setHours(0, 0, 0, 0);
       const weekKey = isoWeekKey(monday);
 
-      // Skip if already imported (same Strava activity ID with same or newer timestamp)
+      // Check if already correctly placed in this week and up-to-date
       if (!ap.weekSessions[weekKey]) ap.weekSessions[weekKey] = [];
       const existing = ap.weekSessions[weekKey].find(x => x.stravaId && x.stravaId === act.id);
-      if (existing && existing.updatedAt && existing.updatedAt >= new Date(act.start_date).toISOString()) continue;
+      if (existing && existing.day === dayMon0 && existing.updatedAt && existing.updatedAt >= new Date(act.start_date).toISOString()) continue;
+
+      // Remove stale entries for this activity from ALL weeks (fixes prior TZ misassignment)
+      for (const wk of Object.keys(ap.weekSessions)) {
+        ap.weekSessions[wk] = ap.weekSessions[wk].filter(x => !(x.stravaId && x.stravaId === act.id));
+      }
+      if (!ap.weekSessions[weekKey]) ap.weekSessions[weekKey] = [];
 
       const distKm = act.distance ? +(act.distance / 1000).toFixed(2) : 0;
       const durMin = act.moving_time ? Math.round(act.moving_time / 60) : 0;
@@ -3508,7 +3524,8 @@ function renderIngredientRows() {
       const p = state.products.find(x => x.id === ing.productId);
       if (p) {
         const pg = productPerGram(p);
-        const qtyG = ingUnit === 'serves' ? parseFloat(ing.qty) * (p.serve || 100) : parseFloat(ing.qty);
+        const serveG = ((p.nutrPer || '100g') === '100g' && (!p.serve || p.serve < 5)) ? 100 : (p.serve || 100);
+        const qtyG = ingUnit === 'serves' ? parseFloat(ing.qty) * serveG : parseFloat(ing.qty);
         const contrib = Math.round(pg.kcal * qtyG);
         hint = `<span style="font-size:.7rem; color:var(--accent); white-space:nowrap; min-width:52px;">${contrib} kcal</span>`;
       }
@@ -3544,8 +3561,9 @@ function calcPantryMealMacros() {
     if (!p) continue;
     const pg = productPerGram(p);
     const ingUnit = ing.unit || 'g';
-    // If unit is 'serves', convert to grams: qty × p.serve
-    const qtyG = ingUnit === 'serves' ? parseFloat(ing.qty) * (p.serve || 100) : parseFloat(ing.qty) || 0;
+    // For per-100g products with corrupted serve (<5g), default serving to 100g
+    const serveG = ((p.nutrPer || '100g') === '100g' && (!p.serve || p.serve < 5)) ? 100 : (p.serve || 100);
+    const qtyG = ingUnit === 'serves' ? parseFloat(ing.qty) * serveG : parseFloat(ing.qty) || 0;
     kcal += pg.kcal * qtyG;
     prot += pg.prot * qtyG;
     carb += pg.carb * qtyG;

@@ -2427,12 +2427,13 @@ function classifyWorkout(s) {
   }
 
   // Check pace variability across laps (for interval detection)
+  // Exclude mobility/stationary laps (>12:00/km and <=7 min) from variability calc
   let paceVariability = 0;
   if (laps.length >= 3) {
     const paces = laps.filter(l => l.pace).map(l => {
       const [m, sec] = l.pace.split(':').map(Number);
       return m * 60 + sec;
-    });
+    }).filter(p => p <= 720); // exclude mobility laps (>12:00/km)
     if (paces.length >= 3) {
       const avg = paces.reduce((a, b) => a + b, 0) / paces.length;
       const variance = paces.reduce((sum, p) => sum + Math.pow(p - avg, 2), 0) / paces.length;
@@ -2478,12 +2479,18 @@ function classifyWorkout(s) {
     if (laps.length >= 3) {
       const lapData = laps.filter(l => l.pace && l.dist).map((l, idx) => {
         const [m, sec] = l.pace.split(':').map(Number);
-        return { paceSec: m * 60 + sec, dist: l.dist, hr: l.avgHr, time: l.time, pace: l.pace, elev: lapElevations[idx] || 0 };
+        const paceSec = m * 60 + sec;
+        // Flag mobility/stationary laps: very slow pace (>12:00/km) and short duration (<= 7 min)
+        const isMobility = paceSec > 720 && (l.time || 0) <= 420;
+        return { paceSec, dist: l.dist, hr: l.avgHr, time: l.time, pace: l.pace, elev: lapElevations[idx] || 0, isMobility };
       });
-      if (lapData.length >= 3) {
-        const medianPace = [...lapData].sort((a, b) => a.paceSec - b.paceSec)[Math.floor(lapData.length / 2)].paceSec;
-        const workLaps = lapData.filter(l => l.paceSec < medianPace * 0.95);
-        const recoveryLaps = lapData.filter(l => l.paceSec > medianPace * 1.05);
+      // Separate mobility laps from running laps
+      const runLaps = lapData.filter(l => !l.isMobility);
+      const mobilityLaps = lapData.filter(l => l.isMobility);
+      if (runLaps.length >= 3) {
+        const medianPace = [...runLaps].sort((a, b) => a.paceSec - b.paceSec)[Math.floor(runLaps.length / 2)].paceSec;
+        const workLaps = runLaps.filter(l => l.paceSec < medianPace * 0.95);
+        const recoveryLaps = runLaps.filter(l => l.paceSec > medianPace * 1.05);
         if (workLaps.length >= 2) {
           const avgWork = workLaps.reduce((s, l) => s + l.paceSec, 0) / workLaps.length;
           const wm = Math.floor(avgWork / 60), ws = Math.round(avgWork % 60);
@@ -2542,21 +2549,24 @@ function classifyWorkout(s) {
           }
 
           // Detect warm-up / cool-down structure (easy laps before and after work laps)
+          // Use lapData indices (includes mobility) but exclude mobility from pace analysis
           const firstWorkIdx = lapData.indexOf(workLaps[0]);
           const lastWorkIdx = lapData.indexOf(workLaps[workLaps.length - 1]);
 
-          // Helper: build detailed easy-run commentary for a set of laps
+          // Helper: build detailed easy-run commentary for a set of laps (excluding mobility)
           function easyComponentAnalysis(cLaps, label) {
-            const dist = cLaps.reduce((s, l) => s + l.dist, 0);
-            const durS = cLaps.reduce((s, l) => s + (l.time || 0), 0);
+            const running = cLaps.filter(l => !l.isMobility);
+            if (!running.length) return '';
+            const dist = running.reduce((s, l) => s + l.dist, 0);
+            const durS = running.reduce((s, l) => s + (l.time || 0), 0);
             const avgPace = durS > 0 && dist > 0 ? durS / dist : null;
             let text = ` ${label}: ${dist.toFixed(1)}km`;
             if (avgPace) {
               const pm = Math.floor(avgPace / 60), ps = Math.round(avgPace % 60);
               text += ` at ${pm}:${String(ps).padStart(2,'0')}/km`;
             }
-            // HR for this component
-            const hrs = cLaps.filter(l => l.hr).map(l => l.hr);
+            // HR for this component (running laps only)
+            const hrs = running.filter(l => l.hr).map(l => l.hr);
             if (hrs.length) {
               const avgHr = Math.round(hrs.reduce((a, b) => a + b, 0) / hrs.length);
               const pct = Math.round(avgHr / hrMax * 100);
@@ -2574,29 +2584,55 @@ function classifyWorkout(s) {
               }
             }
             // Elevation for component
-            const elev = cLaps.reduce((s, l) => s + l.elev, 0);
+            const elev = running.reduce((s, l) => s + l.elev, 0);
             if (elev > 20) text += ` Elevation gain: ${Math.round(elev)}m.`;
+            // Note mobility laps within this component
+            const mob = cLaps.filter(l => l.isMobility);
+            if (mob.length) {
+              const mobDur = Math.round(mob.reduce((s, l) => s + (l.time || 0), 0) / 60);
+              text += ` Mobility/drills: ~${mobDur} min (excluded from pace).`;
+            }
             return text;
           }
 
           if (firstWorkIdx >= 1) {
             const warmUpLaps = lapData.slice(0, firstWorkIdx);
-            const warmUpDist = warmUpLaps.reduce((s, l) => s + l.dist, 0);
+            const warmUpRunning = warmUpLaps.filter(l => !l.isMobility);
+            const warmUpDist = warmUpRunning.reduce((s, l) => s + l.dist, 0);
             if (warmUpDist >= 1.0) {
               // Substantial warm-up — provide detailed easy-run analysis
               intervalDetail += easyComponentAnalysis(warmUpLaps, 'Easy run warm-up');
-            } else {
+            } else if (warmUpDist > 0) {
               intervalDetail += ` Warm-up: ${warmUpDist.toFixed(1)}km easy.`;
+              const mob = warmUpLaps.filter(l => l.isMobility);
+              if (mob.length) {
+                const mobDur = Math.round(mob.reduce((s, l) => s + (l.time || 0), 0) / 60);
+                intervalDetail += ` Mobility/drills: ~${mobDur} min.`;
+              }
             }
           }
           if (lastWorkIdx < lapData.length - 2) {
             const coolDownLaps = lapData.slice(lastWorkIdx + 1);
-            const coolDownDist = coolDownLaps.reduce((s, l) => s + l.dist, 0);
+            const coolDownRunning = coolDownLaps.filter(l => !l.isMobility);
+            const coolDownDist = coolDownRunning.reduce((s, l) => s + l.dist, 0);
             if (coolDownDist >= 1.0) {
               // Substantial cool-down — provide detailed easy-run analysis
               intervalDetail += easyComponentAnalysis(coolDownLaps, 'Easy run cool-down');
-            } else {
+            } else if (coolDownDist > 0) {
               intervalDetail += ` Cool-down: ${coolDownDist.toFixed(1)}km easy.`;
+            }
+          }
+          // Mention mobility between warm-up and work (not captured above)
+          if (mobilityLaps.length) {
+            const mobBetween = mobilityLaps.filter(l => {
+              const idx = lapData.indexOf(l);
+              return idx >= firstWorkIdx; // mobility after warm-up section
+            });
+            if (mobBetween.length && firstWorkIdx >= 1) {
+              // Already mentioned in warm-up analysis, skip
+            } else if (mobilityLaps.length && firstWorkIdx < 1) {
+              const mobDur = Math.round(mobilityLaps.reduce((s, l) => s + (l.time || 0), 0) / 60);
+              intervalDetail += ` Mobility/drills: ~${mobDur} min (excluded from pace analysis).`;
             }
           }
         }

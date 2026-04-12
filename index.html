@@ -403,17 +403,32 @@
   #toast.show { opacity: 1; }
 
   /* ---- Meals ---- */
-  .meal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
-  .meal-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 1rem; position: relative;
+  .meal-grid { display: flex; flex-wrap: wrap; gap: .45rem; }
+  .meal-chip {
+    display: inline-flex; align-items: center; gap: .25rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+    padding: .25rem .65rem; font-size: .82rem; cursor: pointer;
+    transition: border-color .15s, box-shadow .15s; position: relative;
+    white-space: nowrap;
   }
-  .meal-card .meal-name { font-weight: 700; font-size: 1rem; margin-bottom: .4rem; }
-  .meal-card .meal-del {
-    position: absolute; top: .6rem; right: .6rem;
-    background: none; border: none; cursor: pointer; color: var(--muted); font-size: 1rem;
+  .meal-chip:hover, .meal-chip.active { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .meal-chip .mchip-name { font-weight: 600; }
+  .meal-chip .mchip-del {
+    background: none; border: none; cursor: pointer; color: var(--muted); font-size: .7rem; padding: 0; margin-left: .1rem;
   }
-  .meal-card .meal-del:hover { color: var(--danger); }
+  .meal-chip .mchip-del:hover { color: var(--danger); }
+  .meal-chip .mchip-log {
+    background: var(--accent); color: #fff; border: none; border-radius: 10px;
+    font-size: .65rem; font-weight: 700; padding: .1rem .4rem; cursor: pointer; margin-left: .15rem;
+  }
+  .meal-chip .mchip-log:hover { opacity: .85; }
+  .meal-detail-pop {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+    background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 6px 24px rgba(0,0,0,.12); padding: .65rem .85rem;
+    min-width: 240px; max-width: 340px; font-size: .8rem;
+  }
+  .meal-chip.active .meal-detail-pop { display: block; }
   .meal-type-badge { display: inline-block; font-size: .7rem; font-weight: 600; padding: .15rem .5rem; border-radius: 20px; margin-bottom: .5rem; }
   .meal-type-pantry { background: #d4edda; color: #155724; }
   .meal-type-recipe { background: #cce5ff; color: #004085; }
@@ -3172,6 +3187,9 @@ document.addEventListener('click', e => {
   if (!e.target.closest('.product-chip')) {
     document.querySelectorAll('.product-chip.active').forEach(el => el.classList.remove('active'));
   }
+  if (!e.target.closest('.meal-chip')) {
+    document.querySelectorAll('.meal-chip.active').forEach(el => el.classList.remove('active'));
+  }
 });
 
 window.deleteProduct = id => {
@@ -3979,6 +3997,15 @@ document.getElementById('btn-save-meal').addEventListener('click', () => {
 });
 
 // ---- Delete meal ----
+window.toggleMealCard = (id, e) => {
+  if (e && (e.target.classList.contains('mchip-del') || e.target.classList.contains('mchip-log'))) return;
+  document.querySelectorAll('.meal-chip.active').forEach(el => {
+    if (el.id !== 'mcard-' + id) el.classList.remove('active');
+  });
+  const card = document.getElementById('mcard-' + id);
+  if (card) card.classList.toggle('active');
+};
+
 window.deleteMeal = id => {
   const m = state.meals.find(x => x.id === id);
   if (!m) return;
@@ -4084,18 +4111,23 @@ function renderMeals() {
     }
 
     return `
-      <div class="meal-card" draggable="true" ondragstart="startDrag(event,'meal','${m.id}')">
-        <button class="meal-del" onclick="deleteMeal('${m.id}')">✕</button>
-        <div class="meal-name">${m.name}</div>
-        <span class="meal-type-badge ${badgeClass}">${badgeLabel}</span>
-        ${ingredientLines ? `<div class="meal-ingredients">${ingredientLines}</div>` : ''}
-        ${macroHtml}
-        ${m.url ? `<div style="margin-top:.5rem;"><a href="${m.url}" target="_blank" style="font-size:.76rem;">View recipe ↗</a></div>` : ''}
-        <div style="display:flex; gap:.4rem; margin-top:.5rem; flex-wrap:wrap;">
-          <button class="plog-btn" onclick="openQtyModal('meal','${m.id}')"
-                  ondragstart="event.stopPropagation()">＋ Log today</button>
-          <button class="plog-btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border);"
-                  onclick="editMeal('${m.id}')" ondragstart="event.stopPropagation()">✏️ Edit</button>
+      <div class="meal-chip" id="mcard-${m.id}"
+           onclick="toggleMealCard('${m.id}', event)"
+           draggable="true" ondragstart="startDrag(event,'meal','${m.id}')">
+        <span class="mchip-name">${m.name}</span>
+        <button class="mchip-log" onclick="event.stopPropagation(); openQtyModal('meal','${m.id}')">＋</button>
+        <button class="mchip-del" onclick="event.stopPropagation(); deleteMeal('${m.id}')" title="Delete">✕</button>
+        <div class="meal-detail-pop" onclick="event.stopPropagation()">
+          <div style="font-weight:700; margin-bottom:.25rem;">${m.name}</div>
+          <span class="meal-type-badge ${badgeClass}">${badgeLabel}</span>
+          ${ingredientLines ? `<div class="meal-ingredients">${ingredientLines}</div>` : ''}
+          ${macroHtml}
+          ${m.url ? `<div style="margin-top:.4rem;"><a href="${m.url}" target="_blank" style="font-size:.76rem;">View recipe ↗</a></div>` : ''}
+          <div style="display:flex; gap:.4rem; margin-top:.5rem; flex-wrap:wrap;">
+            <button class="plog-btn" onclick="openQtyModal('meal','${m.id}')">＋ Log today</button>
+            <button class="plog-btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border);"
+                    onclick="editMeal('${m.id}')">✏️ Edit</button>
+          </div>
         </div>
       </div>`;
   }).join('');

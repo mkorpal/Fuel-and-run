@@ -707,10 +707,10 @@
           </div>
           <div class="form-inline">
             <div class="form-row"><label>Serving size (g/ml)</label><input type="number" id="p-serve" min="1" placeholder="100" /></div>
-            <div class="form-row"><label>Calories (kcal)</label><input type="number" id="p-kcal" min="0" /></div>
-            <div class="form-row"><label>Protein (g)</label><input type="number" id="p-prot" min="0" step=".1" /></div>
-            <div class="form-row"><label>Carbs (g)</label><input type="number" id="p-carb" min="0" step=".1" /></div>
-            <div class="form-row"><label>Fat (g)</label><input type="number" id="p-fat" min="0" step=".1" /></div>
+            <div class="form-row"><label>Calories (kcal per serving)</label><input type="number" id="p-kcal" min="0" /></div>
+            <div class="form-row"><label>Protein g (per serving)</label><input type="number" id="p-prot" min="0" step=".1" /></div>
+            <div class="form-row"><label>Carbs g (per serving)</label><input type="number" id="p-carb" min="0" step=".1" /></div>
+            <div class="form-row"><label>Fat g (per serving)</label><input type="number" id="p-fat" min="0" step=".1" /></div>
           </div>
           <div class="form-row">
             <label>Notes (timing, usage)</label>
@@ -2850,10 +2850,10 @@ function renderProducts() {
         ${p.brand ? `<div style="font-size:.74rem; color:var(--muted);">${p.brand}</div>` : ''}
         ${p.notes ? `<div style="font-size:.73rem; color:var(--muted); margin:.2rem 0;">${p.notes}</div>` : ''}
         <div class="nutrient-row"><span>Serving</span><span>${p.serve || '—'}g/ml</span></div>
-        <div class="nutrient-row"><span>Calories</span><span><b>${p.kcal || '—'}</b> kcal</span></div>
-        <div class="nutrient-row"><span>Protein</span><span>${p.prot || '—'}g</span></div>
-        <div class="nutrient-row"><span>Carbs</span><span>${p.carb || '—'}g</span></div>
-        <div class="nutrient-row"><span>Fat</span><span>${p.fat || '—'}g</span></div>
+        <div class="nutrient-row"><span>Calories</span><span><b>${p.kcal || '—'}</b> kcal/serving</span></div>
+        <div class="nutrient-row"><span>Protein</span><span>${p.prot || '—'}g/serve</span></div>
+        <div class="nutrient-row"><span>Carbs</span><span>${p.carb || '—'}g/serve</span></div>
+        <div class="nutrient-row"><span>Fat</span><span>${p.fat || '—'}g/serve</span></div>
         ${p.url ? `<div style="margin-top:.4rem;"><a href="${p.url}" target="_blank" style="font-size:.74rem;">View product ↗</a></div>` : ''}
         <div style="display:flex; gap:.4rem; margin-top:.4rem;">
           <button class="plog-btn" onclick="openQtyModal('product','${p.id}')">＋ Log today</button>
@@ -2929,15 +2929,20 @@ async function searchFoodDB(query) {
     for (const p of (offData.products || [])) {
       if (!p.product_name) continue;
       const n = p.nutriments || {};
+      // Nutrition from OFF is always per 100g — scale to per-serving so the stored
+      // values are consistent with barcode scan and manual entry (all per-serving).
+      const rawServing = p.serving_quantity ? parseFloat(p.serving_quantity) : null;
+      const servingG = (rawServing && rawServing >= 5) ? rawServing : 100; // min 5g guard
+      const scl = servingG / 100;
       results.push({
         source: 'OFF',
         name: p.product_name,
         brand: p.brands || '',
-        serve: p.serving_quantity || 100,
-        kcal: Math.round(n['energy-kcal_100g'] || n['energy-kcal'] || 0),
-        prot: +(n.proteins_100g || 0).toFixed(1),
-        carb: +(n.carbohydrates_100g || 0).toFixed(1),
-        fat: +(n.fat_100g || 0).toFixed(1),
+        serve: Math.round(servingG),
+        kcal: Math.round((n['energy-kcal_100g'] || n['energy-kcal'] || 0) * scl),
+        prot: +((n.proteins_100g || 0) * scl).toFixed(1),
+        carb: +((n.carbohydrates_100g || 0) * scl).toFixed(1),
+        fat:  +((n.fat_100g  || 0) * scl).toFixed(1),
         cats: (p.categories_tags || []).join(' '),
         img: p.image_front_small_url || ''
       });
@@ -3262,16 +3267,31 @@ function renderIngredientRows() {
     return;
   }
   const optionHTML = `<option value="">— select product —</option>` +
-    products.map(p => `<option value="${p.id}">${p.nickname || p.name}${p.brand?' · '+p.brand:''} (${p.serve||100}g serving)</option>`).join('');
+    products.map(p => {
+      const serveG = p.serve || 100;
+      const kcalPer100 = p.kcal ? Math.round(p.kcal / serveG * 100) : null;
+      const hint = kcalPer100 ? `${serveG}g · ${kcalPer100} kcal/100g` : `${serveG}g serving`;
+      return `<option value="${p.id}">${p.nickname || p.name}${p.brand?' · '+p.brand:''} (${hint})</option>`;
+    }).join('');
 
-  container.innerHTML = mealIngredients.map((ing, i) => `
-    <div class="ingredient-row" data-idx="${i}">
+  container.innerHTML = mealIngredients.map((ing, i) => {
+    // Show live kcal contribution next to the ingredient for quick sanity-check
+    let ingKcalHint = '';
+    if (ing.productId && ing.qty) {
+      const p = state.products.find(x => x.id === ing.productId);
+      if (p && p.kcal && p.serve) {
+        const contrib = Math.round(p.kcal * parseFloat(ing.qty) / (p.serve || 100));
+        ingKcalHint = `<span style="font-size:.7rem; color:var(--accent); white-space:nowrap;">${contrib} kcal</span>`;
+      }
+    }
+    return `<div class="ingredient-row" data-idx="${i}">
       <select onchange="updateIngredient(${i},'productId',this.value)">${optionHTML.replace(`value="${ing.productId}"`, `value="${ing.productId}" selected`)}</select>
-      <input type="number" min="0" step="1" placeholder="g / ml" value="${ing.qty}"
-        oninput="updateIngredient(${i},'qty',this.value)" />
+      <input type="number" min="0" step="1" placeholder="grams" value="${ing.qty}"
+        oninput="updateIngredient(${i},'qty',this.value)" style="width:80px;" />
+      ${ingKcalHint}
       <button class="ing-remove" onclick="removeIngredientRow(${i})">✕</button>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
   updateMealPreview();
 }
 
@@ -3286,8 +3306,12 @@ function calcPantryMealMacros() {
     if (!ing.productId || !ing.qty) continue;
     const p = state.products.find(x => x.id === ing.productId);
     if (!p) continue;
-    const ref = p.serve || 100; // nutrients are per 'serve' g
-    const scale = parseFloat(ing.qty) / ref;
+    // p.kcal/prot/carb/fat are stored per-serving (p.serve grams).
+    // ing.qty is the number of grams the user is adding to the meal.
+    // scale = how many servings are in that many grams.
+    const serveG = p.serve || 100;
+    const qtyG   = parseFloat(ing.qty) || 0;
+    const scale  = qtyG / serveG;
     kcal += (p.kcal || 0) * scale;
     prot += (p.prot || 0) * scale;
     carb += (p.carb || 0) * scale;

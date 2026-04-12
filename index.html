@@ -463,11 +463,29 @@
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-<div id="app">
+<!-- Login gate -->
+<div id="login-gate" style="display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg); position:fixed; inset:0; z-index:9999;">
+  <div style="background:var(--surface); padding:2rem; border-radius:var(--radius); max-width:340px; width:90%; text-align:center; box-shadow:0 2px 16px rgba(0,0,0,.1);">
+    <h2 style="margin-bottom:.3rem;">🌿 Fuel &amp; Run</h2>
+    <p style="color:var(--muted); font-size:.85rem; margin-bottom:1.2rem;">Sign in to continue</p>
+    <input type="text" id="login-user" placeholder="Username" autocomplete="username" style="width:100%; padding:.6rem .8rem; margin-bottom:.6rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.9rem;" />
+    <input type="password" id="login-pass" placeholder="Password" autocomplete="current-password" style="width:100%; padding:.6rem .8rem; margin-bottom:.8rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.9rem;" />
+    <button class="btn btn-primary" id="btn-login" style="width:100%;">Sign In</button>
+    <p id="login-error" style="color:var(--danger); font-size:.8rem; margin-top:.5rem; display:none;">Invalid username or password</p>
+  </div>
+</div>
+
+<div id="app" style="display:none;">
   <header>
     <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
       <h1>🌿 Fuel &amp; Run</h1>
       <div id="profile-switcher" style="display:flex; align-items:center; gap:.5rem;"></div>
+      <div style="display:flex; gap:.4rem; align-items:center; margin-left:auto;">
+        <button class="btn btn-secondary btn-sm" id="btn-strava-sync" style="font-size:.72rem; display:none;">🔄 Sync Strava</button>
+        <button class="btn btn-secondary btn-sm" id="btn-import-fit" onclick="document.getElementById('fit-input').click()" style="font-size:.72rem;">⌚ Import .fit</button>
+        <input type="file" id="fit-input" accept=".fit" multiple style="display:none" />
+        <button class="btn btn-sm" onclick="doLogout()" style="font-size:.72rem; background:transparent; color:var(--muted); border:1px solid var(--border);">🚪 Logout</button>
+      </div>
     </div>
     <span>Nutrition Companion for Active Lifestyles</span>
   </header>
@@ -542,11 +560,6 @@
       <div class="card">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem;">
           <span>📅 My Week</span>
-          <div style="display:flex; gap:.4rem; align-items:center;">
-            <button class="btn btn-secondary btn-sm" id="btn-strava-sync" style="font-size:.72rem; display:none;">🔄 Sync Strava</button>
-            <button class="btn btn-secondary btn-sm" id="btn-import-fit" onclick="document.getElementById('fit-input').click()" style="font-size:.72rem;">⌚ Import .fit</button>
-          </div>
-          <input type="file" id="fit-input" accept=".fit" multiple style="display:none" />
         </div>
         <div class="week-nav">
           <button class="week-nav-btn" id="week-prev">← Prev</button>
@@ -2317,9 +2330,57 @@ function classifyWorkout(s) {
 
   // Interval / speed work: high pace variability
   if (paceVariability > 0.12 && (pctHr ? pctHr > 0.75 : true)) {
+    // Analyze individual laps to identify fast (work) vs recovery segments
+    let intervalDetail = '';
+    if (laps.length >= 3) {
+      const lapData = laps.filter(l => l.pace && l.dist).map(l => {
+        const [m, sec] = l.pace.split(':').map(Number);
+        return { paceSec: m * 60 + sec, dist: l.dist, hr: l.avgHr, time: l.time, pace: l.pace };
+      });
+      if (lapData.length >= 3) {
+        const medianPace = [...lapData].sort((a, b) => a.paceSec - b.paceSec)[Math.floor(lapData.length / 2)].paceSec;
+        const workLaps = lapData.filter(l => l.paceSec < medianPace * 0.95);
+        const recoveryLaps = lapData.filter(l => l.paceSec > medianPace * 1.05);
+        if (workLaps.length >= 2) {
+          const avgWork = workLaps.reduce((s, l) => s + l.paceSec, 0) / workLaps.length;
+          const wm = Math.floor(avgWork / 60), ws = Math.round(avgWork % 60);
+          const avgWorkDist = (workLaps.reduce((s, l) => s + l.dist, 0) / workLaps.length).toFixed(2);
+          // Daniels zone classification for work segments
+          let danielsZone = '';
+          if (fiveKPace && avgWork <= fiveKPace * 0.95) danielsZone = ' (R-pace — repetition/speed)';
+          else if (fiveKPace && avgWork <= fiveKPace * 1.05) danielsZone = ' (I-pace — VO₂max intervals)';
+          else if (thresholdPaceRef && avgWork <= thresholdPaceRef * 1.05) danielsZone = ' (T-pace — threshold)';
+          intervalDetail = ` ${workLaps.length} work segments at avg ${wm}:${String(ws).padStart(2,'0')}/km${danielsZone} (~${avgWorkDist}km each)`;
+          if (recoveryLaps.length) {
+            const avgRec = recoveryLaps.reduce((s, l) => s + l.paceSec, 0) / recoveryLaps.length;
+            const rm = Math.floor(avgRec / 60), rs = Math.round(avgRec % 60);
+            intervalDetail += `, recovery at avg ${rm}:${String(rs).padStart(2,'0')}/km`;
+          }
+          intervalDetail += '.';
+          // Work lap HR analysis
+          const workHrs = workLaps.filter(l => l.hr).map(l => l.hr);
+          if (workHrs.length && pctHr) {
+            const avgWorkHr = Math.round(workHrs.reduce((s, h) => s + h, 0) / workHrs.length);
+            const workPctHr = Math.round(avgWorkHr / hrMax * 100);
+            intervalDetail += ` Work segment HR averaged ${avgWorkHr} bpm (${workPctHr}% max).`;
+          }
+          // Fade analysis — did paces slow across work segments?
+          if (workLaps.length >= 3) {
+            const firstHalf = workLaps.slice(0, Math.floor(workLaps.length / 2));
+            const secondHalf = workLaps.slice(Math.ceil(workLaps.length / 2));
+            const firstAvg = firstHalf.reduce((s, l) => s + l.paceSec, 0) / firstHalf.length;
+            const secondAvg = secondHalf.reduce((s, l) => s + l.paceSec, 0) / secondHalf.length;
+            const fadePct = ((secondAvg - firstAvg) / firstAvg * 100).toFixed(1);
+            if (secondAvg > firstAvg * 1.03) intervalDetail += ` Pace faded ~${fadePct}% in later reps — signs of fatigue.`;
+            else if (secondAvg < firstAvg * 0.98) intervalDetail += ` Negative split across reps — strong finishing.`;
+            else intervalDetail += ` Consistent pacing throughout — well-executed.`;
+          }
+        }
+      }
+    }
     return {
       type: 'interval', label: '⚡ Interval / Speed',
-      purpose: `Develops VO₂max and running economy. The alternating fast and recovery segments train your body to clear lactate and sustain faster speeds.${goalStr ? ' Critical for ' + goalStr + ' preparation — builds the top-end speed that makes race pace feel easier.' : ''}${paceContext}`
+      purpose: `Develops VO₂max and running economy through alternating work and recovery segments.${intervalDetail}${goalStr ? ' Critical for ' + goalStr + ' preparation — builds the top-end speed that makes race pace feel easier.' : ''}`
     };
   }
 
@@ -2334,17 +2395,36 @@ function classifyWorkout(s) {
     }
     // Easy run
     if (paceZone === 'easy') {
+      // Check HR drift for long runs (HR:pace decoupling)
+      let driftNote = '';
+      if (laps.length >= 4 && laps.every(l => l.avgHr && l.pace)) {
+        const firstHalf = laps.slice(0, Math.floor(laps.length / 2));
+        const secondHalf = laps.slice(Math.ceil(laps.length / 2));
+        const hrFirst = firstHalf.reduce((s, l) => s + l.avgHr, 0) / firstHalf.length;
+        const hrSecond = secondHalf.reduce((s, l) => s + l.avgHr, 0) / secondHalf.length;
+        const drift = ((hrSecond - hrFirst) / hrFirst * 100).toFixed(1);
+        if (drift > 8) driftNote = ` HR drifted ${drift}% from first to second half — notable cardiovascular drift, consider hydration and pacing.`;
+        else if (drift > 5) driftNote = ` HR drift of ${drift}% — moderate cardiovascular drift, normal for longer efforts.`;
+        else if (drift > 0) driftNote = ` Minimal HR drift (${drift}%) — well-paced.`;
+      }
+      // Cadence check
+      let cadenceNote = '';
+      if (s.avgCadence) {
+        const spm = s.avgCadence * 2;
+        if (spm < 160) cadenceNote = ` Cadence was ${spm} spm — quite low; aiming for 170+ may improve running economy.`;
+        else if (spm >= 170) cadenceNote = ` Good cadence at ${spm} spm.`;
+      }
       if (durMin > 75) {
         let longPurpose = `Builds endurance and aerobic base over ${distKm} km. Trains fat metabolism, strengthens muscles and joints, and builds mental resilience.`;
-        if (goal === 'marathon') longPurpose += ' The most important weekly session for marathon preparation — simulates the sustained effort of race day.';
+        if (goal === 'marathon') longPurpose += ' The most important weekly session for marathon preparation — simulates the sustained effort of race day (Pfitzinger).';
         else if (goal === 'half') longPurpose += ' Essential for half marathon readiness — builds the stamina to maintain pace through the second half.';
         else if (goalStr) longPurpose += ` Builds the endurance foundation for your ${goalStr} goal.`;
-        longPurpose += paceContext;
+        longPurpose += driftNote + cadenceNote + paceContext;
         return { type: 'long', label: '🔵 Long Run', purpose: longPurpose };
       }
       return {
         type: 'easy', label: '💚 Easy Run',
-        purpose: `Aerobic base building at a comfortable pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''}. Most weekly mileage should be at this effort.${goalStr ? ' For ' + goalStr + ' training, easy runs build the cardiovascular foundation that makes all other sessions possible.' : ''}${paceContext}`
+        purpose: `Aerobic base building at a comfortable pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''} — in Daniels' system this is E-pace, targeting Zone 1–2. Per the 80/20 principle, most weekly mileage should be at this effort.${goalStr ? ' For ' + goalStr + ' training, easy runs build the cardiovascular foundation that makes all other sessions possible.' : ''}${driftNote}${cadenceNote}${paceContext}`
       };
     }
     // Moderate (between easy and tempo)
@@ -2358,14 +2438,14 @@ function classifyWorkout(s) {
     if (paceZone === 'tempo') {
       return {
         type: 'tempo', label: '🟡 Tempo',
-        purpose: `Sustained effort close to half-marathon pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''}. Builds aerobic power and mental toughness at controlled discomfort.${goalStr ? ' For ' + goalStr + ' training, tempo runs teach your body to hold pace under fatigue.' : ''}${paceContext}`
+        purpose: `Sustained effort at or near half-marathon pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''} — this is Daniels' T-pace (threshold). Develops lactate clearance and the ability to hold a “comfortably hard” effort. Per Pfitzinger, sustained tempo (20–40 min) or cruise intervals (e.g. 3×1 mile at T-pace) are both effective formats.${goalStr ? ' For ' + goalStr + ' training, tempo runs teach your body to hold pace under fatigue, building the aerobic power that underpins race-day performance.' : ''}${paceContext}`
       };
     }
     // Threshold
     if (paceZone === 'threshold' || paceZone === 'fast') {
       return {
         type: 'threshold', label: '🔶 Threshold',
-        purpose: `Hard effort near 10k race pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''}. Improves the pace you can sustain for prolonged periods.${goalStr ? ' Directly improves your ' + goalStr + ' race pace — this is where race fitness is built.' : ''}${paceContext}`
+        purpose: `Hard effort near 10k race pace${pctHr ? ' (' + Math.round(pctHr*100) + '% max HR)' : ''} — Daniels' I-pace zone targeting VO₂max. Improves the pace you can sustain for prolonged periods by pushing your lactate threshold higher and increasing cardiac output.${goalStr ? ' Directly improves your ' + goalStr + ' race pace — this is where race fitness is sharpened.' : ''}${paceContext}`
       };
     }
   }
@@ -2866,7 +2946,8 @@ function renderProducts() {
         ${p.url ? `<div style="margin-top:.4rem;"><a href="${p.url}" target="_blank" style="font-size:.74rem;">View product ↗</a></div>` : ''}
         <div style="display:flex; gap:.4rem; margin-top:.4rem; flex-wrap:wrap;">
           <button class="plog-btn" onclick="openQtyModal('product','${p.id}')">＋ Log today</button>
-          <button class="plog-btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border);" onclick="editProductNutrition('${p.id}')">✏️ Edit</button>
+          <button class="plog-btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border);" onclick="renameProduct('${p.id}')">✏️ Rename</button>
+          <button class="plog-btn" style="background:var(--surface); color:var(--text); border:1px solid var(--border);" onclick="editProductNutrition('${p.id}')">Edit</button>
         </div>
       </div>
     </div>
@@ -3353,7 +3434,7 @@ window.editMeal = id => {
 
   if (m.type === 'pantry') {
     // Rebuild ingredient rows from saved data
-    mealIngredients = (m.ingredients || []).map(i => ({ productId: i.productId, qty: String(i.qty) }));
+    mealIngredients = (m.ingredients || []).map(i => ({ productId: i.productId, qty: String(i.qty), unit: i.unit || 'g' }));
     setMealBuilderType('pantry');
     renderIngredientRows();
   } else if (m.type === 'recipe') {
@@ -3392,8 +3473,8 @@ function setMealBuilderType(type) {
   document.getElementById('meal-manual-section').style.display = type === 'manual' ? '' : 'none';
 }
 
-function addIngredientRow(productId, qty) {
-  mealIngredients.push({ productId: productId || '', qty: qty || '' });
+function addIngredientRow(productId, qty, unit) {
+  mealIngredients.push({ productId: productId || '', qty: qty || '', unit: unit || 'g' });
   renderIngredientRows();
 }
 
@@ -3422,18 +3503,27 @@ function renderIngredientRows() {
 
   container.innerHTML = mealIngredients.map((ing, i) => {
     let hint = '';
+    const ingUnit = ing.unit || 'g';
     if (ing.productId && ing.qty) {
       const p = state.products.find(x => x.id === ing.productId);
       if (p) {
         const pg = productPerGram(p);
-        const contrib = Math.round(pg.kcal * parseFloat(ing.qty));
+        const qtyG = ingUnit === 'serves' ? parseFloat(ing.qty) * (p.serve || 100) : parseFloat(ing.qty);
+        const contrib = Math.round(pg.kcal * qtyG);
         hint = `<span style="font-size:.7rem; color:var(--accent); white-space:nowrap; min-width:52px;">${contrib} kcal</span>`;
       }
     }
+    // Determine placeholder and step based on unit
+    const placeholder = ingUnit === 'serves' ? 'servings' : 'grams';
+    const step = ingUnit === 'serves' ? '0.5' : '1';
     return `<div class="ingredient-row" data-idx="${i}" style="display:flex;align-items:center;gap:.4rem;">
       <select onchange="updateIngredient(${i},'productId',this.value)" style="flex:1;">${optionHTML.replace(`value="${ing.productId}"`, `value="${ing.productId}" selected`)}</select>
-      <input type="number" min="0" step="1" placeholder="grams" value="${ing.qty}"
-        oninput="updateIngredient(${i},'qty',this.value)" style="width:80px;" />
+      <input type="number" min="0" step="${step}" placeholder="${placeholder}" value="${ing.qty}"
+        oninput="updateIngredient(${i},'qty',this.value)" style="width:70px;" />
+      <select onchange="updateIngredient(${i},'unit',this.value)" style="width:64px; font-size:.75rem; padding:.3rem;">
+        <option value="g"${ingUnit === 'g' ? ' selected' : ''}>g</option>
+        <option value="serves"${ingUnit === 'serves' ? ' selected' : ''}>serves</option>
+      </select>
       ${hint}
       <button class="ing-remove" onclick="removeIngredientRow(${i})">✕</button>
     </div>`;
@@ -3443,7 +3533,7 @@ function renderIngredientRows() {
 
 window.updateIngredient = (idx, field, val) => {
   mealIngredients[idx][field] = val;
-  updateMealPreview();
+  renderIngredientRows();
 };
 
 function calcPantryMealMacros() {
@@ -3453,7 +3543,9 @@ function calcPantryMealMacros() {
     const p = state.products.find(x => x.id === ing.productId);
     if (!p) continue;
     const pg = productPerGram(p);
-    const qtyG = parseFloat(ing.qty) || 0;
+    const ingUnit = ing.unit || 'g';
+    // If unit is 'serves', convert to grams: qty × p.serve
+    const qtyG = ingUnit === 'serves' ? parseFloat(ing.qty) * (p.serve || 100) : parseFloat(ing.qty) || 0;
     kcal += pg.kcal * qtyG;
     prot += pg.prot * qtyG;
     carb += pg.carb * qtyG;
@@ -3587,7 +3679,7 @@ document.getElementById('btn-save-meal').addEventListener('click', () => {
     const m = calcPantryMealMacros();
     const ingredients = validIngs.map(i => {
       const p = state.products.find(x => x.id === i.productId);
-      return { productId: i.productId, name: p ? p.name : '', qty: +i.qty };
+      return { productId: i.productId, name: p ? p.name : '', qty: +i.qty, unit: i.unit || 'g' };
     });
     mealData = {
       name, type: 'pantry',
@@ -3679,7 +3771,7 @@ function renderMeals() {
 
     if (m.type === 'pantry') {
       ingredientLines = (m.ingredients || []).map(i =>
-        `<span>${i.name} — ${i.qty}g</span>`
+        `<span>${i.name} — ${i.qty}${i.unit === 'serves' ? ' serves' : 'g'}</span>`
       ).join('<br>');
       macroHtml = `
         <div class="meal-macros">
@@ -4240,7 +4332,6 @@ async function onBarcodeScanned(barcode) {
   document.getElementById('scanner-status').textContent = '🔍 Looking up barcode ' + barcode + '…';
   await stopScanner();
   try {
-    // Try Australian Open Food Facts first, fall back to global
     let data = null;
     for (const base of ['https://au.openfoodfacts.org', 'https://world.openfoodfacts.org']) {
       const res = await fetch(`${base}/api/v2/product/${barcode}.json?fields=product_name,brands,nutriments,serving_size,categories_tags`);
@@ -4251,27 +4342,28 @@ async function onBarcodeScanned(barcode) {
       document.getElementById('scanner-status').textContent = '⚠️ Product not found for barcode ' + barcode + '. Try adding it manually.';
       return;
     }
-    // Pre-fill the product form
     const n = data.nutriments || {};
-    const serving = parseFloat(data.serving_size) || 100;
-    const scale = serving / 100;
-    document.getElementById('p-name').value  = data.product_name || '';
-    document.getElementById('p-brand').value = data.brands || '';
-    document.getElementById('p-serve').value = Math.round(serving);
-    // Prefer per-100g values if available (most reliable from OFF), else convert from serving
-    if (n['energy-kcal_100g']) {
-      document.getElementById('p-nutr-per').value = '100g';
-      document.getElementById('p-kcal').value = Math.round(n['energy-kcal_100g']);
-      document.getElementById('p-prot').value = (n.proteins_100g || 0).toFixed(1);
-      document.getElementById('p-carb').value = (n.carbohydrates_100g || 0).toFixed(1);
-      document.getElementById('p-fat').value  = (n.fat_100g  || 0).toFixed(1);
-    } else {
-      document.getElementById('p-nutr-per').value = 'serving';
-      document.getElementById('p-kcal').value = n['energy-kcal_serving'] ? Math.round(n['energy-kcal_serving']) : '';
-      document.getElementById('p-prot').value = n['proteins_serving']    ? n['proteins_serving'].toFixed(1)    : '';
-      document.getElementById('p-carb').value = n['carbohydrates_serving'] ? n['carbohydrates_serving'].toFixed(1) : '';
-      document.getElementById('p-fat').value  = n['fat_serving']         ? n['fat_serving'].toFixed(1)         : '';
-    }
+    // Always use per-100g values
+    const kcal = Math.round(n['energy-kcal_100g'] || n['energy-kcal'] || 0);
+    const prot = +(n.proteins_100g || 0).toFixed(1);
+    const carb = +(n.carbohydrates_100g || 0).toFixed(1);
+    const fat  = +(n.fat_100g || 0).toFixed(1);
+    const productName = data.product_name || 'Unknown product';
+    const brandName = data.brands || '';
+    // Ask user for their typical serving size
+    const labelServing = parseFloat(data.serving_size) || null;
+    const servingHint = labelServing ? ` (label says ${Math.round(labelServing)}g)` : '';
+    const userServing = prompt(`✅ Found: ${productName}${brandName ? ' (' + brandName + ')' : ''}\n\nPer 100g: ${kcal} kcal, ${prot}g protein, ${carb}g carbs, ${fat}g fat\n\nWhat is your typical serving size in grams?${servingHint}`, labelServing ? Math.round(labelServing) : 100);
+    if (userServing === null) { toast('Cancelled'); return; }
+    // Fill form
+    document.getElementById('p-name').value  = productName;
+    document.getElementById('p-brand').value = brandName;
+    document.getElementById('p-serve').value = +userServing || 100;
+    document.getElementById('p-nutr-per').value = '100g';
+    document.getElementById('p-kcal').value = kcal;
+    document.getElementById('p-prot').value = prot;
+    document.getElementById('p-carb').value = carb;
+    document.getElementById('p-fat').value  = fat;
     updateNutrLabels();
     // Guess category from tags
     const tags = (data.categories_tags || []).join(' ');
@@ -4279,9 +4371,8 @@ async function onBarcodeScanned(barcode) {
     const matched = catMap.find(([k]) => tags.includes(k));
     if (matched) document.getElementById('p-cat').value = matched[1];
     closeScanner();
-    // Auto-save the product immediately — don't rely on user finding and tapping the form on mobile
     saveProductFromForm();
-    toast('✅ ' + (data.product_name || 'Product') + ' saved to pantry');
+    toast('✅ ' + productName + ' saved to pantry (per 100g)');
   } catch(e) {
     document.getElementById('scanner-status').textContent = '⚠️ Lookup failed. Check your internet connection.';
   }
@@ -4565,12 +4656,61 @@ function renderPlate() {
 }
 
 // ============================================================
+// AUTH
+// ============================================================
+async function hashStr(s) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+const AUTH_USER_HASH = '1dc540f2bfb480239c7658c3158b365ed62ac447fdffa08ccba6fa6be0042eff';
+const AUTH_PASS_HASH = 'b71cbca7407069a394215b29a63dac47686b81551369070bc859c6fe0d011bb0';
+
+async function checkAuth() {
+  if (localStorage.getItem('fuelrun_auth') === 'ok') return true;
+  return false;
+}
+
+async function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  const uH = await hashStr(u);
+  const pH = await hashStr(p);
+  if (uH === AUTH_USER_HASH && pH === AUTH_PASS_HASH) {
+    localStorage.setItem('fuelrun_auth', 'ok');
+    document.getElementById('login-gate').style.display = 'none';
+    document.getElementById('app').style.display = '';
+    initApp();
+  } else {
+    document.getElementById('login-error').style.display = '';
+  }
+}
+
+document.getElementById('btn-login').addEventListener('click', doLogin);
+document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('login-user').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('login-pass').focus(); });
+
+function initApp() {
+  load();
+  renderAll();
+  renderStravaUI();
+  handleStravaOAuthRedirect();
+}
+
+function doLogout() {
+  localStorage.removeItem('fuelrun_auth');
+  location.reload();
+}
+
+// ============================================================
 // INIT
 // ============================================================
-load();
-renderAll();
-renderStravaUI();
-handleStravaOAuthRedirect();
+(async () => {
+  if (await checkAuth()) {
+    document.getElementById('login-gate').style.display = 'none';
+    document.getElementById('app').style.display = '';
+    initApp();
+  }
+})();
 </script>
 </body>
 </html>

@@ -1276,6 +1276,44 @@ function applyParsed(parsed) {
     const curWeekKey = isoWeekKey(curMonday);
     state.profiles.forEach(prof => {
       if (!prof.weekSessions) return;
+
+      // Deduplicate Strava activities across weeks — keep only the entry in the correct week
+      const seenStrava = new Map(); // stravaId → { weekKey, startDate }
+      for (const wk of Object.keys(prof.weekSessions)) {
+        for (const s of (prof.weekSessions[wk] || [])) {
+          if (!s.stravaId) continue;
+          const prev = seenStrava.get(s.stravaId);
+          if (!prev) {
+            seenStrava.set(s.stravaId, { wk, startDate: s.startDate || '' });
+          } else {
+            // Keep the one with startDate, or the one whose week matches the actual date
+            let correctWk = wk;
+            if (s.startDate) {
+              const d = new Date(s.startDate);
+              if (!isNaN(d.getTime())) {
+                const dm = (d.getDay() + 6) % 7;
+                const mon = new Date(d); mon.setDate(d.getDate() - dm); mon.setHours(0,0,0,0);
+                correctWk = isoWeekKey(mon);
+              }
+            } else if (prev.startDate) {
+              const d = new Date(prev.startDate);
+              if (!isNaN(d.getTime())) {
+                const dm = (d.getDay() + 6) % 7;
+                const mon = new Date(d); mon.setDate(d.getDate() - dm); mon.setHours(0,0,0,0);
+                correctWk = isoWeekKey(mon);
+              }
+            }
+            // Remove the duplicate from the wrong week
+            const wrongWk = correctWk === wk ? prev.wk : wk;
+            if (prof.weekSessions[wrongWk]) {
+              prof.weekSessions[wrongWk] = prof.weekSessions[wrongWk].filter(x => x.stravaId !== s.stravaId);
+            }
+            seenStrava.set(s.stravaId, { wk: correctWk, startDate: s.startDate || prev.startDate });
+          }
+        }
+      }
+
+      // Remove future weeks and future days in current week
       for (const wk of Object.keys(prof.weekSessions)) {
         if (wk > curWeekKey) {
           delete prof.weekSessions[wk];
@@ -2453,28 +2491,17 @@ function classifyWorkout(s) {
           const avgWorkDistM = Math.round(avgWorkDist * 1000);
           const avgWorkElev = workLaps.reduce((s, l) => s + l.elev, 0) / workLaps.length;
 
-          // Detect workout sub-type: hill repeats vs strides vs flat intervals
+          // Detect workout sub-type: strides vs flat intervals
           let workoutSubType = 'intervals';
           let subTypeDetail = '';
-          if (avgWorkElev > 3 && hasSignificantElev) {
-            // Significant elevation gain per work lap → hill repeats
-            if (avgWorkDistM <= 150) {
-              workoutSubType = 'hill_strides';
-              subTypeDetail = `Hill strides (~${avgWorkDistM}m, ~${Math.round(avgWorkElev)}m gain each)`;
-            } else {
-              workoutSubType = 'hill_repeats';
-              subTypeDetail = `Hill repeats (~${avgWorkDistM}m, ~${Math.round(avgWorkElev)}m gain each)`;
-            }
-          } else if (avgWorkDistM <= 150) {
+          if (avgWorkDistM <= 150) {
             workoutSubType = 'strides';
             subTypeDetail = `Strides (~${avgWorkDistM}m each)`;
           }
 
           // Daniels zone classification for work segments
           let danielsZone = '';
-          if (workoutSubType === 'hill_repeats' || workoutSubType === 'hill_strides') {
-            danielsZone = ''; // Pace zones not meaningful on hills
-          } else if (fiveKPace && avgWork <= fiveKPace * 0.95) danielsZone = ' (R-pace — repetition/speed)';
+          if (fiveKPace && avgWork <= fiveKPace * 0.95) danielsZone = ' (R-pace — repetition/speed)';
           else if (fiveKPace && avgWork <= fiveKPace * 1.05) danielsZone = ' (I-pace — VO₂max intervals)';
           else if (thresholdPaceRef && avgWork <= thresholdPaceRef * 1.05) danielsZone = ' (T-pace — threshold)';
 
@@ -2490,13 +2517,9 @@ function classifyWorkout(s) {
           }
           intervalDetail += '.';
 
-          // Elevation context for hill work
-          if ((workoutSubType === 'hill_repeats' || workoutSubType === 'hill_strides') && totalElev) {
+          // Elevation context
+          if (totalElev > 30) {
             intervalDetail += ` Total elevation gain: ${Math.round(totalElev)}m.`;
-            // HR is expected to be higher on hills — note this
-            if (pctHr && pctHr > 0.82) {
-              intervalDetail += ` Elevated HR (${Math.round(pctHr*100)}% max) is expected for uphill efforts — effort is driven by gradient, not pace.`;
-            }
           }
 
           // Work lap HR analysis
@@ -2582,13 +2605,7 @@ function classifyWorkout(s) {
     // Customize label based on sub-type
     let intervalLabel = '⚡ Interval / Speed';
     let intervalPurpose = `Develops VO₂max and running economy through alternating work and recovery segments.`;
-    if (intervalDetail.includes('Hill repeats')) {
-      intervalLabel = '⛰️ Hill Repeats';
-      intervalPurpose = `Builds power, strength and running economy through uphill efforts. Hill repeats develop leg strength that translates to faster flat running (Daniels, Pfitzinger). The gradient adds resistance without the joint impact of flat sprinting.`;
-    } else if (intervalDetail.includes('Hill strides')) {
-      intervalLabel = '⛰️ Hill Strides';
-      intervalPurpose = `Short, controlled uphill accelerations to build power and neuromuscular coordination. Less taxing than full hill repeats — excellent for integrating into easy run days.`;
-    } else if (intervalDetail.includes('Strides')) {
+    if (intervalDetail.includes('Strides')) {
       intervalLabel = '🦶 Strides';
       intervalPurpose = `Short accelerations (~60-100m) at fast but controlled effort to maintain neuromuscular speed and running form. Per Daniels and Pfitzinger, strides keep the legs "sharp" without adding training stress.`;
     }

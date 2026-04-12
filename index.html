@@ -1216,6 +1216,8 @@ function applyParsed(parsed) {
       if (!p.dailyLog) p.dailyLog = [];
       if (!p.weekSessions) p.weekSessions = {};
       if (!p.weekMeals) p.weekMeals = {};
+      // Clear legacy sessions fallback (old ICS/plan data) — only weekSessions is used now
+      if (p.sessions) p.sessions = [];
     });
   }
   // Clean up: per-100g products should not have a serve value
@@ -2239,7 +2241,14 @@ let weekOffset = 0;
 // ============================================================
 function sessionsForWeekDay(weekKey, dayIdx) {
   const ap = activeProfile();
-  const sessions = (ap.weekSessions && ap.weekSessions[weekKey]) || ap.sessions || [];
+  const sessions = (ap.weekSessions && ap.weekSessions[weekKey]) || [];
+  // Don't show sessions for future days in the current week
+  const now = new Date();
+  const todayMon0 = (now.getDay() + 6) % 7;
+  const curWeekKey = isoWeekKey(mondayOfOffset(0));
+  if (weekKey === curWeekKey && dayIdx > todayMon0) return [];
+  // Don't show sessions for entirely future weeks
+  if (weekKey > curWeekKey) return [];
   return sessions.filter(s => s.day === dayIdx);
 }
 function sessionForWeekDay(weekKey, dayIdx) {

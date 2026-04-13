@@ -49,6 +49,20 @@ serve(async (req) => {
 /* ── Woolworths ──────────────────────────────────── */
 async function searchWoolworths(query: string): Promise<Product[]> {
   try {
+    // First do a GET to the main site to obtain a session cookie
+    const initRes = await fetch("https://www.woolworths.com.au/", {
+      method: "GET",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        Accept: "text/html",
+      },
+    });
+    const cookies = (initRes.headers.get("set-cookie") || "").split(",")
+      .map(c => c.split(";")[0].trim())
+      .filter(Boolean)
+      .join("; ");
+
     const res = await fetch(
       "https://www.woolworths.com.au/apis/ui/Search/products",
       {
@@ -56,8 +70,11 @@ async function searchWoolworths(query: string): Promise<Product[]> {
         headers: {
           "Content-Type": "application/json",
           "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
           Accept: "application/json",
+          Origin: "https://www.woolworths.com.au",
+          Referer: `https://www.woolworths.com.au/shop/search/products?searchTerm=${encodeURIComponent(query)}`,
+          ...(cookies ? { Cookie: cookies } : {}),
         },
         body: JSON.stringify({
           SearchTerm: query,
@@ -70,7 +87,7 @@ async function searchWoolworths(query: string): Promise<Product[]> {
     );
 
     if (!res.ok) {
-      console.error("Woolworths API error:", res.status);
+      console.error("Woolworths API error:", res.status, await res.text().catch(() => ""));
       return [];
     }
 
@@ -88,7 +105,7 @@ async function searchWoolworths(query: string): Promise<Product[]> {
         name: p.Name || "",
         brand: p.Brand || "",
         store: "Woolworths",
-        serve: nutrition.serve || p.PackageSize ? parsePackageSize(p.PackageSize) : 100,
+        serve: nutrition.serve || (p.PackageSize ? parsePackageSize(p.PackageSize) : 100),
         kcal: nutrition.kcal,
         prot: nutrition.prot,
         carb: nutrition.carb,

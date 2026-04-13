@@ -784,9 +784,9 @@
           <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">Build meals from your pantry products or save recipes. <strong>Drag</strong> a meal card (or tap <strong>＋</strong>) to log it to today's plate.</p>
           <div style="display:flex; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm meal-filter-btn active" data-filter="all">All meals</button>
-            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="pantry">🛒 From Pantry</button>
-            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="recipe">🌐 From Recipe</button>
-            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="manual">✍️ Manual</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="breakfast">🌅 Breakfast</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="lunch">🍽️ Lunch / Dinner</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="snack">🥜 Snack</button>
           </div>
           <div class="meal-grid" id="meal-grid"></div>
           <p id="no-meals" style="color:var(--muted); font-size:.85rem;">No meals saved yet. Create your first meal above.</p>
@@ -1002,6 +1002,14 @@
     <div class="form-row">
       <label>Meal Name</label>
       <input type="text" id="meal-name" placeholder="e.g. Post-run recovery bowl" />
+    </div>
+    <div class="form-row">
+      <label>Meal Category</label>
+      <select id="meal-cat" style="width:100%;">
+        <option value="breakfast">🌅 Breakfast</option>
+        <option value="lunch" selected>🍽️ Lunch / Dinner</option>
+        <option value="snack">🥜 Snack</option>
+      </select>
     </div>
     <!-- Pantry section -->
     <div id="meal-pantry-section">
@@ -3733,6 +3741,7 @@ window.editMeal = id => {
   mealIngredients = [];
   // Clear all fields first
   document.getElementById('meal-name').value = m.name || '';
+  document.getElementById('meal-cat').value = m.mealCat || 'lunch';
   document.getElementById('meal-url').value = m.url || '';
   document.getElementById('meal-source').value = m.source || '';
   document.getElementById('meal-notes').value = m.notes || '';
@@ -3828,7 +3837,7 @@ function renderIngredientRows() {
         const contrib = per === 'serving'
           ? Math.round((p.kcal || 0) * qty)
           : Math.round((p.kcal || 0) / 100 * qty);
-        hint = `<span style="font-size:.7rem; color:var(--accent); white-space:nowrap; min-width:52px;">${contrib} kcal</span>`;
+        hint = `<span class="ing-kcal-hint" style="font-size:.7rem; color:var(--accent); white-space:nowrap; min-width:52px;">${contrib} kcal</span>`;
       }
     }
     // Determine unit label based on product type
@@ -3856,8 +3865,28 @@ window.updateIngredient = (idx, field, val) => {
     if (p) {
       mealIngredients[idx].unit = (p.nutrPer === 'serving') ? 'serves' : 'g';
     }
+    renderIngredientRows(); // full re-render only when product changes
+  } else if (field === 'qty') {
+    // Update hint inline without re-rendering (avoids cursor jump)
+    const row = document.querySelector(`.ingredient-row[data-idx="${idx}"]`);
+    if (row) {
+      const hintEl = row.querySelector('.ing-kcal-hint');
+      if (hintEl && mealIngredients[idx].productId) {
+        const p = state.products.find(x => x.id === mealIngredients[idx].productId);
+        if (p) {
+          const qty = parseFloat(val) || 0;
+          const per = p.nutrPer || '100g';
+          const contrib = per === 'serving'
+            ? Math.round((p.kcal || 0) * qty)
+            : Math.round((p.kcal || 0) / 100 * qty);
+          hintEl.textContent = contrib + ' kcal';
+        }
+      }
+    }
+    updateMealPreview();
+  } else {
+    renderIngredientRows();
   }
-  renderIngredientRows();
 };
 
 function calcPantryMealMacros() {
@@ -4044,6 +4073,8 @@ document.getElementById('btn-save-meal').addEventListener('click', () => {
       updatedAt: new Date().toISOString(),
     };
   }
+  // Add meal category
+  mealData.mealCat = document.getElementById('meal-cat').value || 'lunch';
   if (editingMealId) {
     const existing = state.meals.find(x => x.id === editingMealId);
     if (existing) Object.assign(existing, mealData);
@@ -4094,7 +4125,7 @@ function renderMeals() {
   const none = document.getElementById('no-meals');
   if (!grid) return;
 
-  const filtered = state.meals.filter(m => !m.deletedAt && (mealFilter === 'all' || m.type === mealFilter));
+  const filtered = state.meals.filter(m => !m.deletedAt && (mealFilter === 'all' || (m.mealCat || 'lunch') === mealFilter));
   if (!filtered.length) {
     grid.innerHTML = '';
     none.style.display = '';
@@ -4102,7 +4133,17 @@ function renderMeals() {
   }
   none.style.display = 'none';
 
-  grid.innerHTML = filtered.map(m => {
+  // Group by meal category
+  const catLabels = { breakfast: '🌅 Breakfast', lunch: '🍽️ Lunch / Dinner', snack: '🥜 Snack' };
+  const catOrder = ['breakfast', 'lunch', 'snack'];
+  const groups = {};
+  filtered.forEach(m => {
+    const cat = m.mealCat || 'lunch';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(m);
+  });
+
+  const mealChip = m => {
     const badgeClass = m.type === 'pantry' ? 'meal-type-pantry' : m.type === 'manual' ? 'meal-type-manual' : 'meal-type-recipe';
     const badgeLabel = m.type === 'pantry' ? '🛒 From Pantry' : m.type === 'manual' ? '✍️ Manual' : '🌐 From Recipe';
 
@@ -4192,6 +4233,16 @@ function renderMeals() {
           </div>
         </div>
       </div>`;
+  };
+
+  // Render grouped by category (or flat if filtering by single category)
+  const catsToShow = mealFilter === 'all' ? catOrder.filter(c => groups[c]) : [mealFilter];
+  grid.innerHTML = catsToShow.map(cat => {
+    const meals = groups[cat] || [];
+    if (!meals.length) return '';
+    const showHeader = mealFilter === 'all' && catsToShow.length > 1;
+    return (showHeader ? `<div class="product-group-title" style="width:100%;">${catLabels[cat] || cat} <span style="font-weight:400; font-size:.72rem;">(${meals.length})</span></div>` : '')
+      + meals.map(mealChip).join('');
   }).join('');
 }
 
@@ -4889,6 +4940,10 @@ function openQtyModal(type, id) {
     if (!m) return;
     name = m.name;
     if (m.type === 'pantry') {
+      defaultQty = 1; unit = 'servings';
+      kcalPer = m.kcal; protPer = m.prot; carbPer = m.carb; fatPer = m.fat;
+    } else if (m.type === 'manual') {
+      // Manual meals store total macros — treat as 1 serving
       defaultQty = 1; unit = 'servings';
       kcalPer = m.kcal; protPer = m.prot; carbPer = m.carb; fatPer = m.fat;
     } else {

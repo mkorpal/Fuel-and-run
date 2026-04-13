@@ -4562,17 +4562,8 @@ function renderDashboard() {
     }
   }
 
-  // Deficit / surplus per day (total consumed - total TDEE) / daysElapsed
-  let totalTdee = 0;
-  for (let d = 0; d < daysElapsed; d++) {
-    const dt = new Date(monday);
-    dt.setDate(monday.getDate() + d);
-    const ds = dateStr(dt);
-    const entry = log.find(l => l.date === ds);
-    if (entry && entry.tdee) { totalTdee += entry.tdee; }
-    else { const t = dailyTargets(d); totalTdee += t.tdee; }
-  }
-  const deficitTotal = kcalConsumed - totalTdee;
+  // Deficit / surplus per day: consumed minus burned
+  const deficitTotal = kcalConsumed - kcalBurned;
   const deficitPerDay = daysElapsed > 0 ? Math.round(deficitTotal / daysElapsed) : 0;
   const deficitLabel = deficitPerDay > 0 ? '+' + deficitPerDay : String(deficitPerDay);
   const deficitClass = deficitPerDay > 0 ? 'danger' : '';

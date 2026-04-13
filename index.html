@@ -4500,23 +4500,22 @@ function renderDashboard() {
   const ap = activeProfile();
   const w = ap.weight || 72;
 
-  // --- Viewed-week actuals (Mon=0 through today or full week if past) ---
+  // --- Viewed-week stats: actuals for past days + estimate for today ---
   const monday = mondayOfOffset(weekOffset);
   const wk = isoWeekKey(monday);
   const curWeekKey = isoWeekKey(mondayOfOffset(0));
   const todayMon0 = (new Date().getDay() + 6) % 7; // 0=Mon .. 6=Sun
   const isPast = wk < curWeekKey;
   const isFuture = wk > curWeekKey;
-  const dayLimit = isPast ? 6 : isFuture ? -1 : todayMon0;
   const daysElapsed = isPast ? 7 : isFuture ? 0 : todayMon0 + 1;
   const weekSessions = (ap.weekSessions && ap.weekSessions[wk]) || (ap.sessions || []);
-  // Only sessions up to today (or all if past week)
-  const sessionsThisWeek = weekSessions.filter(s => s.day <= dayLimit);
   const hardDays = weekSessions.filter(s => s.intensity === 'hard' || s.intensity === 'race').length;
 
+  // Only sessions up to and including today (or all if past week)
+  const sessionsThisWeek = weekSessions.filter(s => isPast ? true : isFuture ? false : s.day <= todayMon0);
+  const kcalBurned = sessionsThisWeek.reduce((a, s) => a + estimateBurn(s), 0);
   const runKm = sessionsThisWeek.filter(s => s.type === 'run').reduce((a, s) => a + (s.dist || 0), 0);
   const strengthMins = sessionsThisWeek.filter(s => s.type === 'strength').reduce((a, s) => a + (s.dur || 0), 0);
-  const kcalBurned = sessionsThisWeek.reduce((a, s) => a + estimateBurn(s), 0);
 
   // Consumed + macros from dailyLog this week
   const log = ap.dailyLog || [];

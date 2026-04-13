@@ -49,45 +49,19 @@ serve(async (req) => {
 /* ── Woolworths ──────────────────────────────────── */
 async function searchWoolworths(query: string): Promise<Product[]> {
   try {
-    // First do a GET to the main site to obtain a session cookie
-    const initRes = await fetch("https://www.woolworths.com.au/", {
+    // Use the v2 GET endpoint — works without cookies/session
+    const url = `https://www.woolworths.com.au/apis/ui/v2/Search/products?searchTerm=${encodeURIComponent(query)}&pageNumber=1&pageSize=8&sortType=TraderRelevance`;
+    const res = await fetch(url, {
       method: "GET",
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        Accept: "text/html",
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+        Accept: "application/json",
       },
     });
-    const cookies = (initRes.headers.get("set-cookie") || "").split(",")
-      .map(c => c.split(";")[0].trim())
-      .filter(Boolean)
-      .join("; ");
-
-    const res = await fetch(
-      "https://www.woolworths.com.au/apis/ui/Search/products",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-          Accept: "application/json",
-          Origin: "https://www.woolworths.com.au",
-          Referer: `https://www.woolworths.com.au/shop/search/products?searchTerm=${encodeURIComponent(query)}`,
-          ...(cookies ? { Cookie: cookies } : {}),
-        },
-        body: JSON.stringify({
-          SearchTerm: query,
-          PageNumber: 1,
-          PageSize: 8,
-          SortType: "TraderRelevance",
-          Location: `/shop/search/products?searchTerm=${encodeURIComponent(query)}`,
-        }),
-      }
-    );
 
     if (!res.ok) {
-      console.error("Woolworths API error:", res.status, await res.text().catch(() => ""));
+      console.error("Woolworths API error:", res.status);
       return [];
     }
 
@@ -98,14 +72,13 @@ async function searchWoolworths(query: string): Promise<Product[]> {
       const p = item.Products?.[0] || item;
       if (!p.Name) continue;
 
-      // Try to extract nutrition from the product's additional attributes
       const nutrition = parseWoolworthsNutrition(p);
 
       products.push({
         name: p.Name || "",
         brand: p.Brand || "",
         store: "Woolworths",
-        serve: nutrition.serve || (p.PackageSize ? parsePackageSize(p.PackageSize) : 100),
+        serve: nutrition.serve,
         kcal: nutrition.kcal,
         prot: nutrition.prot,
         carb: nutrition.carb,
@@ -127,42 +100,50 @@ async function searchWoolworths(query: string): Promise<Product[]> {
 function parseWoolworthsNutrition(p: any) {
   const result = { serve: 100, kcal: 0, prot: 0, carb: 0, fat: 0 };
 
-  // Woolworths sometimes includes AdditionalAttributes with nutrition info
   const attrs = p.AdditionalAttributes || {};
-  const ni = attrs.nutritionalinformation || attrs.NutritionalInformation;
 
-  if (ni && typeof ni === "string") {
-    try {
-      const info = JSON.parse(ni);
-      // Parse the NIP (Nutrition Information Panel)
-      for (const row of info || []) {
-        const name = (row.name || "").toLowerCase();
-        const per100 = parseFloat(row.values?.[1]?.value || row.per100g || "0");
-        const perServe = parseFloat(row.values?.[0]?.value || row.perServing || "0");
-
-        if (name.includes("energy") && name.includes("kcal")) {
-          result.kcal = Math.round(per100 || perServe);
-        } else if (name.includes("energy") && !name.includes("kcal")) {
-          // kJ → kcal
-          const kj = per100 || perServe;
-          if (kj > 100) result.kcal = Math.round(kj / 4.184);
-        } else if (name.includes("protein")) {
-          result.prot = +(per100 || perServe).toFixed(1);
-        } else if (
-          name.includes("carbohydrate") &&
-          !name.includes("sugar")
-        ) {
-          result.carb = +(per100 || perServe).toFixed(1);
-        } else if (name.includes("fat") && !name.includes("saturated")) {
-          result.fat = +(per100 || perServe).toFixed(1);
-        }
-      }
-    } catch {
-      // not JSON
-    }
+  // Parse serving size from NIP field
+  const servingStr = attrs["servingsize-total-nip"];
+  if (servingStr) {
+    const sm = String(servingStr).match(/(\d+(?:\.\d+)?)\s*[gG]/);
+    if (sm) result.serve = parseFloat(sm[1]);
   }
 
-  // Fallback: try RichDescription HTML parsing
+  // nutritionalinformation can be a JSON string or object
+  let ni = attrs.nutritionalinformation || attrs.NutritionalInformation;
+  if (typeof ni === "string") {
+    try { ni = JSON.parse(ni); } catch { ni = null; }
+  }
+
+  if (ni) {
+    // New format: { Name, Attributes: [{Name, Value}, ...] }
+    const rows = ni.Attributes || ni;
+    if (Array.isArray(rows)) {
+      for (const row of rows) {
+        const name = (row.Name || row.name || "").toLowerCase();
+        const valStr = row.Value || row.value || "";
+        const val = parseFloat(String(valStr).replace(/[^\d.]/g, "")) || 0;
+        const isPer100 = name.includes("per 100");
+
+        if (isPer100) {
+          if (name.includes("energy")) {
+            if (name.includes("kcal") || name.includes("cal")) {
+              result.kcal = Math.round(val);
+            } else {
+              // kJ → kcal
+              if (val > 0 && !result.kcal) result.kcal = Math.round(val / 4.184);
+            }
+          } else if (name.includes("protein")) {
+            result.prot = +val.toFixed(1);
+          } else if (name.includes("carbohydrate") && !name.includes("sugar")) {
+            result.carb = +val.toFixed(1);
+          } else if (name.includes("fat") && !name.includes("saturated") && !name.includes("trans")) {
+            result.fat = +val.toFixed(1);
+          }
+        }
+      }
+    }
+  }
   const rd =
     p.RichDescription || p.AdditionalAttributes?.description || "";
   if (rd && !result.kcal) {

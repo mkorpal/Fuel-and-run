@@ -4943,9 +4943,18 @@ function openQtyModal(type, id) {
       defaultQty = 1; unit = 'servings';
       kcalPer = m.kcal; protPer = m.prot; carbPer = m.carb; fatPer = m.fat;
     } else if (m.type === 'manual') {
-      // Manual meals store total macros — treat as 1 serving
-      defaultQty = 1; unit = 'servings';
-      kcalPer = m.kcal; protPer = m.prot; carbPer = m.carb; fatPer = m.fat;
+      if (m.serve) {
+        // Manual meal with serving size — use gram-based entry
+        defaultQty = m.serve; unit = 'g';
+        kcalPer = (m.kcal || 0) / m.serve;
+        protPer = (m.prot || 0) / m.serve;
+        carbPer = (m.carb || 0) / m.serve;
+        fatPer  = (m.fat  || 0) / m.serve;
+      } else {
+        // Manual meal without serving size — treat as 1 serving
+        defaultQty = 1; unit = 'servings';
+        kcalPer = m.kcal; protPer = m.prot; carbPer = m.carb; fatPer = m.fat;
+      }
     } else {
       defaultQty = 100; unit = 'g';
       kcalPer = m.kcal100 ? m.kcal100 / 100 : null;

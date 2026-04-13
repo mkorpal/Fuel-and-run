@@ -4922,6 +4922,8 @@ function openQtyModal(type, id) {
   let name, defaultQty, unit, kcalPer, protPer, carbPer, fatPer;
   let eachInfo = null; // { key, weight } if product supports eaches
   let currentUnit = 'grams'; // 'grams' or 'eaches'
+  // Per-serving macros for eaches mode (bypasses gram conversion)
+  let perServingMacros = null;
 
   if (type === 'product') {
     const p = state.products.find(x => x.id === id);
@@ -4935,6 +4937,11 @@ function openQtyModal(type, id) {
     carbPer = pg.carb || null;
     fatPer  = pg.fat  || null;
     eachInfo = getEachWeight(p.name);
+    // For per-serving products, store raw per-serving values so eaches mode
+    // uses them directly (1 each = 1 serving) instead of gram conversion
+    if (p.nutrPer === 'serving') {
+      perServingMacros = { kcal: p.kcal || 0, prot: p.prot || 0, carb: p.carb || 0, fat: p.fat || 0 };
+    }
   } else {
     const m = state.meals.find(x => x.id === id);
     if (!m) return;
@@ -5008,14 +5015,29 @@ function openQtyModal(type, id) {
   }
 
   function updatePreview() {
-    const grams = getEffectiveQtyGrams();
-    if (!grams || !kcalPer) { previewEl.textContent = ''; return; }
-    const kcal = Math.round(kcalPer * grams);
+    const raw = parseFloat(input.value) || 0;
+    if (!raw) { previewEl.textContent = ''; return; }
+    let kcal, prot, carb, fat, grams;
+    if (currentUnit === 'eaches' && perServingMacros) {
+      // Per-serving product: 1 each = 1 serving, use raw macros directly
+      kcal = Math.round((perServingMacros.kcal || 0) * raw);
+      prot = (perServingMacros.prot || 0) * raw;
+      carb = (perServingMacros.carb || 0) * raw;
+      fat  = (perServingMacros.fat  || 0) * raw;
+      grams = eachInfo ? Math.round(raw * eachInfo.weight) : null;
+    } else {
+      grams = getEffectiveQtyGrams();
+      if (!kcalPer) { previewEl.textContent = ''; return; }
+      kcal = Math.round(kcalPer * grams);
+      prot = (protPer || 0) * grams;
+      carb = (carbPer || 0) * grams;
+      fat  = (fatPer  || 0) * grams;
+    }
     const parts = [kcal + ' kcal'];
-    if (protPer) parts.push('P ' + (protPer * grams).toFixed(1) + 'g');
-    if (carbPer) parts.push('C ' + (carbPer * grams).toFixed(1) + 'g');
-    if (fatPer)  parts.push('F ' + (fatPer  * grams).toFixed(1) + 'g');
-    if (currentUnit === 'eaches' && eachInfo) {
+    if (prot) parts.push('P ' + prot.toFixed(1) + 'g');
+    if (carb) parts.push('C ' + carb.toFixed(1) + 'g');
+    if (fat)  parts.push('F ' + fat.toFixed(1) + 'g');
+    if (currentUnit === 'eaches' && grams) {
       parts.push('(' + grams + 'g)');
     }
     previewEl.textContent = parts.join(' · ');
@@ -5035,11 +5057,20 @@ function openQtyModal(type, id) {
     if (!confirmed) return;
     const rawQty = parseFloat(input.value) || 0;
     if (!rawQty) { toast('Enter a quantity first'); return; }
-    const grams = getEffectiveQtyGrams();
-    const kcal = kcalPer ? Math.round(kcalPer * grams) : 0;
-    const prot = protPer ? parseFloat((protPer * grams).toFixed(1)) : 0;
-    const carb = carbPer ? parseFloat((carbPer * grams).toFixed(1)) : 0;
-    const fat  = fatPer  ? parseFloat((fatPer  * grams).toFixed(1)) : 0;
+    let kcal, prot, carb, fat;
+    if (currentUnit === 'eaches' && perServingMacros) {
+      // Per-serving: 1 each = 1 serving
+      kcal = Math.round((perServingMacros.kcal || 0) * rawQty);
+      prot = parseFloat(((perServingMacros.prot || 0) * rawQty).toFixed(1));
+      carb = parseFloat(((perServingMacros.carb || 0) * rawQty).toFixed(1));
+      fat  = parseFloat(((perServingMacros.fat  || 0) * rawQty).toFixed(1));
+    } else {
+      const grams = getEffectiveQtyGrams();
+      kcal = kcalPer ? Math.round(kcalPer * grams) : 0;
+      prot = protPer ? parseFloat((protPer * grams).toFixed(1)) : 0;
+      carb = carbPer ? parseFloat((carbPer * grams).toFixed(1)) : 0;
+      fat  = fatPer  ? parseFloat((fatPer  * grams).toFixed(1)) : 0;
+    }
     const displayUnit = currentUnit === 'eaches' ? 'eaches' : unit;
     addToPlate(type, id, name, rawQty, displayUnit, kcal, prot, carb, fat);
   };

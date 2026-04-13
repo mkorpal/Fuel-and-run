@@ -613,22 +613,20 @@
         </div>
       </div>
       <div class="card">
-        <div class="card-title">Add / Edit Session Manually</div>
+        <div class="card-title">Log Activity Manually</div>
         <div class="form-inline">
           <div class="form-row">
-            <label>Day</label>
-            <select id="man-day">
-              <option>Monday</option><option>Tuesday</option><option>Wednesday</option>
-              <option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option>
-            </select>
+            <label>Date</label>
+            <input type="date" id="man-date" />
           </div>
           <div class="form-row">
             <label>Type</label>
             <select id="man-type">
               <option value="run">Run</option>
+              <option value="walk">Walk</option>
               <option value="bike">Bike</option>
               <option value="swim">Swim</option>
-              <option value="strength">Strength</option>
+              <option value="strength">Strength Training</option>
               <option value="rest">Rest</option>
               <option value="other">Other</option>
             </select>
@@ -642,6 +640,10 @@
             <input type="number" id="man-dur" min="0" step="5" placeholder="e.g. 60" />
           </div>
           <div class="form-row">
+            <label>kcal Burned</label>
+            <input type="number" id="man-cal" min="0" placeholder="e.g. 450" />
+          </div>
+          <div class="form-row">
             <label>Intensity</label>
             <select id="man-int">
               <option value="easy">Easy</option>
@@ -651,7 +653,7 @@
             </select>
           </div>
         </div>
-        <button class="btn btn-primary" id="btn-add-session">Add Session</button>
+        <button class="btn btn-primary" id="btn-add-session">Log Activity</button>
       </div>
     </section>
 
@@ -844,6 +846,7 @@
           <div class="form-row"><label>Height (cm)</label><input type="number" id="prof-height" placeholder="e.g. 175" /></div>
         </div>
         <div class="form-inline">
+          <div class="form-row"><label>Resting Metabolic Rate (kcal/day)</label><input type="number" id="prof-rmr" placeholder="e.g. 1600" /></div>
           <div class="form-row"><label>Avg weekly run (km)</label><input type="number" id="prof-km" value="75" /></div>
           <div class="form-row">
             <label>Diet style</label>
@@ -1087,6 +1090,7 @@ function newProfile(id, name) {
   return { id, name: name||'Runner '+(id), age: '', sex: 'male', weight: 72,
     goalWeight: 69.5, height: 175, weeklyKm: 75, diet: 'plantforward', notes: '',
     trainingGoal: '', pbMarathon: '', pbHalf: '', pb10k: '', pb5k: '',
+    rmr: '',
     sessions: [], dailyLog: [],
     weekSessions: {}, weekMeals: {} };
 }
@@ -2142,23 +2146,40 @@ document.getElementById('btn-strava-sync').addEventListener('click', () => {
 // ============================================================
 // MANUAL SESSION
 // ============================================================
+// Set default date on manual activity form to today
+(function setManDateDefault() {
+  const el = document.getElementById('man-date');
+  if (el) el.value = dateStr(new Date());
+})();
+
 document.getElementById('btn-add-session').addEventListener('click', () => {
-  const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-  const dayName = document.getElementById('man-day').value;
-  const dayIdx = days.indexOf(dayName);
+  const dateVal = document.getElementById('man-date').value;
+  if (!dateVal) { toast('Please select a date'); return; }
+  const selDate = new Date(dateVal + 'T00:00:00');
+  const dayIdx = (selDate.getDay() + 6) % 7; // Mon=0
+  const monday = new Date(selDate);
+  monday.setDate(selDate.getDate() - dayIdx);
+  monday.setHours(0, 0, 0, 0);
+  const wk = isoWeekKey(monday);
   const type = document.getElementById('man-type').value;
   const dist = parseFloat(document.getElementById('man-dist').value) || 0;
   const dur  = parseInt(document.getElementById('man-dur').value) || 0;
+  const cal  = parseInt(document.getElementById('man-cal').value) || null;
   const intensity = document.getElementById('man-int').value;
   const ap = activeProfile();
   if (!ap.weekSessions) ap.weekSessions = {};
-  const wk = isoWeekKey(mondayOfOffset(weekOffset));
   if (!ap.weekSessions[wk]) ap.weekSessions[wk] = [];
-  ap.weekSessions[wk] = ap.weekSessions[wk].filter(s => s.day !== dayIdx);
-  ap.weekSessions[wk].push({ day: dayIdx, type, dist, dur, intensity, title: type.charAt(0).toUpperCase()+type.slice(1), updatedAt: new Date().toISOString() });
-  if (weekOffset === 0) ap.sessions = ap.weekSessions[wk]; // keep legacy array in sync
+  // Allow multiple sessions per day — remove only if same day + same type (update)
+  ap.weekSessions[wk] = ap.weekSessions[wk].filter(s => !(s.day === dayIdx && s.type === type && !s.stravaId && !s.startTime));
+  ap.weekSessions[wk].push({ day: dayIdx, type, dist, dur, intensity, calories: cal, title: type.charAt(0).toUpperCase()+type.slice(1), updatedAt: new Date().toISOString() });
+  const curWk = isoWeekKey(mondayOfOffset(0));
+  if (wk === curWk) ap.sessions = ap.weekSessions[wk];
+  // Navigate to the logged week
+  const thisMonday = mondayOfOffset(0);
+  weekOffset = Math.round((monday - thisMonday) / (7 * 86400000));
   save(); renderAll();
-  toast('Session saved for ' + dayName);
+  const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  toast('Activity logged for ' + DAYS[dayIdx] + ' ' + dateVal);
 });
 
 // ============================================================
@@ -4514,13 +4535,13 @@ function renderDashboard() {
   // Only sessions up to and including today (or all if past week)
   const sessionsThisWeek = weekSessions.filter(s => isPast ? true : isFuture ? false : s.day <= todayMon0);
   const exerciseBurn = sessionsThisWeek.reduce((a, s) => a + estimateBurn(s), 0);
-  // Total burn = RMR (Mifflin-St Jeor) per elapsed day + exercise
+  // RMR: use profile value if set, else Mifflin-St Jeor fallback
   const isFemale = ap.sex === 'female';
   const h = ap.height || 175;
   const age = ap.age || 35;
-  const rmr = isFemale
+  const rmr = ap.rmr ? ap.rmr : (isFemale
     ? Math.round(10*w + 6.25*h - 5*age - 161)
-    : Math.round(10*w + 6.25*h - 5*age + 5);
+    : Math.round(10*w + 6.25*h - 5*age + 5));
   const kcalBurned = rmr * daysElapsed + exerciseBurn;
   const runKm = sessionsThisWeek.filter(s => s.type === 'run').reduce((a, s) => a + (s.dist || 0), 0);
   const strengthMins = sessionsThisWeek.filter(s => s.type === 'strength').reduce((a, s) => a + (s.dur || 0), 0);
@@ -4729,6 +4750,7 @@ document.getElementById('btn-save-profile').addEventListener('click', () => {
   ap.weight     = +document.getElementById('prof-weight').value || 72;
   ap.goalWeight = +document.getElementById('prof-goal').value || 69.5;
   ap.height     = +document.getElementById('prof-height').value || 175;
+  ap.rmr        = +document.getElementById('prof-rmr').value || '';
   ap.weeklyKm   = +document.getElementById('prof-km').value || 75;
   ap.diet       = document.getElementById('prof-diet').value;
   ap.trainingGoal = document.getElementById('prof-training-goal').value;
@@ -4766,6 +4788,7 @@ function loadProfileForm() {
   document.getElementById('prof-weight').value = p.weight || 72;
   document.getElementById('prof-goal').value = p.goalWeight || 69.5;
   document.getElementById('prof-height').value = p.height || '';
+  document.getElementById('prof-rmr').value = p.rmr || '';
   document.getElementById('prof-km').value = p.weeklyKm || 75;
   document.getElementById('prof-diet').value = p.diet || 'plantforward';
   document.getElementById('prof-training-goal').value = p.trainingGoal || '';

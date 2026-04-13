@@ -4514,14 +4514,14 @@ function renderDashboard() {
   // Only sessions up to and including today (or all if past week)
   const sessionsThisWeek = weekSessions.filter(s => isPast ? true : isFuture ? false : s.day <= todayMon0);
   const exerciseBurn = sessionsThisWeek.reduce((a, s) => a + estimateBurn(s), 0);
-  // Total burn = resting BMR (Garmin: revised Harris-Benedict) per elapsed day + exercise
+  // Total burn = RMR (Mifflin-St Jeor) per elapsed day + exercise
   const isFemale = ap.sex === 'female';
   const h = ap.height || 175;
   const age = ap.age || 35;
-  const bmr = isFemale
-    ? Math.round(447.593 + 9.247*w + 3.098*h - 4.330*age)
-    : Math.round(88.362 + 13.397*w + 4.799*h - 5.677*age);
-  const kcalBurned = bmr * daysElapsed + exerciseBurn;
+  const rmr = isFemale
+    ? Math.round(10*w + 6.25*h - 5*age - 161)
+    : Math.round(10*w + 6.25*h - 5*age + 5);
+  const kcalBurned = rmr * daysElapsed + exerciseBurn;
   const runKm = sessionsThisWeek.filter(s => s.type === 'run').reduce((a, s) => a + (s.dist || 0), 0);
   const strengthMins = sessionsThisWeek.filter(s => s.type === 'strength').reduce((a, s) => a + (s.dur || 0), 0);
 

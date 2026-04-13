@@ -2187,15 +2187,16 @@ function estimateBurn(session) {
   if (!session || session.type === 'rest') return 0;
   if (session.calories) return session.calories;
   const w = activeProfile().weight || 72;
+  const dur = session.dur || 0;
   if (session.type === 'run') {
     const byDist = session.dist > 0 ? session.dist * w * 1.0 : 0;
-    const byDur  = session.dur  > 0 ? (session.dur / 60) * w * ({ easy:8.5, moderate:10, hard:12, race:14 }[session.intensity] || 10) : 0;
+    const byDur  = dur > 0 ? (dur / 60) * w * ({ easy:8.5, moderate:10, hard:12, race:14 }[session.intensity] || 10) : 0;
     return Math.round(Math.max(byDist, byDur));
   }
-  if (session.type === 'bike') return Math.round((session.dur / 60) * w * 8);
-  if (session.type === 'swim') return Math.round((session.dur / 60) * w * 9);
-  if (session.type === 'strength') return Math.round((session.dur / 60) * w * 5);
-  return Math.round((session.dur / 60) * w * 5);
+  if (session.type === 'bike') return Math.round((dur / 60) * w * 8);
+  if (session.type === 'swim') return Math.round((dur / 60) * w * 9);
+  if (session.type === 'strength') return Math.round((dur / 60) * w * 5);
+  return Math.round((dur / 60) * w * 5);
 }
 
 function dailyTargets(dayIdx) {
@@ -4498,16 +4499,20 @@ function renderDashboard() {
 
   const ap = activeProfile();
   const w = ap.weight || 72;
-  const hardDays = ap.sessions.filter(s => s.intensity === 'hard' || s.intensity === 'race').length;
 
-  // --- This-week actuals (Mon=0 through today) ---
-  const todayMon0 = (new Date().getDay() + 6) % 7; // 0=Mon .. 6=Sun
-  const daysElapsed = todayMon0 + 1; // Mon=1, Tue=2 ... Sun=7
-  const monday = mondayOfOffset(0);
+  // --- Viewed-week actuals (Mon=0 through today or full week if past) ---
+  const monday = mondayOfOffset(weekOffset);
   const wk = isoWeekKey(monday);
-  const weekSessions = (ap.weekSessions && ap.weekSessions[wk]) || ap.sessions || [];
-  // Only sessions up to today
-  const sessionsThisWeek = weekSessions.filter(s => s.day <= todayMon0);
+  const curWeekKey = isoWeekKey(mondayOfOffset(0));
+  const todayMon0 = (new Date().getDay() + 6) % 7; // 0=Mon .. 6=Sun
+  const isPast = wk < curWeekKey;
+  const isFuture = wk > curWeekKey;
+  const dayLimit = isPast ? 6 : isFuture ? -1 : todayMon0;
+  const daysElapsed = isPast ? 7 : isFuture ? 0 : todayMon0 + 1;
+  const weekSessions = (ap.weekSessions && ap.weekSessions[wk]) || (ap.sessions || []);
+  // Only sessions up to today (or all if past week)
+  const sessionsThisWeek = weekSessions.filter(s => s.day <= dayLimit);
+  const hardDays = weekSessions.filter(s => s.intensity === 'hard' || s.intensity === 'race').length;
 
   const runKm = sessionsThisWeek.filter(s => s.type === 'run').reduce((a, s) => a + (s.dist || 0), 0);
   const strengthMins = sessionsThisWeek.filter(s => s.type === 'strength').reduce((a, s) => a + (s.dur || 0), 0);
@@ -4540,19 +4545,20 @@ function renderDashboard() {
     else { const t = dailyTargets(d); totalTdee += t.tdee; }
   }
   const deficitTotal = kcalConsumed - totalTdee;
-  const deficitPerDay = Math.round(deficitTotal / daysElapsed);
+  const deficitPerDay = daysElapsed > 0 ? Math.round(deficitTotal / daysElapsed) : 0;
   const deficitLabel = deficitPerDay > 0 ? '+' + deficitPerDay : String(deficitPerDay);
   const deficitClass = deficitPerDay > 0 ? 'danger' : '';
 
-  const protPerKgDay = (totalProt / daysElapsed / w).toFixed(1);
-  const carbPerKgDay = (totalCarb / daysElapsed / w).toFixed(1);
+  const protPerKgDay = daysElapsed > 0 ? (totalProt / daysElapsed / w).toFixed(1) : '—';
+  const carbPerKgDay = daysElapsed > 0 ? (totalCarb / daysElapsed / w).toFixed(1) : '—';
+  const weekLabel = isPast ? 'that week' : isFuture ? 'upcoming' : 'this week';
 
   summary.innerHTML = `
-    <div class="target-card"><div class="target-val">${runKm.toFixed(1)}</div><div class="target-label">km run this week</div></div>
+    <div class="target-card"><div class="target-val">${runKm.toFixed(1)}</div><div class="target-label">km run ${weekLabel}</div></div>
     <div class="target-card"><div class="target-val">${strengthMins}</div><div class="target-label">min strength training</div></div>
-    <div class="target-card"><div class="target-val">${kcalBurned.toLocaleString()}</div><div class="target-label">kcal burned this week</div></div>
-    <div class="target-card"><div class="target-val">${kcalConsumed.toLocaleString()}</div><div class="target-label">kcal consumed this week</div></div>
-    <div class="target-card ${deficitClass}"><div class="target-val">${deficitLabel}</div><div class="target-label">kcal deficit/surplus per day</div></div>
+    <div class="target-card"><div class="target-val">${kcalBurned.toLocaleString()}</div><div class="target-label">kcal burned ${weekLabel}</div></div>
+    <div class="target-card"><div class="target-val">${kcalConsumed.toLocaleString()}</div><div class="target-label">kcal consumed ${weekLabel}</div></div>
+    <div class="target-card ${deficitClass}"><div class="target-val">${daysElapsed > 0 ? deficitLabel : '—'}</div><div class="target-label">kcal deficit/surplus per day</div></div>
     <div class="target-card"><div class="target-val">${protPerKgDay}</div><div class="target-label">g protein / kg / day</div></div>
     <div class="target-card"><div class="target-val">${carbPerKgDay}</div><div class="target-label">g carbs / kg / day</div></div>
   `;

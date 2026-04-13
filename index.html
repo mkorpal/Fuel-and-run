@@ -521,10 +521,6 @@
         <div class="card-title">Weekly Overview</div>
         <div id="dash-summary" class="targets-grid"></div>
       </div>
-      <div class="card">
-        <div class="card-title">This Week's Nutrition Guide</div>
-        <div id="dash-guide"></div>
-      </div>
 
       <!-- Calorie Chart -->
       <div class="card">
@@ -538,10 +534,22 @@
             <button class="btn btn-secondary btn-sm chart-period" data-period="365">Year</button>
           </div>
         </div>
+        <div style="display:flex; gap:.35rem; flex-wrap:wrap; margin-bottom:.5rem;">
+          <button class="btn btn-sm chart-series-btn active" data-series="consumed" style="background:#f4a261;color:#fff;font-size:.72rem;">kcal consumed</button>
+          <button class="btn btn-sm chart-series-btn active" data-series="burned" style="background:#2d6a4f;color:#fff;font-size:.72rem;">kcal burned</button>
+          <button class="btn btn-sm chart-series-btn" data-series="protkg" style="background:var(--surface);color:var(--fg);font-size:.72rem;">protein g/kg</button>
+          <button class="btn btn-sm chart-series-btn" data-series="carbkg" style="background:var(--surface);color:var(--fg);font-size:.72rem;">carbs g/kg</button>
+        </div>
         <div style="position:relative; height:260px;">
           <canvas id="calorie-chart"></canvas>
         </div>
+        <div id="chart-deficit-text" style="font-size:.82rem; color:var(--muted); text-align:center; margin-top:.4rem;"></div>
         <p id="chart-no-data" style="text-align:center; color:var(--muted); font-size:.85rem; padding:1rem 0; display:none;">No calorie data logged yet. Use the log below to start tracking.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">This Week's Nutrition Guide</div>
+        <div id="dash-guide"></div>
       </div>
 
       <!-- Log Calories -->
@@ -4272,6 +4280,7 @@ window.calcRecipePortion = mealId => {
 // ============================================================
 let calorieChart = null;
 let chartPeriodDays = 7;
+let chartSeries = { consumed: true, burned: true, protkg: false, carbkg: false };
 
 function dateStr(d) {
   const y = d.getFullYear();
@@ -4282,55 +4291,56 @@ function dateStr(d) {
 
 function aggregateCalorieData(log, days) {
   const today = new Date(); today.setHours(0,0,0,0);
+  const w = activeProfile().weight || 72;
+
+  function dayData(ds) {
+    const e = log.find(l => l.date === ds);
+    if (!e) return { consumed: null, used: null, protkg: null, carbkg: null };
+    const items = e.items || [];
+    const prot = items.reduce((s, i) => s + (i.prot || 0), 0);
+    const carb = items.reduce((s, i) => s + (i.carb || 0), 0);
+    return { consumed: e.consumed, used: e.tdee, protkg: +(prot / w).toFixed(2), carbkg: +(carb / w).toFixed(2) };
+  }
+
+  function avgBucket(arr) {
+    const avg = vals => { const v = vals.filter(x => x != null); return v.length ? +(v.reduce((a,x)=>a+x,0)/v.length).toFixed(2) : null; };
+    return { consumed: avg(arr.map(x => x.consumed)), used: avg(arr.map(x => x.used)), protkg: avg(arr.map(x => x.protkg)), carbkg: avg(arr.map(x => x.carbkg)) };
+  }
+
   if (days <= 30) {
-    // Daily points
-    const labels = [], consumed = [], used = [];
+    const labels = [], consumed = [], used = [], protkg = [], carbkg = [];
     for (let i = days-1; i >= 0; i--) {
       const d = new Date(today); d.setDate(d.getDate() - i);
       const ds = dateStr(d);
-      labels.push(ds.slice(8) + '/' + ds.slice(5,7)); // DD/MM
-      const e = log.find(l => l.date === ds);
-      consumed.push(e != null ? e.consumed : null);
-      used.push(e != null ? e.tdee : null);
+      labels.push(ds.slice(8) + '/' + ds.slice(5,7));
+      const dd = dayData(ds);
+      consumed.push(dd.consumed); used.push(dd.used); protkg.push(dd.protkg); carbkg.push(dd.carbkg);
     }
-    return { labels, consumed, used };
+    return { labels, consumed, used, protkg, carbkg };
   }
-  if (days <= 180) {
-    // Weekly averages, bucketed by the week's Monday
-    const buckets = new Map();
-    for (let i = days-1; i >= 0; i--) {
-      const d = new Date(today); d.setDate(d.getDate() - i);
-      const ds = dateStr(d);
-      const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay()+6)%7));
-      const wk = dateStr(mon);
-      if (!buckets.has(wk)) buckets.set(wk, { consumed: [], used: [], label: wk.slice(8) + '/' + wk.slice(5,7) });
-      const e = log.find(l => l.date === ds);
-      if (e) { buckets.get(wk).consumed.push(e.consumed); buckets.get(wk).used.push(e.tdee); }
-    }
-    const labels = [], consumed = [], used = [];
-    for (const b of buckets.values()) {
-      const avg = arr => arr.length ? Math.round(arr.reduce((a,v)=>a+v,0)/arr.length) : null;
-      labels.push(b.label); consumed.push(avg(b.consumed)); used.push(avg(b.used));
-    }
-    return { labels, consumed, used };
-  }
-  // Monthly averages for Year view
+
+  // Bucket by week or month
   const buckets = new Map();
   for (let i = days-1; i >= 0; i--) {
     const d = new Date(today); d.setDate(d.getDate() - i);
     const ds = dateStr(d);
-    const mo = ds.slice(0,7);
-    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    if (!buckets.has(mo)) buckets.set(mo, { consumed: [], used: [], label: MONTHS[parseInt(mo.slice(5,7),10)-1] });
-    const e = log.find(l => l.date === ds);
-    if (e) { buckets.get(mo).consumed.push(e.consumed); buckets.get(mo).used.push(e.tdee); }
+    let key, label;
+    if (days <= 180) {
+      const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay()+6)%7));
+      key = dateStr(mon); label = key.slice(8) + '/' + key.slice(5,7);
+    } else {
+      const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      key = ds.slice(0,7); label = MONTHS[parseInt(key.slice(5,7),10)-1];
+    }
+    if (!buckets.has(key)) buckets.set(key, { label, data: [] });
+    buckets.get(key).data.push(dayData(ds));
   }
-  const labels = [], consumed = [], used = [];
+  const labels = [], consumed = [], used = [], protkg = [], carbkg = [];
   for (const b of buckets.values()) {
-    const avg = arr => arr.length ? Math.round(arr.reduce((a,v)=>a+v,0)/arr.length) : null;
-    labels.push(b.label); consumed.push(avg(b.consumed)); used.push(avg(b.used));
+    const a = avgBucket(b.data);
+    labels.push(b.label); consumed.push(a.consumed != null ? Math.round(a.consumed) : null); used.push(a.used != null ? Math.round(a.used) : null); protkg.push(a.protkg); carbkg.push(a.carbkg);
   }
-  return { labels, consumed, used };
+  return { labels, consumed, used, protkg, carbkg };
 }
 
 function renderCalorieChart() {
@@ -4339,47 +4349,77 @@ function renderCalorieChart() {
   const isDashboardActive = document.getElementById('tab-dashboard').classList.contains('active');
   const ap = activeProfile();
   const log = ap.dailyLog || [];
-  const { labels, consumed, used } = aggregateCalorieData(log, chartPeriodDays);
+  const { labels, consumed, used, protkg, carbkg } = aggregateCalorieData(log, chartPeriodDays);
   const hasData = consumed.some(v => v !== null) || used.some(v => v !== null);
   const noDataEl = document.getElementById('chart-no-data');
+  const deficitEl = document.getElementById('chart-deficit-text');
 
-  // If chart already exists and dashboard isn't visible, silently update data in-place
-  if (calorieChart && !isDashboardActive) {
-    calorieChart.data.labels = labels;
-    calorieChart.data.datasets[0].data = consumed;
-    calorieChart.data.datasets[1].data = used;
-    calorieChart.update('none');
-    return;
-  }
-
-  // Only do a full (re)create when dashboard is visible — avoids zero-size canvas on first render
-  if (!isDashboardActive) return;
+  // Only do a full (re)create when dashboard is visible
+  if (!isDashboardActive && !calorieChart) return;
   if (noDataEl) noDataEl.style.display = hasData ? 'none' : '';
   if (calorieChart) { calorieChart.destroy(); calorieChart = null; }
-  if (!hasData) return;
+  if (!hasData) { if (deficitEl) deficitEl.textContent = ''; return; }
+
+  // Deficit/surplus text when both calorie series are active
+  if (deficitEl) {
+    if (chartSeries.consumed && chartSeries.burned) {
+      const cArr = consumed.filter(v => v != null);
+      const uArr = used.filter(v => v != null);
+      const totalC = cArr.reduce((a,v) => a+v, 0);
+      const totalU = uArr.reduce((a,v) => a+v, 0);
+      const diff = totalC - totalU;
+      const label = diff > 0 ? `Surplus: +${diff.toLocaleString()} kcal` : `Deficit: ${diff.toLocaleString()} kcal`;
+      const periodNames = { 7: 'this week', 30: 'this month', 90: 'last 3 months', 180: 'last 6 months', 365: 'this year' };
+      deficitEl.textContent = `${label} (${periodNames[chartPeriodDays] || chartPeriodDays + 'd'})`;
+      deficitEl.style.color = diff > 0 ? 'var(--danger)' : 'var(--accent)';
+    } else {
+      deficitEl.textContent = '';
+    }
+  }
+
   const ptRadius = chartPeriodDays <= 30 ? 4 : 2;
+  const useSecondAxis = chartSeries.protkg || chartSeries.carbkg;
+
+  const datasets = [];
+  if (chartSeries.consumed) datasets.push({
+    label: 'Calories Consumed', data: consumed, yAxisID: 'y',
+    borderColor: '#f4a261', backgroundColor: 'rgba(244,162,97,.12)',
+    borderWidth: 2, pointRadius: ptRadius, tension: 0.35, spanGaps: true, fill: true,
+  });
+  if (chartSeries.burned) datasets.push({
+    label: 'Calories Burned (TDEE)', data: used, yAxisID: 'y',
+    borderColor: '#2d6a4f', backgroundColor: 'rgba(45,106,79,.06)',
+    borderWidth: 2, borderDash: [6,4], pointRadius: ptRadius, tension: 0.35, spanGaps: true,
+  });
+  if (chartSeries.protkg) datasets.push({
+    label: 'Protein g/kg', data: protkg, yAxisID: 'y2',
+    borderColor: '#e76f51', backgroundColor: 'rgba(231,111,81,.08)',
+    borderWidth: 2, pointRadius: ptRadius, tension: 0.35, spanGaps: true,
+  });
+  if (chartSeries.carbkg) datasets.push({
+    label: 'Carbs g/kg', data: carbkg, yAxisID: 'y2',
+    borderColor: '#457b9d', backgroundColor: 'rgba(69,123,157,.08)',
+    borderWidth: 2, pointRadius: ptRadius, tension: 0.35, spanGaps: true,
+  });
+
+  const scales = {
+    x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
+    y: {
+      display: chartSeries.consumed || chartSeries.burned,
+      title: { display: true, text: 'kcal', font: { size: 11 } },
+      beginAtZero: false, ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' },
+    },
+  };
+  if (useSecondAxis) {
+    scales.y2 = {
+      position: 'right', title: { display: true, text: 'g / kg', font: { size: 11 } },
+      beginAtZero: true, ticks: { font: { size: 11 } }, grid: { drawOnChartArea: false },
+    };
+  }
+
   calorieChart = new Chart(canvas, {
     type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Calories Consumed',
-          data: consumed,
-          borderColor: '#f4a261',
-          backgroundColor: 'rgba(244,162,97,.12)',
-          borderWidth: 2, pointRadius: ptRadius, tension: 0.35, spanGaps: false,
-          fill: true,
-        },
-        {
-          label: 'Calories Used (TDEE)',
-          data: used,
-          borderColor: '#2d6a4f',
-          backgroundColor: 'rgba(45,106,79,.06)',
-          borderWidth: 2, borderDash: [6,4], pointRadius: ptRadius, tension: 0.35, spanGaps: false,
-        },
-      ],
-    },
+    data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
@@ -4387,21 +4427,15 @@ function renderCalorieChart() {
         legend: { position: 'top', labels: { font: { size: 12 }, boxWidth: 28, padding: 14 } },
         tooltip: {
           callbacks: {
-            label: ctx => ctx.parsed.y != null
-              ? `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} kcal`
-              : `${ctx.dataset.label}: not logged`,
+            label: ctx => {
+              if (ctx.parsed.y == null) return `${ctx.dataset.label}: not logged`;
+              const isGkg = ctx.dataset.yAxisID === 'y2';
+              return `${ctx.dataset.label}: ${isGkg ? ctx.parsed.y.toFixed(1) + ' g/kg' : ctx.parsed.y.toLocaleString() + ' kcal'}`;
+            }
           }
         },
       },
-      scales: {
-        y: {
-          title: { display: true, text: 'kcal', font: { size: 11 } },
-          beginAtZero: false,
-          ticks: { font: { size: 11 } },
-          grid: { color: 'rgba(0,0,0,.06)' },
-        },
-        x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
-      },
+      scales,
     },
   });
 }
@@ -4412,6 +4446,20 @@ document.querySelectorAll('.chart-period').forEach(btn => {
     document.querySelectorAll('.chart-period').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     chartPeriodDays = +btn.dataset.period;
+    renderCalorieChart();
+  });
+});
+
+// Series toggle buttons
+document.querySelectorAll('.chart-series-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const s = btn.dataset.series;
+    chartSeries[s] = !chartSeries[s];
+    const on = chartSeries[s];
+    const colors = { consumed: '#f4a261', burned: '#2d6a4f', protkg: '#e76f51', carbkg: '#457b9d' };
+    btn.style.background = on ? (colors[s] || 'var(--accent)') : 'var(--surface)';
+    btn.style.color = on ? '#fff' : 'var(--fg)';
+    btn.classList.toggle('active', on);
     renderCalorieChart();
   });
 });
@@ -4449,31 +4497,74 @@ function renderDashboard() {
   if (!summary) return;
 
   const ap = activeProfile();
-  const totalKm = ap.sessions.reduce((a,s) => a + (s.type==='run' ? s.dist : 0), 0);
-  const totalBurn = ap.sessions.reduce((a,s) => a + estimateBurn(s), 0);
-  const avgKcal = Math.round([0,1,2,3,4,5,6].reduce((a,d) => a + dailyTargets(d).kcal, 0) / 7);
-  const hardDays = ap.sessions.filter(s => s.intensity === 'hard' || s.intensity === 'race').length;
   const w = ap.weight || 72;
-  const goal = ap.goalWeight || 69.5;
-  const toGo = Math.max(0, w - goal).toFixed(1);
+  const hardDays = ap.sessions.filter(s => s.intensity === 'hard' || s.intensity === 'race').length;
+
+  // --- This-week actuals (Mon=0 through today) ---
+  const todayMon0 = (new Date().getDay() + 6) % 7; // 0=Mon .. 6=Sun
+  const daysElapsed = todayMon0 + 1; // Mon=1, Tue=2 ... Sun=7
+  const monday = mondayOfOffset(0);
+  const wk = isoWeekKey(monday);
+  const weekSessions = (ap.weekSessions && ap.weekSessions[wk]) || ap.sessions || [];
+  // Only sessions up to today
+  const sessionsThisWeek = weekSessions.filter(s => s.day <= todayMon0);
+
+  const runKm = sessionsThisWeek.filter(s => s.type === 'run').reduce((a, s) => a + (s.dist || 0), 0);
+  const strengthMins = sessionsThisWeek.filter(s => s.type === 'strength').reduce((a, s) => a + (s.dur || 0), 0);
+  const kcalBurned = sessionsThisWeek.reduce((a, s) => a + estimateBurn(s), 0);
+
+  // Consumed + macros from dailyLog this week
+  const log = ap.dailyLog || [];
+  let kcalConsumed = 0, totalProt = 0, totalCarb = 0;
+  for (let d = 0; d < daysElapsed; d++) {
+    const dt = new Date(monday);
+    dt.setDate(monday.getDate() + d);
+    const ds = dateStr(dt);
+    const entry = log.find(l => l.date === ds);
+    if (entry) {
+      kcalConsumed += entry.consumed || 0;
+      const items = entry.items || [];
+      totalProt += items.reduce((s, i) => s + (i.prot || 0), 0);
+      totalCarb += items.reduce((s, i) => s + (i.carb || 0), 0);
+    }
+  }
+
+  // Deficit / surplus per day (total consumed - total TDEE) / daysElapsed
+  let totalTdee = 0;
+  for (let d = 0; d < daysElapsed; d++) {
+    const dt = new Date(monday);
+    dt.setDate(monday.getDate() + d);
+    const ds = dateStr(dt);
+    const entry = log.find(l => l.date === ds);
+    if (entry && entry.tdee) { totalTdee += entry.tdee; }
+    else { const t = dailyTargets(d); totalTdee += t.tdee; }
+  }
+  const deficitTotal = kcalConsumed - totalTdee;
+  const deficitPerDay = Math.round(deficitTotal / daysElapsed);
+  const deficitLabel = deficitPerDay > 0 ? '+' + deficitPerDay : String(deficitPerDay);
+  const deficitClass = deficitPerDay > 0 ? 'danger' : '';
+
+  const protPerKgDay = (totalProt / daysElapsed / w).toFixed(1);
+  const carbPerKgDay = (totalCarb / daysElapsed / w).toFixed(1);
 
   summary.innerHTML = `
-    <div class="target-card"><div class="target-val">${totalKm.toFixed(0)}</div><div class="target-label">km planned this week</div></div>
-    <div class="target-card"><div class="target-val">${totalBurn.toLocaleString()}</div><div class="target-label">kcal exercise burn</div></div>
-    <div class="target-card"><div class="target-val">${avgKcal.toLocaleString()}</div><div class="target-label">avg daily target kcal</div></div>
-    <div class="target-card warn"><div class="target-val">${hardDays}</div><div class="target-label">hard/race days (full fuel)</div></div>
-    <div class="target-card"><div class="target-val">${toGo}kg</div><div class="target-label">to goal weight (${goal}kg)</div></div>
-    <div class="target-card"><div class="target-val">${state.products.length}</div><div class="target-label">products in your pantry</div></div>
-    <div class="target-card"><div class="target-val">${state.meals.length}</div><div class="target-label">saved meals</div></div>
+    <div class="target-card"><div class="target-val">${runKm.toFixed(1)}</div><div class="target-label">km run this week</div></div>
+    <div class="target-card"><div class="target-val">${strengthMins}</div><div class="target-label">min strength training</div></div>
+    <div class="target-card"><div class="target-val">${kcalBurned.toLocaleString()}</div><div class="target-label">kcal burned this week</div></div>
+    <div class="target-card"><div class="target-val">${kcalConsumed.toLocaleString()}</div><div class="target-label">kcal consumed this week</div></div>
+    <div class="target-card ${deficitClass}"><div class="target-val">${deficitLabel}</div><div class="target-label">kcal deficit/surplus per day</div></div>
+    <div class="target-card"><div class="target-val">${protPerKgDay}</div><div class="target-label">g protein / kg / day</div></div>
+    <div class="target-card"><div class="target-val">${carbPerKgDay}</div><div class="target-label">g carbs / kg / day</div></div>
   `;
 
   // Weekly guide text
-  const weeklyCarb = Math.round(totalKm * 1.5 * (w / 70));
+  const totalKm = weekSessions.filter(s => s.type === 'run').reduce((a, s) => a + (s.dist || 0), 0);
+  const runCount = weekSessions.filter(s => s.type === 'run').length;
   guide.innerHTML = `
     <div style="font-size:.88rem; line-height:1.8;">
-      <p>This week you have <strong>${totalKm.toFixed(0)} km</strong> of running planned across <strong>${ap.sessions.filter(s=>s.type==='run').length} sessions</strong>.</p>
-      <p style="margin-top:.6rem;"><strong>Protein:</strong> Aim for ~${Math.round(1.8*(ap.weight||72))}g/day spread over 4+ meals to support muscle repair.</p>
-      <p style="margin-top:.4rem;"><strong>Carbohydrates:</strong> Increase on long run / hard days (up to ${Math.round(7.5*(ap.weight||72))}g/day). Reduce on rest days (${Math.round(4.5*(ap.weight||72))}g/day).</p>
+      <p>This week you have <strong>${totalKm.toFixed(0)} km</strong> of running planned across <strong>${runCount} sessions</strong>.</p>
+      <p style="margin-top:.6rem;"><strong>Protein:</strong> Aim for ~${Math.round(1.8*w)}g/day spread over 4+ meals to support muscle repair.</p>
+      <p style="margin-top:.4rem;"><strong>Carbohydrates:</strong> Increase on long run / hard days (up to ${Math.round(7.5*w)}g/day). Reduce on rest days (${Math.round(4.5*w)}g/day).</p>
       <p style="margin-top:.4rem;"><strong>Hydration:</strong> Add ~500–750ml water per hour of running on top of baseline 2–2.5L/day.</p>
       ${hardDays > 2 ? '<p style="margin-top:.4rem; color:var(--warn);"><strong>⚠️ Busy week:</strong> '+hardDays+' hard sessions — ensure you nail pre-run fuelling and post-run recovery nutrition every time.</p>' : ''}
     </div>
@@ -4936,7 +5027,12 @@ function openQtyModal(type, id) {
     protPer = pg.prot || null;
     carbPer = pg.carb || null;
     fatPer  = pg.fat  || null;
+    // All products get eaches — use PRODUCE_EACH_WEIGHTS lookup, or fall back to serving size
     eachInfo = getEachWeight(p.name);
+    if (!eachInfo) {
+      const w = p.serve || 100;
+      eachInfo = { key: 'piece', weight: w };
+    }
     // For per-serving products, store raw per-serving values so eaches mode
     // uses them directly (1 each = 1 serving) instead of gram conversion
     if (p.nutrPer === 'serving') {
@@ -5138,12 +5234,32 @@ function renderPlate() {
       }).join('')
     : '<p style="font-size:.78rem;color:var(--muted);text-align:center;margin:.5rem 0;">Nothing logged yet today</p>';
 
+  const totalProt = items.reduce((s, i) => s + (i.prot || 0), 0);
+  const totalCarb = items.reduce((s, i) => s + (i.carb || 0), 0);
+  const totalFat  = items.reduce((s, i) => s + (i.fat  || 0), 0);
+  const w = activeProfile().weight || 72;
+  // Macro calorie breakdown
+  const protKcal = totalProt * 4, carbKcal = totalCarb * 4, fatKcal = totalFat * 9;
+  const macroTotal = protKcal + carbKcal + fatKcal || 1;
+  const protPct = Math.round(protKcal / macroTotal * 100);
+  const carbPct = Math.round(carbKcal / macroTotal * 100);
+  const fatPct  = Math.round(fatKcal  / macroTotal * 100);
+  const protPerKg = (totalProt / w).toFixed(1);
+  const carbPerKg = (totalCarb / w).toFixed(1);
+
+  const macroLine = items.length ? `
+    <div style="font-size:.78rem; color:var(--muted); text-align:center; margin-top:.25rem; line-height:1.6;">
+      P: ${totalProt.toFixed(1)}g (${protPct}%) · ${protPerKg} g/kg &nbsp;|&nbsp;
+      C: ${totalCarb.toFixed(1)}g (${carbPct}%) · ${carbPerKg} g/kg &nbsp;|&nbsp;
+      F: ${totalFat.toFixed(1)}g (${fatPct}%)
+    </div>` : '';
+
   ['products', 'meals'].forEach(sfx => {
     const iEl = document.getElementById('plate-items-' + sfx);
     const tEl = document.getElementById('plate-total-' + sfx);
     const dEl = document.getElementById('plate-date-' + sfx);
     if (iEl) iEl.innerHTML = itemsHtml;
-    if (tEl) { tEl.textContent = 'Total: ' + total + ' kcal'; tEl.style.display = items.length ? '' : 'none'; }
+    if (tEl) { tEl.innerHTML = 'Total: ' + total + ' kcal' + macroLine; tEl.style.display = items.length ? '' : 'none'; }
     if (dEl) dEl.textContent = today;
   });
 }

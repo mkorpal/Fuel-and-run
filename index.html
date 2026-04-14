@@ -290,11 +290,12 @@
   .plate-zone p { font-size: .7rem; color: var(--muted); text-align: center; margin: 0; line-height: 1.4; }
   .plate-item-row {
     display: flex; align-items: center; gap: .35rem;
-    font-size: .8rem; padding: .28rem 0; border-top: 1px solid var(--border);
+    font-size: .8rem; padding: .28rem 0; border-top: 1px solid var(--border); flex-wrap: wrap;
   }
   .pi-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pi-qty  { font-size: .72rem; color: var(--muted); white-space: nowrap; }
   .pi-kcal { font-weight: 700; color: var(--accent); white-space: nowrap; }
+  .pi-macros { width: 100%; font-size: .7rem; color: var(--muted); padding-left: .2rem; }
   .pi-del  { background: none; border: none; cursor: pointer; color: var(--muted); font-size: .85rem; flex-shrink: 0; }
   .pi-del:hover { color: var(--danger); }
   .plate-total { font-size: .95rem; font-weight: 700; color: var(--accent); text-align: center; margin-top: .6rem; padding-top: .5rem; border-top: 2px solid var(--border); }
@@ -511,6 +512,7 @@
     <button data-tab="products">My Products</button>
     <button data-tab="meals">My Meals</button>
     <button data-tab="recommendations">AU Food Ideas</button>
+    <button data-tab="plate">Today's Plate</button>
     <button data-tab="profile">Profile</button>
   </nav>
   <main>
@@ -813,6 +815,16 @@
           <div id="plate-total-meals" class="plate-total" style="display:none;"></div>
           <div id="plate-date-meals" style="text-align:center;font-size:.73rem;color:var(--muted);margin-top:.4rem;"></div>
         </div>
+      </div>
+    </section>
+
+    <!-- TODAY'S PLATE -->
+    <section id="tab-plate" class="section">
+      <div class="card">
+        <div class="card-title">🍽️ Today's Plate — Detailed Breakdown</div>
+        <div id="plate-tab-date" style="text-align:center; font-size:.82rem; color:var(--muted); margin-bottom:.6rem;"></div>
+        <div id="plate-tab-content"></div>
+        <div id="plate-tab-totals" style="margin-top:1rem;"></div>
       </div>
     </section>
 
@@ -4842,6 +4854,7 @@ function renderAll() {
   renderProfileSummary();
   renderSyncCode();
   renderPlate();
+  renderPlateTab();
 }
 
 // ============================================================
@@ -5221,6 +5234,7 @@ function addToPlate(type, sourceId, name, qty, unit, kcal, prot, carb, fat) {
   entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
   save();
   renderPlate();
+  renderPlateTab();
   renderCalorieChart();
   toast('✅ ' + name + ' added to today\'s plate');
 }
@@ -5234,6 +5248,7 @@ window.removeFromPlate = (itemId) => {
   entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
   save();
   renderPlate();
+  renderPlateTab();
   renderCalorieChart();
 };
 
@@ -5257,6 +5272,7 @@ function renderPlate() {
           <span class="pi-qty">${qtyLabel}</span>
           <span class="pi-kcal">${item.kcal} kcal</span>
           <button class="pi-del" onclick="removeFromPlate('${item.id}')">✕</button>
+          <div class="pi-macros">C: ${(item.carb||0).toFixed(1)}g · P: ${(item.prot||0).toFixed(1)}g · F: ${(item.fat||0).toFixed(1)}g</div>
         </div>`;
       }).join('')
     : '<p style="font-size:.78rem;color:var(--muted);text-align:center;margin:.5rem 0;">Nothing logged yet today</p>';
@@ -5289,6 +5305,95 @@ function renderPlate() {
     if (tEl) { tEl.innerHTML = 'Total: ' + total + ' kcal' + macroLine; tEl.style.display = items.length ? '' : 'none'; }
     if (dEl) dEl.textContent = today;
   });
+}
+
+// --- Detailed Plate tab ---
+function renderPlateTab() {
+  const contentEl = document.getElementById('plate-tab-content');
+  const totalsEl = document.getElementById('plate-tab-totals');
+  const dateEl = document.getElementById('plate-tab-date');
+  if (!contentEl) return;
+
+  const today = dateStr(new Date());
+  const ap = activeProfile();
+  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  const items = entry ? (entry.items || []) : [];
+  if (dateEl) dateEl.textContent = today;
+
+  if (!items.length) {
+    contentEl.innerHTML = '<p style="text-align:center; color:var(--muted);">Nothing logged yet today — add food from My Products or My Meals.</p>';
+    if (totalsEl) totalsEl.innerHTML = '';
+    return;
+  }
+
+  // Group items by meal type (product vs meal), then list individually
+  const rows = items.map(item => {
+    let qtyLabel;
+    if (item.unit === 'eaches') qtyLabel = '× ' + item.qty;
+    else if (item.unit === 'servings') qtyLabel = item.qty + ' srv';
+    else qtyLabel = item.qty + 'g';
+    const kcal = item.kcal || 0;
+    const prot = (item.prot || 0).toFixed(1);
+    const carb = (item.carb || 0).toFixed(1);
+    const fat  = (item.fat  || 0).toFixed(1);
+    return `<tr>
+      <td style="padding:.35rem .4rem; font-size:.82rem;">${item.name}</td>
+      <td style="padding:.35rem .4rem; font-size:.78rem; color:var(--muted); white-space:nowrap;">${qtyLabel}</td>
+      <td style="padding:.35rem .4rem; text-align:right; font-weight:600;">${kcal}</td>
+      <td style="padding:.35rem .4rem; text-align:right;">${carb}</td>
+      <td style="padding:.35rem .4rem; text-align:right;">${prot}</td>
+      <td style="padding:.35rem .4rem; text-align:right;">${fat}</td>
+      <td style="padding:.35rem .2rem; text-align:center;">
+        <button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.82rem;" onclick="removeFromPlate('${item.id}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  contentEl.innerHTML = `
+    <table style="width:100%; border-collapse:collapse; font-size:.82rem;">
+      <thead>
+        <tr style="border-bottom:2px solid var(--border); font-size:.75rem; color:var(--muted); text-transform:uppercase;">
+          <th style="padding:.35rem .4rem; text-align:left;">Item</th>
+          <th style="padding:.35rem .4rem; text-align:left;">Qty</th>
+          <th style="padding:.35rem .4rem; text-align:right;">kcal</th>
+          <th style="padding:.35rem .4rem; text-align:right;">Carbs (g)</th>
+          <th style="padding:.35rem .4rem; text-align:right;">Protein (g)</th>
+          <th style="padding:.35rem .4rem; text-align:right;">Fat (g)</th>
+          <th style="padding:.35rem .2rem;"></th>
+        </tr>
+      </thead>
+      <tbody style="border-bottom:2px solid var(--border);">${rows}</tbody>
+    </table>`;
+
+  // Totals
+  const totalKcal = items.reduce((s, i) => s + (i.kcal || 0), 0);
+  const totalProt = items.reduce((s, i) => s + (i.prot || 0), 0);
+  const totalCarb = items.reduce((s, i) => s + (i.carb || 0), 0);
+  const totalFat  = items.reduce((s, i) => s + (i.fat  || 0), 0);
+  const w = ap.weight || 72;
+  const protKcal = totalProt * 4, carbKcal = totalCarb * 4, fatKcal = totalFat * 9;
+  const macroTotal = protKcal + carbKcal + fatKcal || 1;
+  const protPct = Math.round(protKcal / macroTotal * 100);
+  const carbPct = Math.round(carbKcal / macroTotal * 100);
+  const fatPct  = Math.round(fatKcal  / macroTotal * 100);
+
+  if (totalsEl) totalsEl.innerHTML = `
+    <table style="width:100%; border-collapse:collapse; font-size:.88rem; font-weight:700;">
+      <tr style="border-top:2px solid var(--accent);">
+        <td style="padding:.5rem .4rem;">TOTAL</td>
+        <td style="padding:.5rem .4rem;"></td>
+        <td style="padding:.5rem .4rem; text-align:right; color:var(--accent);">${totalKcal.toLocaleString()}</td>
+        <td style="padding:.5rem .4rem; text-align:right;">${totalCarb.toFixed(1)}</td>
+        <td style="padding:.5rem .4rem; text-align:right;">${totalProt.toFixed(1)}</td>
+        <td style="padding:.5rem .4rem; text-align:right;">${totalFat.toFixed(1)}</td>
+        <td style="padding:.5rem .2rem;"></td>
+      </tr>
+    </table>
+    <div style="text-align:center; margin-top:.6rem; font-size:.82rem; color:var(--muted); line-height:1.7;">
+      Carbs: ${totalCarb.toFixed(1)}g (${carbPct}%) · ${(totalCarb/w).toFixed(1)} g/kg<br>
+      Protein: ${totalProt.toFixed(1)}g (${protPct}%) · ${(totalProt/w).toFixed(1)} g/kg<br>
+      Fat: ${totalFat.toFixed(1)}g (${fatPct}%)
+    </div>`;
 }
 
 // ============================================================

@@ -4217,8 +4217,18 @@ function renderMeals() {
       ingredientLines = (m.ingredients || []).map(i => {
         const p = state.products.find(x => x.id === i.productId);
         const isEach = p && p.nutrPer === 'serving';
-        return `<span>${i.name} — ${i.qty}${isEach ? ' ea' : 'g'}</span>`;
-      }).join('<br>');
+        const qty = parseFloat(i.qty) || 0;
+        let iKcal = 0, iProt = 0, iCarb = 0, iFat = 0;
+        if (p) {
+          const per = p.nutrPer || '100g';
+          if (per === 'serving') { iKcal = (p.kcal||0)*qty; iProt = (p.prot||0)*qty; iCarb = (p.carb||0)*qty; iFat = (p.fat||0)*qty; }
+          else { iKcal = (p.kcal||0)/100*qty; iProt = (p.prot||0)/100*qty; iCarb = (p.carb||0)/100*qty; iFat = (p.fat||0)/100*qty; }
+        }
+        return `<div style="display:flex; justify-content:space-between; align-items:baseline; gap:.3rem; padding:.15rem 0; border-bottom:1px solid var(--border);">
+          <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${i.name} <span style="color:var(--muted); font-size:.72rem;">${qty}${isEach ? ' ea' : 'g'}</span></span>
+          <span style="white-space:nowrap; font-size:.72rem; color:var(--muted);">${Math.round(iKcal)} kcal · C ${iCarb.toFixed(1)}g · P ${iProt.toFixed(1)}g · F ${iFat.toFixed(1)}g</span>
+        </div>`;
+      }).join('');
       macroHtml = `
         <div class="meal-macros">
           <span class="meal-macro-chip">🔥 ${liveKcal} kcal</span>

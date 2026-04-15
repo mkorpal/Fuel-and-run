@@ -509,12 +509,11 @@
   </header>
   <nav id="main-nav">
     <button class="active" data-tab="dashboard">Dashboard</button>
+    <button data-tab="plate">Today's Plate</button>
     <button data-tab="training">My Week</button>
-    <button data-tab="nutrition">Daily Targets</button>
     <button data-tab="products">My Products</button>
     <button data-tab="meals">My Meals</button>
     <button data-tab="recommendations">AU Food Ideas</button>
-    <button data-tab="plate">Today's Plate</button>
     <button data-tab="profile">Profile</button>
   </nav>
   <main>
@@ -552,8 +551,13 @@
       </div>
 
       <div class="card">
-        <div class="card-title">This Week's Nutrition Guide</div>
+        <div class="card-title">📊 Diet Insights</div>
         <div id="dash-guide"></div>
+      </div>
+
+      <div class="card" id="dash-tip-card">
+        <div class="card-title">💡 Dietitian Tip</div>
+        <div id="dash-tip" style="font-size:.9rem; color: var(--muted);"></div>
       </div>
 
       <!-- Log Calories -->
@@ -574,10 +578,15 @@
           <span id="log-target-hint" style="font-size:.82rem; color:var(--muted);"></span>
         </div>
       </div>
+    </section>
 
-      <div class="card" id="dash-tip-card">
-        <div class="card-title">💡 Dietitian Tip</div>
-        <div id="dash-tip" style="font-size:.9rem; color: var(--muted);"></div>
+    <!-- TODAY'S PLATE -->
+    <section id="tab-plate" class="section">
+      <div class="card">
+        <div class="card-title">🍽️ Today's Plate — Detailed Breakdown</div>
+        <div id="plate-tab-date" style="text-align:center; font-size:.82rem; color:var(--muted); margin-bottom:.6rem;"></div>
+        <div id="plate-tab-content"></div>
+        <div id="plate-tab-totals" style="margin-top:1rem;"></div>
       </div>
     </section>
 
@@ -677,18 +686,6 @@
     </div>
 
     <!-- NUTRITION TARGETS -->
-    <section id="tab-nutrition" class="section">
-      <div class="card">
-        <div class="card-title">Daily Nutrition Targets by Training Load</div>
-        <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">Based on your profile (72 kg, running goal: lose 2–3 kg) and this week's sessions. Hard training days are fully fuelled; the deficit is applied on easy/rest days.</p>
-        <div id="nutrition-table"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Key Micronutrients to Watch</div>
-        <div id="micro-table"></div>
-      </div>
-    </section>
-
     <!-- MY PRODUCTS -->
     <section id="tab-products" class="section">
       <div class="pantry-layout">
@@ -822,16 +819,6 @@
           <div id="plate-total-meals" class="plate-total" style="display:none;"></div>
           <div id="plate-date-meals" style="text-align:center;font-size:.73rem;color:var(--muted);margin-top:.4rem;"></div>
         </div>
-      </div>
-    </section>
-
-    <!-- TODAY'S PLATE -->
-    <section id="tab-plate" class="section">
-      <div class="card">
-        <div class="card-title">🍽️ Today's Plate — Detailed Breakdown</div>
-        <div id="plate-tab-date" style="text-align:center; font-size:.82rem; color:var(--muted); margin-bottom:.6rem;"></div>
-        <div id="plate-tab-content"></div>
-        <div id="plate-tab-totals" style="margin-top:1rem;"></div>
       </div>
     </section>
 
@@ -1407,19 +1394,20 @@ function mergeStates(local, remote) {
       });
       // Profile settings: newer updatedAt wins
       const newer = ((p.updatedAt || '') > (base.updatedAt || '')) ? p : base;
-      // weekSessions: merge week keys, within each key merge per-day via updatedAt
+      // weekSessions: merge week keys, support multiple sessions per day
       const ws = {};
       [base.weekSessions || {}, p.weekSessions || {}].forEach(obj => {
         Object.entries(obj).forEach(([wk, arr]) => {
           if (!ws[wk]) ws[wk] = {};
           (arr || []).forEach(s => {
-            const ex = ws[wk][s.day];
-            if (!ex || (s.updatedAt || '') > (ex.updatedAt || '')) ws[wk][s.day] = s;
+            const key = s.stravaId ? 'strava_' + s.stravaId : s.day + '_' + s.type + '_manual';
+            const ex = ws[wk][key];
+            if (!ex || (s.updatedAt || '') > (ex.updatedAt || '')) ws[wk][key] = s;
           });
         });
       });
       const weekSessionsMerged = {};
-      Object.entries(ws).forEach(([wk, dayMap]) => { weekSessionsMerged[wk] = Object.values(dayMap); });
+      Object.entries(ws).forEach(([wk, keyMap]) => { weekSessionsMerged[wk] = Object.values(keyMap); });
       // weekMeals: merge week keys, last-write wins per day+slot (simple union)
       const wm = {};
       [base.weekMeals || {}, p.weekMeals || {}].forEach(obj => {
@@ -2036,7 +2024,7 @@ async function stravaSyncActivities() {
         laps,
         stravaId: act.id,
         startDate: (act.start_date_local || '').replace(/Z$/i, ''),
-        updatedAt: new Date(act.start_date).toISOString()
+        updatedAt: new Date().toISOString()
       };
 
       ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(x => !(x.stravaId && x.stravaId === act.id));
@@ -3044,6 +3032,12 @@ function renderMealGrid() {
   if (!grid) return;
   grid.innerHTML = '';
 
+  const w = ap.weight || 72;
+  const isFemaleM = ap.sex === 'female';
+  const hM = ap.height || 175, ageM = ap.age || 35;
+  const dayRmr = ap.rmr ? ap.rmr : (isFemaleM ? Math.round(10*w + 6.25*hM - 5*ageM - 161) : Math.round(10*w + 6.25*hM - 5*ageM + 5));
+  const weekSess = (ap.weekSessions && ap.weekSessions[weekKey]) || [];
+
   for (let d = 0; d < 7; d++) {
     const cellDate = new Date(monday); cellDate.setDate(monday.getDate() + d);
     const dateKey = dateStr(cellDate);
@@ -3057,6 +3051,20 @@ function renderMealGrid() {
     const items = logEntry ? (logEntry.items || []) : [];
     const pct = target > 0 ? Math.min((consumed / target) * 100, 120) : 0;
     const isOver = consumed > target && target > 0;
+
+    // Macros from plate items
+    const dayProt = items.reduce((s, i) => s + (i.prot || 0), 0);
+    const dayCarb = items.reduce((s, i) => s + (i.carb || 0), 0);
+    const protKg = w > 0 ? (dayProt / w).toFixed(1) : '—';
+    const carbKg = w > 0 ? (dayCarb / w).toFixed(1) : '—';
+
+    // Calorie deficit for this day
+    const daySessions = (weekSess || []).filter(s => s.day === d);
+    const dayExBurn = daySessions.reduce((sum, s) => sum + estimateBurn(s), 0);
+    const dayBurned = dayRmr + dayExBurn;
+    const dayDeficit = consumed > 0 ? consumed - dayBurned : 0;
+    const defLabel = dayDeficit > 0 ? '+' + dayDeficit : String(dayDeficit);
+    const defColor = consumed === 0 ? 'var(--muted)' : dayDeficit > 0 ? 'var(--warn, #e65100)' : '#2e7d32';
 
     // Quick preview of plate items (max 3)
     const previewItems = items.slice(0, 3).map(i => i.name).join(', ');
@@ -3076,6 +3084,8 @@ function renderMealGrid() {
       <div class="kcal-consumed">${consumed > 0 ? consumed.toLocaleString() : '—'}</div>
       <div class="kcal-target">of ${target.toLocaleString()} kcal target</div>
       <div class="kcal-bar"><div class="kcal-bar-fill${isOver ? ' over' : ''}" style="width:${Math.min(pct, 100)}%"></div></div>
+      ${consumed > 0 ? `<div style="font-size:.72rem; color:${defColor}; font-weight:600; margin-top:.2rem;">${defLabel} kcal deficit</div>` : ''}
+      ${consumed > 0 ? `<div style="font-size:.68rem; color:var(--muted); margin-top:.1rem;">P: ${protKg} g/kg · C: ${carbKg} g/kg</div>` : ''}
       ${previewItems ? `<div class="meal-items-preview">${previewItems}${moreCount}</div>` : ''}
       ${plannedLabel ? `<div style="font-size:.68rem; color:var(--accent); margin-top:.15rem;">${plannedLabel}</div>` : ''}
       <div style="font-size:.68rem; color:var(--muted); margin-top:.2rem;">tap for details</div>
@@ -4626,17 +4636,67 @@ function renderDashboard() {
   `;
 
   // Weekly guide text
-  const totalKm = weekSessions.filter(s => s.type === 'run').reduce((a, s) => a + (s.dist || 0), 0);
-  const runCount = weekSessions.filter(s => s.type === 'run').length;
-  guide.innerHTML = `
-    <div style="font-size:.88rem; line-height:1.8;">
-      <p>This week you have <strong>${totalKm.toFixed(0)} km</strong> of running planned across <strong>${runCount} sessions</strong>.</p>
-      <p style="margin-top:.6rem;"><strong>Protein:</strong> Aim for ~${Math.round(1.8*w)}g/day spread over 4+ meals to support muscle repair.</p>
-      <p style="margin-top:.4rem;"><strong>Carbohydrates:</strong> Increase on long run / hard days (up to ${Math.round(7.5*w)}g/day). Reduce on rest days (${Math.round(4.5*w)}g/day).</p>
-      <p style="margin-top:.4rem;"><strong>Hydration:</strong> Add ~500–750ml water per hour of running on top of baseline 2–2.5L/day.</p>
-      ${hardDays > 2 ? '<p style="margin-top:.4rem; color:var(--warn);"><strong>⚠️ Busy week:</strong> '+hardDays+' hard sessions — ensure you nail pre-run fuelling and post-run recovery nutrition every time.</p>' : ''}
-    </div>
-  `;
+  // --- Diet insights from recent days ---
+  const recentDays = [];
+  for (let i = 1; i <= 7; i++) {
+    const dt = new Date(); dt.setDate(dt.getDate() - i);
+    const ds = dateStr(dt);
+    const entry = log.find(l => l.date === ds);
+    if (entry && entry.consumed > 0) recentDays.push({ date: ds, entry, dayMon0: (dt.getDay() + 6) % 7 });
+  }
+  if (recentDays.length >= 1) {
+    const n = recentDays.length;
+    const totalC = recentDays.reduce((s, d) => s + (d.entry.consumed || 0), 0);
+    const avgConsumed = Math.round(totalC / n);
+    // Macros from plate items
+    let tProt = 0, tCarb = 0, tFat = 0;
+    recentDays.forEach(d => { (d.entry.items || []).forEach(i => { tProt += i.prot || 0; tCarb += i.carb || 0; tFat += i.fat || 0; }); });
+    const avgProt = tProt / n, avgCarb = tCarb / n;
+    const protPerKg = (avgProt / w).toFixed(1), carbPerKg = (avgCarb / w).toFixed(1);
+    // Burned per day (RMR + exercise) over the same recent days
+    const isFemale2 = ap.sex === 'female';
+    const h2 = ap.height || 175, age2 = ap.age || 35;
+    const dayRmr = ap.rmr ? ap.rmr : (isFemale2 ? Math.round(10*w + 6.25*h2 - 5*age2 - 161) : Math.round(10*w + 6.25*h2 - 5*age2 + 5));
+    let totalBurnEx = 0;
+    recentDays.forEach(d => {
+      const dt2 = new Date(d.date + 'T12:00:00');
+      const dayMon0r = (dt2.getDay() + 6) % 7;
+      const mon2 = new Date(dt2); mon2.setDate(dt2.getDate() - dayMon0r); mon2.setHours(0,0,0,0);
+      const wk2 = isoWeekKey(mon2);
+      const daySess = ((ap.weekSessions && ap.weekSessions[wk2]) || []).filter(s => s.day === dayMon0r);
+      totalBurnEx += daySess.reduce((sum, s) => sum + estimateBurn(s), 0);
+    });
+    const avgBurned = Math.round(dayRmr + totalBurnEx / n);
+    const avgDeficit = avgConsumed - avgBurned;
+    const defLabel = avgDeficit > 0 ? '+' + avgDeficit : String(avgDeficit);
+    // Insights
+    const protOk = avgProt / w >= 1.6;
+    const carbOk = avgCarb / w >= 4.0;
+    const deficitOk = avgDeficit < -100 && avgDeficit > -750;
+    const protInsight = protOk
+      ? `✅ <strong>Protein ${protPerKg} g/kg</strong> — solid for muscle maintenance and repair.`
+      : `⚠️ <strong>Protein ${protPerKg} g/kg</strong> — aim for ≥1.6 g/kg to support lean muscle. Consider adding Greek yoghurt, eggs, or a post-run shake.`;
+    const carbInsight = carbOk
+      ? `✅ <strong>Carbs ${carbPerKg} g/kg</strong> — adequate to fuel your running.`
+      : `⚠️ <strong>Carbs ${carbPerKg} g/kg</strong> — might be low for training days. Fuel hard sessions with ≥5 g/kg to protect performance.`;
+    const deficitInsight = deficitOk
+      ? `✅ <strong>Deficit ${defLabel} kcal/day</strong> — sustainable pace for gradual fat loss while preserving muscle.`
+      : avgDeficit <= -750
+        ? `⚠️ <strong>Deficit ${defLabel} kcal/day</strong> — quite aggressive. Risk of muscle loss and poor recovery. Try to stay within –300 to –500 kcal.`
+        : avgDeficit > 0
+          ? `⚠️ <strong>Surplus ${defLabel} kcal/day</strong> — you're eating above maintenance. To lose weight, create a small deficit (–300 to –500 kcal).`
+          : `ℹ️ <strong>Deficit ${defLabel} kcal/day</strong> — close to maintenance. A –300 to –500 kcal deficit would support steady fat loss.`;
+    guide.innerHTML = `
+      <div style="font-size:.85rem; line-height:1.8;">
+        <p style="color:var(--muted); margin-bottom:.5rem;">Based on your last ${n} day${n>1?'s':''} — avg ${avgConsumed.toLocaleString()} kcal consumed vs ${avgBurned.toLocaleString()} kcal burned:</p>
+        <p>${deficitInsight}</p>
+        <p style="margin-top:.3rem;">${protInsight}</p>
+        <p style="margin-top:.3rem;">${carbInsight}</p>
+        <p style="margin-top:.6rem; font-size:.82rem; color:var(--muted);"><strong>Goal:</strong> Lose 2–3 kg while building lean muscle and maintaining running performance. Target a moderate deficit on easy/rest days, eat to maintenance on hard training days.</p>
+      </div>`;
+  } else {
+    guide.innerHTML = `<p style="font-size:.85rem; color:var(--muted);">Start logging your meals to see personalised diet insights here.</p>`;
+  }
 
   // Rotating tip
   if (tipEl) tipEl.textContent = TIPS[Math.floor(Date.now() / 86400000) % TIPS.length];
@@ -4876,7 +4936,6 @@ function renderAll() {
   renderDashboard();
   renderWeekGrid();
   renderMealGrid();
-  renderNutritionTable();
   renderProducts();
   renderRecommendations();
   renderMeals();

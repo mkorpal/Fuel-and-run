@@ -136,6 +136,8 @@
   .tag-strength { background: #fff3cd; color: #856404; }
   .tag-rest   { background: #f8f9fa; color: #6c757d; }
   .tag-other  { background: #e2d9f3; color: #432874; }
+  .tag-walk   { background: #e8f5e9; color: #2e7d32; }
+  .tag-pushups { background: #fce4ec; color: #c62828; }
 
   /* ---- Meal week grid ---- */
   .meal-day-cell { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:.6rem .5rem; min-height:120px; font-size:.78rem; cursor:pointer; transition:box-shadow .15s; }
@@ -629,6 +631,7 @@
               <option value="bike">Bike</option>
               <option value="swim">Swim</option>
               <option value="strength">Strength Training</option>
+              <option value="pushups">Push-ups</option>
               <option value="rest">Rest</option>
               <option value="other">Other</option>
             </select>
@@ -640,6 +643,10 @@
           <div class="form-row">
             <label>Duration (min)</label>
             <input type="number" id="man-dur" min="0" step="5" placeholder="e.g. 60" />
+          </div>
+          <div class="form-row" id="man-reps-row" style="display:none;">
+            <label>Reps</label>
+            <input type="number" id="man-reps" min="0" step="1" placeholder="e.g. 50" />
           </div>
           <div class="form-row">
             <label>kcal Burned</label>
@@ -2164,6 +2171,12 @@ document.getElementById('btn-strava-sync').addEventListener('click', () => {
   if (el) el.value = dateStr(new Date());
 })();
 
+// Toggle reps field for pushups
+document.getElementById('man-type').addEventListener('change', function() {
+  const repsRow = document.getElementById('man-reps-row');
+  if (repsRow) repsRow.style.display = this.value === 'pushups' ? '' : 'none';
+});
+
 document.getElementById('btn-add-session').addEventListener('click', () => {
   const dateVal = document.getElementById('man-date').value;
   if (!dateVal) { toast('Please select a date'); return; }
@@ -2177,13 +2190,16 @@ document.getElementById('btn-add-session').addEventListener('click', () => {
   const dist = parseFloat(document.getElementById('man-dist').value) || 0;
   const dur  = parseInt(document.getElementById('man-dur').value) || 0;
   const cal  = parseInt(document.getElementById('man-cal').value) || null;
+  const reps = parseInt(document.getElementById('man-reps').value) || 0;
   const intensity = document.getElementById('man-int').value;
   const ap = activeProfile();
   if (!ap.weekSessions) ap.weekSessions = {};
   if (!ap.weekSessions[wk]) ap.weekSessions[wk] = [];
   // Allow multiple sessions per day — remove only if same day + same type (update)
   ap.weekSessions[wk] = ap.weekSessions[wk].filter(s => !(s.day === dayIdx && s.type === type && !s.stravaId && !s.startTime));
-  ap.weekSessions[wk].push({ day: dayIdx, type, dist, dur, intensity, calories: cal, title: type.charAt(0).toUpperCase()+type.slice(1), updatedAt: new Date().toISOString() });
+  const session = { day: dayIdx, type, dist, dur, intensity, calories: cal, title: type === 'pushups' ? 'Push-ups' : type.charAt(0).toUpperCase()+type.slice(1), updatedAt: new Date().toISOString() };
+  if (type === 'pushups' && reps) session.reps = reps;
+  ap.weekSessions[wk].push(session);
   const curWk = isoWeekKey(mondayOfOffset(0));
   if (wk === curWk) ap.sessions = ap.weekSessions[wk];
   // Navigate to the logged week
@@ -2229,6 +2245,7 @@ function estimateBurn(session) {
   if (session.type === 'bike') return Math.round((dur / 60) * w * 8);
   if (session.type === 'swim') return Math.round((dur / 60) * w * 9);
   if (session.type === 'strength') return Math.round((dur / 60) * w * 5);
+  if (session.type === 'pushups') return Math.round((session.reps || 0) * 0.5);
   return Math.round((dur / 60) * w * 5);
 }
 
@@ -2379,6 +2396,7 @@ function renderWeekGrid() {
         const tagLabel = s.type.charAt(0).toUpperCase() + s.type.slice(1);
         const distInfo = s.dist ? `${s.dist}km` : '';
         const durInfo = s.dur ? `${s.dur}min` : '';
+        const repsInfo = s.reps ? `${s.reps} reps` : '';
         const garminCal = s.calories ? `<div style="font-size:.7rem; color:var(--accent); font-weight:600;">🔥 ${s.calories} kcal burned</div>` : '';
         const garminHr = s.avgHr ? `<div style="font-size:.7rem; color:#e05050;">❤️ ${s.avgHr} avg · ${s.maxHr || '—'} max</div>` : '';
         const garminPace = s.pace ? `<div style="font-size:.7rem; color:var(--muted);">⏱ ${s.pace}/km</div>` : '';
@@ -2389,6 +2407,7 @@ function renderWeekGrid() {
           ${title}
           <span class="workout-tag ${tagClass}">${tagLabel}</span>
           ${distInfo ? `<div style="font-size:.72rem; color:var(--muted);">${distInfo} ${durInfo}</div>` : ''}
+          ${repsInfo ? `<div style="font-size:.72rem; color:var(--muted);">${repsInfo}</div>` : ''}
           ${garminCal}${garminHr}${garminPace}${clsLabel}
         </div>`;
       }
@@ -4567,6 +4586,7 @@ function renderDashboard() {
   const kcalBurned = rmr * daysElapsed + exerciseBurn;
   const runKm = sessionsThisWeek.filter(s => s.type === 'run').reduce((a, s) => a + (s.dist || 0), 0);
   const strengthMins = sessionsThisWeek.filter(s => s.type === 'strength').reduce((a, s) => a + (s.dur || 0), 0);
+  const pushups = sessionsThisWeek.filter(s => s.type === 'pushups').reduce((a, s) => a + (s.reps || 0), 0);
 
   // Consumed + macros from dailyLog this week
   const log = ap.dailyLog || [];
@@ -4597,6 +4617,7 @@ function renderDashboard() {
   summary.innerHTML = `
     <div class="target-card"><div class="target-val">${runKm.toFixed(1)} km</div><div class="target-label">run ${weekLabel}</div></div>
     <div class="target-card"><div class="target-val">${strengthMins} min</div><div class="target-label">strength training</div></div>
+    <div class="target-card"><div class="target-val">${pushups}</div><div class="target-label">push-ups</div></div>
     <div class="target-card"><div class="target-val">${kcalBurned.toLocaleString()} kcal</div><div class="target-label">burned ${weekLabel}</div></div>
     <div class="target-card"><div class="target-val">${kcalConsumed.toLocaleString()} kcal</div><div class="target-label">consumed ${weekLabel}</div></div>
     <div class="target-card ${deficitClass}"><div class="target-val">${daysElapsed > 0 ? deficitLabel + ' kcal' : '—'}</div><div class="target-label">deficit/surplus per day</div></div>
@@ -5218,7 +5239,15 @@ function openQtyModal(type, id) {
       fat  = fatPer  ? parseFloat((fatPer  * grams).toFixed(1)) : 0;
     }
     const displayUnit = currentUnit === 'eaches' ? 'eaches' : unit;
-    addToPlate(type, id, name, rawQty, displayUnit, kcal, prot, carb, fat);
+    // For pantry meals, snapshot ingredients for later editing
+    let ingredients = null;
+    if (type === 'meal') {
+      const m = state.meals.find(x => x.id === id);
+      if (m && m.type === 'pantry' && m.ingredients) {
+        ingredients = m.ingredients.map(i => ({ ...i, qty: parseFloat(i.qty) || 0 }));
+      }
+    }
+    addToPlate(type, id, name, rawQty, displayUnit, kcal, prot, carb, fat, ingredients);
   };
 }
 
@@ -5228,7 +5257,7 @@ document.getElementById('qty-overlay').addEventListener('click', e => { if (e.ta
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && _qtyResolve) _qtyResolve(false); if (e.key === 'Enter' && document.getElementById('qty-overlay').style.display !== 'none' && _qtyResolve) _qtyResolve(true); });
 
 // --- Add / remove items ---
-function addToPlate(type, sourceId, name, qty, unit, kcal, prot, carb, fat) {
+function addToPlate(type, sourceId, name, qty, unit, kcal, prot, carb, fat, ingredients) {
   const today = dateStr(new Date());
   const ap = activeProfile();
   if (!ap.dailyLog) ap.dailyLog = [];
@@ -5240,7 +5269,9 @@ function addToPlate(type, sourceId, name, qty, unit, kcal, prot, carb, fat) {
     ap.dailyLog.push(entry);
   }
   if (!entry.items) entry.items = [];
-  entry.items.push({ id: Date.now().toString(), sourceId, type, name, qty, unit, kcal, prot, carb, fat });
+  const item = { id: Date.now().toString(), sourceId, type, name, qty, unit, kcal, prot, carb, fat };
+  if (ingredients) item.ingredients = ingredients;
+  entry.items.push(item);
   entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
   save();
   renderPlate();
@@ -5261,6 +5292,173 @@ window.removeFromPlate = (itemId) => {
   renderPlateTab();
   renderCalorieChart();
 };
+
+// --- Edit ingredients of a plate item ---
+function editPlateIngredients(itemId) {
+  const today = dateStr(new Date());
+  const ap = activeProfile();
+  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  if (!entry) return;
+  const item = (entry.items || []).find(i => i.id === itemId);
+  if (!item || !item.ingredients || !item.ingredients.length) return;
+
+  const rows = item.ingredients.map((ing, idx) => {
+    const p = state.products.find(x => x.id === ing.productId);
+    const unitLabel = ing.unit === 'serves' ? 'serves' : 'g';
+    const pg = productPerGram(p);
+    const q = parseFloat(ing.qty) || 0;
+    const mult = ing.unit === 'serves' ? (p && p.serve ? p.serve : 1) : 1;
+    const iKcal = Math.round(pg.kcal * q * mult);
+    const iCarb = (pg.carb * q * mult).toFixed(1);
+    const iProt = (pg.prot * q * mult).toFixed(1);
+    const iFat  = (pg.fat  * q * mult).toFixed(1);
+    return `<tr data-ing-idx="${idx}">
+      <td style="padding:.3rem .4rem; font-size:.8rem;">${ing.name}</td>
+      <td style="padding:.3rem .4rem;"><input type="number" min="0" step="any" value="${q}" style="width:60px; padding:.2rem .3rem; border:1px solid var(--border); border-radius:4px; font-size:.8rem;" data-ing-qty="${idx}"></td>
+      <td style="padding:.3rem .4rem; font-size:.75rem; color:var(--muted);">${unitLabel}</td>
+      <td style="padding:.3rem .4rem; text-align:right; font-size:.78rem;" data-ing-kcal="${idx}">${iKcal}</td>
+      <td style="padding:.3rem .4rem; text-align:right; font-size:.78rem;" data-ing-carb="${idx}">${iCarb}</td>
+      <td style="padding:.3rem .4rem; text-align:right; font-size:.78rem;" data-ing-prot="${idx}">${iProt}</td>
+      <td style="padding:.3rem .4rem; text-align:right; font-size:.78rem;" data-ing-fat="${idx}">${iFat}</td>
+      <td style="padding:.3rem .2rem; text-align:center;"><button style="background:none; border:none; cursor:pointer; color:#c62828; font-size:.78rem;" onclick="removePlateIngredient('${itemId}', ${idx})">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  const editorHtml = `
+    <div id="ing-editor-${itemId}" style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:.6rem; margin:.4rem 0;">
+      <div style="font-size:.82rem; font-weight:600; margin-bottom:.4rem;">Edit ingredients — ${item.name}</div>
+      <table style="width:100%; border-collapse:collapse; font-size:.8rem;">
+        <thead><tr style="border-bottom:1px solid var(--border); font-size:.7rem; color:var(--muted); text-transform:uppercase;">
+          <th style="text-align:left; padding:.2rem .4rem;">Ingredient</th>
+          <th style="text-align:left; padding:.2rem .4rem;">Qty</th>
+          <th style="padding:.2rem .4rem;">Unit</th>
+          <th style="text-align:right; padding:.2rem .4rem;">kcal</th>
+          <th style="text-align:right; padding:.2rem .4rem;">C</th>
+          <th style="text-align:right; padding:.2rem .4rem;">P</th>
+          <th style="text-align:right; padding:.2rem .4rem;">F</th>
+          <th style="padding:.2rem;"></th>
+        </tr></thead>
+        <tbody id="ing-editor-body-${itemId}">${rows}</tbody>
+      </table>
+      <div style="display:flex; gap:.5rem; justify-content:flex-end; margin-top:.5rem;">
+        <button onclick="cancelIngredientEdit('${itemId}')" style="padding:.3rem .8rem; font-size:.78rem; border:1px solid var(--border); border-radius:4px; background:var(--surface); cursor:pointer;">Cancel</button>
+        <button onclick="savePlateIngredientEdits('${itemId}')" style="padding:.3rem .8rem; font-size:.78rem; border:none; border-radius:4px; background:var(--accent); color:#fff; cursor:pointer; font-weight:600;">Save</button>
+      </div>
+    </div>`;
+
+  // Insert editor after the table in plate tab
+  const existing = document.getElementById('ing-editor-' + itemId);
+  if (existing) { existing.remove(); return; } // toggle off
+  // Remove any other open editors
+  document.querySelectorAll('[id^="ing-editor-"]').forEach(el => el.remove());
+  const contentEl = document.getElementById('plate-tab-content');
+  if (contentEl) contentEl.insertAdjacentHTML('afterend', editorHtml);
+
+  // Live-update macros when qty changes
+  const body = document.getElementById('ing-editor-body-' + itemId);
+  if (body) body.addEventListener('input', (e) => {
+    if (!e.target.dataset.ingQty) return;
+    const idx = parseInt(e.target.dataset.ingQty);
+    const ing = item.ingredients[idx];
+    if (!ing) return;
+    const p = state.products.find(x => x.id === ing.productId);
+    const pg = productPerGram(p);
+    const q = parseFloat(e.target.value) || 0;
+    const mult = ing.unit === 'serves' ? (p && p.serve ? p.serve : 1) : 1;
+    const kcEl = body.querySelector(`[data-ing-kcal="${idx}"]`);
+    const caEl = body.querySelector(`[data-ing-carb="${idx}"]`);
+    const prEl = body.querySelector(`[data-ing-prot="${idx}"]`);
+    const faEl = body.querySelector(`[data-ing-fat="${idx}"]`);
+    if (kcEl) kcEl.textContent = Math.round(pg.kcal * q * mult);
+    if (caEl) caEl.textContent = (pg.carb * q * mult).toFixed(1);
+    if (prEl) prEl.textContent = (pg.prot * q * mult).toFixed(1);
+    if (faEl) faEl.textContent = (pg.fat  * q * mult).toFixed(1);
+  });
+}
+
+function removePlateIngredient(itemId, ingIdx) {
+  const today = dateStr(new Date());
+  const ap = activeProfile();
+  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  if (!entry) return;
+  const item = (entry.items || []).find(i => i.id === itemId);
+  if (!item || !item.ingredients) return;
+  item.ingredients.splice(ingIdx, 1);
+  // If no ingredients left, remove the whole item
+  if (!item.ingredients.length) {
+    removeFromPlate(itemId);
+    return;
+  }
+  // Recalculate macros
+  recalcPlateItemFromIngredients(item);
+  save();
+  renderPlate();
+  renderPlateTab();
+  renderCalorieChart();
+}
+
+function cancelIngredientEdit(itemId) {
+  const el = document.getElementById('ing-editor-' + itemId);
+  if (el) el.remove();
+}
+
+function savePlateIngredientEdits(itemId) {
+  const today = dateStr(new Date());
+  const ap = activeProfile();
+  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  if (!entry) return;
+  const item = (entry.items || []).find(i => i.id === itemId);
+  if (!item || !item.ingredients) return;
+
+  const body = document.getElementById('ing-editor-body-' + itemId);
+  if (!body) return;
+
+  // Read updated quantities
+  const qtyInputs = body.querySelectorAll('[data-ing-qty]');
+  qtyInputs.forEach(input => {
+    const idx = parseInt(input.dataset.ingQty);
+    if (item.ingredients[idx]) {
+      item.ingredients[idx].qty = parseFloat(input.value) || 0;
+    }
+  });
+
+  // Remove zero-qty ingredients
+  item.ingredients = item.ingredients.filter(i => (parseFloat(i.qty) || 0) > 0);
+  if (!item.ingredients.length) {
+    removeFromPlate(itemId);
+    return;
+  }
+
+  recalcPlateItemFromIngredients(item);
+  save();
+  cancelIngredientEdit(itemId);
+  renderPlate();
+  renderPlateTab();
+  renderCalorieChart();
+}
+
+function recalcPlateItemFromIngredients(item) {
+  let kcal = 0, prot = 0, carb = 0, fat = 0;
+  for (const ing of item.ingredients) {
+    const p = state.products.find(x => x.id === ing.productId);
+    const pg = productPerGram(p);
+    const q = parseFloat(ing.qty) || 0;
+    const mult = ing.unit === 'serves' ? (p && p.serve ? p.serve : 1) : 1;
+    kcal += pg.kcal * q * mult;
+    prot += pg.prot * q * mult;
+    carb += pg.carb * q * mult;
+    fat  += pg.fat  * q * mult;
+  }
+  item.kcal = Math.round(kcal);
+  item.prot = Math.round(prot * 10) / 10;
+  item.carb = Math.round(carb * 10) / 10;
+  item.fat  = Math.round(fat  * 10) / 10;
+  // Update the consumed total on the daily entry
+  const today = dateStr(new Date());
+  const ap = activeProfile();
+  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  if (entry) entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
+}
 
 // --- Render plate panels ---
 function renderPlate() {
@@ -5346,6 +5544,9 @@ function renderPlateTab() {
     const prot = (item.prot || 0).toFixed(1);
     const carb = (item.carb || 0).toFixed(1);
     const fat  = (item.fat  || 0).toFixed(1);
+    const editBtn = item.ingredients && item.ingredients.length
+      ? `<button style="background:none; border:none; cursor:pointer; color:var(--accent); font-size:.82rem; margin-right:.2rem;" onclick="editPlateIngredients('${item.id}')" title="Edit ingredients">✏️</button>`
+      : '';
     return `<tr>
       <td style="padding:.35rem .4rem; font-size:.82rem;">${item.name}</td>
       <td style="padding:.35rem .4rem; font-size:.78rem; color:var(--muted); white-space:nowrap;">${qtyLabel}</td>
@@ -5353,8 +5554,8 @@ function renderPlateTab() {
       <td style="padding:.35rem .4rem; text-align:right;">${carb}</td>
       <td style="padding:.35rem .4rem; text-align:right;">${prot}</td>
       <td style="padding:.35rem .4rem; text-align:right;">${fat}</td>
-      <td style="padding:.35rem .2rem; text-align:center;">
-        <button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.82rem;" onclick="removeFromPlate('${item.id}')">✕</button>
+      <td style="padding:.35rem .2rem; text-align:center; white-space:nowrap;">
+        ${editBtn}<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.82rem;" onclick="removeFromPlate('${item.id}')">✕</button>
       </td>
     </tr>`;
   }).join('');

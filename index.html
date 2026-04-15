@@ -1377,19 +1377,17 @@ function mergeStates(local, remote) {
         const ex = sessMap[s.day];
         if (!ex || (s.updatedAt || '') > (ex.updatedAt || '')) sessMap[s.day] = s;
       });
-      // DailyLog: one per date, newer updatedAt wins; merge items arrays
+      // DailyLog: one per date, newer updatedAt wins entirely
       const logMap = {};
       [...(base.dailyLog || []), ...(p.dailyLog || [])].forEach(entry => {
         const ex = logMap[entry.date];
         if (!ex) { logMap[entry.date] = { ...entry, items: [...(entry.items || [])] }; }
         else {
-          // Merge items by id, then recalc consumed
-          const itemMap = {};
-          [...(ex.items || []), ...(entry.items || [])].forEach(it => { itemMap[it.id] = it; });
-          const merged = { ...((entry.updatedAt||'') > (ex.updatedAt||'') ? entry : ex) };
-          merged.items = Object.values(itemMap);
-          merged.consumed = merged.items.reduce((s, i) => s + (i.kcal || 0), 0) || merged.consumed;
-          logMap[entry.date] = merged;
+          // Last-write-wins: the entry with the newer updatedAt keeps its items
+          if ((entry.updatedAt || '') > (ex.updatedAt || '')) {
+            logMap[entry.date] = { ...entry, items: [...(entry.items || [])] };
+          }
+          // else keep ex (already in logMap)
         }
       });
       // Profile settings: newer updatedAt wins
@@ -4554,8 +4552,9 @@ document.getElementById('btn-log-calories').addEventListener('click', () => {
     const platePortion = (existing.items || []).reduce((s, i) => s + (i.kcal || 0), 0);
     existing.consumed = platePortion + consumed;
     existing.tdee = existing.tdee || t.tdee;
+    existing.updatedAt = new Date().toISOString();
   } else {
-    ap.dailyLog.push({ date, consumed, tdee: t.tdee, target: t.kcal, items: [] });
+    ap.dailyLog.push({ date, consumed, tdee: t.tdee, target: t.kcal, items: [], updatedAt: new Date().toISOString() });
   }
   save();
   renderCalorieChart();
@@ -5332,6 +5331,7 @@ function addToPlate(type, sourceId, name, qty, unit, kcal, prot, carb, fat, ingr
   if (ingredients) item.ingredients = ingredients;
   entry.items.push(item);
   entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
+  entry.updatedAt = new Date().toISOString();
   save();
   renderPlate();
   renderPlateTab();
@@ -5346,6 +5346,7 @@ window.removeFromPlate = (itemId) => {
   if (!entry || !entry.items) return;
   entry.items = entry.items.filter(i => i.id !== itemId);
   entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
+  entry.updatedAt = new Date().toISOString();
   save();
   renderPlate();
   renderPlateTab();
@@ -5516,7 +5517,10 @@ function recalcPlateItemFromIngredients(item) {
   const today = dateStr(new Date());
   const ap = activeProfile();
   const entry = (ap.dailyLog || []).find(l => l.date === today);
-  if (entry) entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
+  if (entry) {
+    entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
+    entry.updatedAt = new Date().toISOString();
+  }
 }
 
 // --- Render plate panels ---

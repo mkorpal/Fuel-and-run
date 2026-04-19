@@ -2398,10 +2398,11 @@ function renderWeekGrid() {
       for (const s of daySessions) {
         const tagClass = `tag-${s.type}`;
         const tagLabel = s.type.charAt(0).toUpperCase() + s.type.slice(1);
+        const burnKcal = estimateBurn(s);
         const distInfo = s.dist ? `${s.dist}km` : '';
         const durInfo = s.dur ? `${s.dur}min` : '';
         const repsInfo = s.reps ? `${s.reps} reps` : '';
-        const garminCal = s.calories ? `<div style="font-size:.7rem; color:var(--accent); font-weight:600;">🔥 ${s.calories} kcal burned</div>` : '';
+        const burnLabel = burnKcal > 0 ? `<div style="font-size:.7rem; color:var(--accent); font-weight:600;">🔥 ${burnKcal.toLocaleString()} kcal</div>` : '';
         const garminHr = s.avgHr ? `<div style="font-size:.7rem; color:#e05050;">❤️ ${s.avgHr} avg · ${s.maxHr || '—'} max</div>` : '';
         const garminPace = s.pace ? `<div style="font-size:.7rem; color:var(--muted);">⏱ ${s.pace}/km</div>` : '';
         const cls = classifyWorkout(s);
@@ -2412,7 +2413,7 @@ function renderWeekGrid() {
           <span class="workout-tag ${tagClass}">${tagLabel}</span>
           ${distInfo ? `<div style="font-size:.72rem; color:var(--muted);">${distInfo} ${durInfo}</div>` : ''}
           ${repsInfo ? `<div style="font-size:.72rem; color:var(--muted);">${repsInfo}</div>` : ''}
-          ${garminCal}${garminHr}${garminPace}${clsLabel}
+          ${burnLabel}${garminHr}${garminPace}${clsLabel}
         </div>`;
       }
     }

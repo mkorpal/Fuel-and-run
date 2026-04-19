@@ -512,8 +512,8 @@
   </header>
   <nav id="main-nav">
     <button class="active" data-tab="dashboard">Dashboard</button>
-    <button data-tab="plate">Today's Plate</button>
     <button data-tab="training">My Week</button>
+    <button data-tab="plate">Today's Plate</button>
     <button data-tab="products">My Products</button>
     <button data-tab="meals">My Meals</button>
     <button data-tab="recommendations">AU Food Ideas</button>
@@ -543,14 +543,46 @@
         <div style="display:flex; gap:.35rem; flex-wrap:wrap; margin-bottom:.5rem;">
           <button class="btn btn-sm chart-series-btn active" data-series="consumed" style="background:#f4a261;color:#fff;font-size:.72rem;">kcal consumed</button>
           <button class="btn btn-sm chart-series-btn active" data-series="burned" style="background:#2d6a4f;color:#fff;font-size:.72rem;">kcal burned</button>
-          <button class="btn btn-sm chart-series-btn" data-series="protkg" style="background:var(--surface);color:var(--fg);font-size:.72rem;">protein g/kg</button>
-          <button class="btn btn-sm chart-series-btn" data-series="carbkg" style="background:var(--surface);color:var(--fg);font-size:.72rem;">carbs g/kg</button>
         </div>
         <div style="position:relative; height:260px;">
           <canvas id="calorie-chart"></canvas>
         </div>
         <div id="chart-deficit-text" style="font-size:.82rem; color:var(--muted); text-align:center; margin-top:.4rem;"></div>
         <p id="chart-no-data" style="text-align:center; color:var(--muted); font-size:.85rem; padding:1rem 0; display:none;">No calorie data logged yet. Use the log below to start tracking.</p>
+      </div>
+
+      <!-- Protein per kg Chart -->
+      <div class="card">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem;">
+          <span>📈 Protein per kg body weight</span>
+          <div style="display:flex; gap:.35rem; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm chart-period-macro active" data-period="7">Week</button>
+            <button class="btn btn-secondary btn-sm chart-period-macro" data-period="30">Month</button>
+            <button class="btn btn-secondary btn-sm chart-period-macro" data-period="90">3M</button>
+            <button class="btn btn-secondary btn-sm chart-period-macro" data-period="180">6M</button>
+            <button class="btn btn-secondary btn-sm chart-period-macro" data-period="365">Year</button>
+          </div>
+        </div>
+        <div style="position:relative; height:200px;">
+          <canvas id="protein-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Carbs per kg Chart -->
+      <div class="card">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem;">
+          <span>📈 Carbs per kg body weight</span>
+          <div style="display:flex; gap:.35rem; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm chart-period-macro active" data-period="7">Week</button>
+            <button class="btn btn-secondary btn-sm chart-period-macro" data-period="30">Month</button>
+            <button class="btn btn-secondary btn-sm chart-period-macro" data-period="90">3M</button>
+            <button class="btn btn-secondary btn-sm chart-period-macro" data-period="180">6M</button>
+            <button class="btn btn-secondary btn-sm chart-period-macro" data-period="365">Year</button>
+          </div>
+        </div>
+        <div style="position:relative; height:200px;">
+          <canvas id="carbs-chart"></canvas>
+        </div>
       </div>
 
       <div class="card">
@@ -3046,7 +3078,8 @@ function renderMealGrid() {
     const daySessions = (weekSess || []).filter(s => s.day === d);
     const dayExBurn = daySessions.reduce((sum, s) => sum + estimateBurn(s), 0);
     const dayBurned = dayExBurn;
-    const dayDeficit = consumed > 0 ? consumed - dayBurned : 0;
+    const dayTDEE = Math.round(dayRmr * 1.4 + dayExBurn);
+    const dayDeficit = consumed > 0 ? consumed - dayTDEE : 0;
     const defLabel = dayDeficit > 0 ? '+' + dayDeficit : String(dayDeficit);
     const defColor = consumed === 0 ? 'var(--muted)' : dayDeficit > 0 ? 'var(--warn, #e65100)' : '#2e7d32';
 
@@ -4337,7 +4370,7 @@ window.calcRecipePortion = mealId => {
 // ============================================================
 let calorieChart = null;
 let chartPeriodDays = 7;
-let chartSeries = { consumed: true, burned: true, protkg: false, carbkg: false };
+let chartSeries = { consumed: true, burned: true };
 
 function dateStr(d) {
   const y = d.getFullYear();
@@ -4348,15 +4381,22 @@ function dateStr(d) {
 
 function aggregateCalorieData(log, days) {
   const today = new Date(); today.setHours(0,0,0,0);
-  const w = activeProfile().weight || 72;
+  const ap = activeProfile();
+  const w = ap.weight || 72;
 
   function dayData(ds) {
     const e = log.find(l => l.date === ds);
-    if (!e) return { consumed: null, used: null, protkg: null, carbkg: null };
-    const items = e.items || [];
+    const items = e ? (e.items || []) : [];
     const prot = items.reduce((s, i) => s + (i.prot || 0), 0);
     const carb = items.reduce((s, i) => s + (i.carb || 0), 0);
-    return { consumed: e.consumed, used: e.tdee, protkg: +(prot / w).toFixed(2), carbkg: +(carb / w).toFixed(2) };
+    // Exercise burn from sessions (matches My Week training)
+    const dd = new Date(ds + 'T12:00:00');
+    const dayMon0 = (dd.getDay() + 6) % 7;
+    const mon = new Date(dd); mon.setDate(dd.getDate() - dayMon0); mon.setHours(0,0,0,0);
+    const wk = isoWeekKey(mon);
+    const sessions = (ap.weekSessions && ap.weekSessions[wk]) || [];
+    const exBurn = sessions.filter(s => s.day === dayMon0).reduce((sum, s) => sum + estimateBurn(s), 0);
+    return { consumed: e ? e.consumed : null, used: exBurn > 0 ? exBurn : null, protkg: e ? +(prot / w).toFixed(2) : null, carbkg: e ? +(carb / w).toFixed(2) : null };
   }
 
   function avgBucket(arr) {
@@ -4406,18 +4446,16 @@ function renderCalorieChart() {
   const isDashboardActive = document.getElementById('tab-dashboard').classList.contains('active');
   const ap = activeProfile();
   const log = ap.dailyLog || [];
-  const { labels, consumed, used, protkg, carbkg } = aggregateCalorieData(log, chartPeriodDays);
+  const { labels, consumed, used } = aggregateCalorieData(log, chartPeriodDays);
   const hasData = consumed.some(v => v !== null) || used.some(v => v !== null);
   const noDataEl = document.getElementById('chart-no-data');
   const deficitEl = document.getElementById('chart-deficit-text');
 
-  // Only do a full (re)create when dashboard is visible
   if (!isDashboardActive && !calorieChart) return;
   if (noDataEl) noDataEl.style.display = hasData ? 'none' : '';
   if (calorieChart) { calorieChart.destroy(); calorieChart = null; }
   if (!hasData) { if (deficitEl) deficitEl.textContent = ''; return; }
 
-  // Deficit/surplus text when both calorie series are active
   if (deficitEl) {
     if (chartSeries.consumed && chartSeries.burned) {
       const cArr = consumed.filter(v => v != null);
@@ -4435,7 +4473,6 @@ function renderCalorieChart() {
   }
 
   const ptRadius = chartPeriodDays <= 30 ? 4 : 2;
-  const useSecondAxis = chartSeries.protkg || chartSeries.carbkg;
 
   const datasets = [];
   if (chartSeries.consumed) datasets.push({
@@ -4444,19 +4481,9 @@ function renderCalorieChart() {
     borderWidth: 2, pointRadius: ptRadius, tension: 0.35, spanGaps: true, fill: true,
   });
   if (chartSeries.burned) datasets.push({
-    label: 'Calories Burned (TDEE)', data: used, yAxisID: 'y',
+    label: 'Calories Burned (Exercise)', data: used, yAxisID: 'y',
     borderColor: '#2d6a4f', backgroundColor: 'rgba(45,106,79,.06)',
     borderWidth: 2, borderDash: [6,4], pointRadius: ptRadius, tension: 0.35, spanGaps: true,
-  });
-  if (chartSeries.protkg) datasets.push({
-    label: 'Protein g/kg', data: protkg, yAxisID: 'y2',
-    borderColor: '#e76f51', backgroundColor: 'rgba(231,111,81,.08)',
-    borderWidth: 2, pointRadius: ptRadius, tension: 0.35, spanGaps: true,
-  });
-  if (chartSeries.carbkg) datasets.push({
-    label: 'Carbs g/kg', data: carbkg, yAxisID: 'y2',
-    borderColor: '#457b9d', backgroundColor: 'rgba(69,123,157,.08)',
-    borderWidth: 2, pointRadius: ptRadius, tension: 0.35, spanGaps: true,
   });
 
   const scales = {
@@ -4467,12 +4494,6 @@ function renderCalorieChart() {
       beginAtZero: false, ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' },
     },
   };
-  if (useSecondAxis) {
-    scales.y2 = {
-      position: 'right', title: { display: true, text: 'g / kg', font: { size: 11 } },
-      beginAtZero: true, ticks: { font: { size: 11 } }, grid: { drawOnChartArea: false },
-    };
-  }
 
   calorieChart = new Chart(canvas, {
     type: 'line',
@@ -4486,8 +4507,7 @@ function renderCalorieChart() {
           callbacks: {
             label: ctx => {
               if (ctx.parsed.y == null) return `${ctx.dataset.label}: not logged`;
-              const isGkg = ctx.dataset.yAxisID === 'y2';
-              return `${ctx.dataset.label}: ${isGkg ? ctx.parsed.y.toFixed(1) + ' g/kg' : ctx.parsed.y.toLocaleString() + ' kcal'}`;
+              return `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()} kcal`;
             }
           }
         },
@@ -4495,6 +4515,61 @@ function renderCalorieChart() {
       scales,
     },
   });
+}
+
+// --- Macro charts (Protein/kg, Carbs/kg) ---
+let proteinChart = null, carbsChart = null;
+let macroPeriodDays = 7;
+
+function renderMacroCharts() {
+  const ap = activeProfile();
+  const log = ap.dailyLog || [];
+  const { labels, protkg, carbkg } = aggregateCalorieData(log, macroPeriodDays);
+  const ptRadius = macroPeriodDays <= 30 ? 4 : 2;
+
+  // Protein chart
+  const pCanvas = document.getElementById('protein-chart');
+  if (pCanvas) {
+    if (proteinChart) { proteinChart.destroy(); proteinChart = null; }
+    const hasP = protkg.some(v => v != null);
+    if (hasP) {
+      proteinChart = new Chart(pCanvas, {
+        type: 'line',
+        data: { labels, datasets: [{
+          label: 'Protein g/kg', data: protkg,
+          borderColor: '#e76f51', backgroundColor: 'rgba(231,111,81,.10)',
+          borderWidth: 2, pointRadius: ptRadius, tension: 0.35, spanGaps: true, fill: true,
+        }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) + ' g/kg' : 'not logged' } } },
+          scales: { x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } }, y: { beginAtZero: true, title: { display: true, text: 'g / kg', font: { size: 11 } }, ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' } } },
+        },
+      });
+    }
+  }
+
+  // Carbs chart
+  const cCanvas = document.getElementById('carbs-chart');
+  if (cCanvas) {
+    if (carbsChart) { carbsChart.destroy(); carbsChart = null; }
+    const hasC = carbkg.some(v => v != null);
+    if (hasC) {
+      carbsChart = new Chart(cCanvas, {
+        type: 'line',
+        data: { labels, datasets: [{
+          label: 'Carbs g/kg', data: carbkg,
+          borderColor: '#457b9d', backgroundColor: 'rgba(69,123,157,.10)',
+          borderWidth: 2, pointRadius: ptRadius, tension: 0.35, spanGaps: true, fill: true,
+        }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) + ' g/kg' : 'not logged' } } },
+          scales: { x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } }, y: { beginAtZero: true, title: { display: true, text: 'g / kg', font: { size: 11 } }, ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' } } },
+        },
+      });
+    }
+  }
 }
 
 // Period toggle buttons
@@ -4507,13 +4582,23 @@ document.querySelectorAll('.chart-period').forEach(btn => {
   });
 });
 
+// Macro chart period toggle
+document.querySelectorAll('.chart-period-macro').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.chart-period-macro').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    macroPeriodDays = +btn.dataset.period;
+    renderMacroCharts();
+  });
+});
+
 // Series toggle buttons
 document.querySelectorAll('.chart-series-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     const s = btn.dataset.series;
     chartSeries[s] = !chartSeries[s];
     const on = chartSeries[s];
-    const colors = { consumed: '#f4a261', burned: '#2d6a4f', protkg: '#e76f51', carbkg: '#457b9d' };
+    const colors = { consumed: '#f4a261', burned: '#2d6a4f' };
     btn.style.background = on ? (colors[s] || 'var(--accent)') : 'var(--surface)';
     btn.style.color = on ? '#fff' : 'var(--fg)';
     btn.classList.toggle('active', on);
@@ -4599,8 +4684,9 @@ function renderDashboard() {
     }
   }
 
-  // Deficit / surplus per day: consumed minus burned
-  const deficitTotal = kcalConsumed - kcalBurned;
+  // Deficit / surplus per day: consumed minus TDEE (BMR×1.4 + exercise)
+  const weekTDEE = Math.round(rmr * 1.4) * daysElapsed + exerciseBurn;
+  const deficitTotal = kcalConsumed - weekTDEE;
   const deficitPerDay = daysElapsed > 0 ? Math.round(deficitTotal / daysElapsed) : 0;
   const deficitLabel = deficitPerDay > 0 ? '+' + deficitPerDay : String(deficitPerDay);
   const deficitClass = deficitPerDay > 0 ? 'danger' : '';
@@ -4930,6 +5016,7 @@ function renderAll() {
   renderSyncCode();
   renderPlate();
   renderPlateTab();
+  renderMacroCharts();
 }
 
 // ============================================================

@@ -2865,7 +2865,6 @@ function formatDuration(totalSec) {
 function openWorkoutDetail(weekKey, dayIdx, dateLabel) {
   const daySessions = sessionsForWeekDay(weekKey, dayIdx).filter(s => s.type !== 'rest');
   if (!daySessions.length) return;
-  // Show all sessions for this day
   let fullHtml = '';
   for (const s of daySessions) {
   fullHtml += renderSingleWorkoutDetail(s, dayIdx, dateLabel);
@@ -2875,6 +2874,30 @@ function openWorkoutDetail(weekKey, dayIdx, dateLabel) {
   document.getElementById('workout-detail-card').innerHTML = fullHtml;
   document.getElementById('workout-detail-overlay').classList.add('open');
 }
+
+window.promptOverrideCal = function(updatedAt, dayIdx) {
+  const ap = activeProfile();
+  const wk = isoWeekKey(mondayOfOffset(weekOffset));
+  const sessions = (ap.weekSessions && ap.weekSessions[wk]) || [];
+  const s = sessions.find(s => s.updatedAt === updatedAt && s.day === dayIdx);
+  if (!s) { toast('Session not found'); return; }
+  const current = estimateBurn(s);
+  const input = prompt(`Override calories burned for "${s.title || s.type}".\nCurrent: ${current} kcal\n\nEnter new value (or leave empty to clear override):`, s.caloriesOverride || current);
+  if (input === null) return;
+  const val = parseInt(input, 10);
+  if (input.trim() === '' || isNaN(val)) {
+    delete s.caloriesOverride;
+    s.calories = s._originalCalories || s.calories;
+  } else {
+    if (!s._originalCalories && s.calories) s._originalCalories = s.calories;
+    s.caloriesOverride = val;
+    s.calories = val;
+  }
+  s.updatedAt = new Date().toISOString();
+  save(); renderAll();
+  toast(`✅ Updated calories to ${estimateBurn(s)} kcal`);
+  closeWorkoutDetail();
+};
 
 function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
   if (!s || s.type === 'rest') return '';
@@ -2901,6 +2924,7 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
   if (s.avgHr) html += `<div class="wo-stat"><span class="wo-stat-label">Avg HR</span><span class="wo-stat-val">${s.avgHr} bpm</span></div>`;
   if (s.maxHr) html += `<div class="wo-stat"><span class="wo-stat-label">Max HR</span><span class="wo-stat-val">${s.maxHr} bpm</span></div>`;
   if (s.calories) html += `<div class="wo-stat"><span class="wo-stat-label">Calories</span><span class="wo-stat-val">${s.calories} kcal</span></div>`;
+  html += `<div class="wo-stat"><span class="wo-stat-label">Burned</span><span class="wo-stat-val">${estimateBurn(s)} kcal <button style="background:none;border:none;cursor:pointer;font-size:.8rem;color:var(--accent);padding:0 .2rem;" onclick="promptOverrideCal('${s.updatedAt || ''}',${dayIdx})" title="Override calories">✏️</button></span></div>`;
   if (s.avgCadence) html += `<div class="wo-stat"><span class="wo-stat-label">Cadence</span><span class="wo-stat-val">${s.avgCadence * 2} spm</span></div>`;
   if (s.totalAscent) html += `<div class="wo-stat"><span class="wo-stat-label">Elevation</span><span class="wo-stat-val">↑${s.totalAscent}m ↓${s.totalDescent || 0}m</span></div>`;
   html += `</div>`;

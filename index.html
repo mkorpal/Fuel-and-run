@@ -3077,9 +3077,8 @@ function renderMealGrid() {
     // Calorie deficit for this day
     const daySessions = (weekSess || []).filter(s => s.day === d);
     const dayExBurn = daySessions.reduce((sum, s) => sum + estimateBurn(s), 0);
-    const dayBurned = dayExBurn;
-    const dayTDEE = Math.round(dayRmr * 1.4 + dayExBurn);
-    const dayDeficit = consumed > 0 ? consumed - dayTDEE : 0;
+    const dayBurned = dayRmr + dayExBurn;
+    const dayDeficit = consumed > 0 ? consumed - dayBurned : 0;
     const defLabel = dayDeficit > 0 ? '+' + dayDeficit : String(dayDeficit);
     const defColor = consumed === 0 ? 'var(--muted)' : dayDeficit > 0 ? 'var(--warn, #e65100)' : '#2e7d32';
 
@@ -4396,7 +4395,13 @@ function aggregateCalorieData(log, days) {
     const wk = isoWeekKey(mon);
     const sessions = (ap.weekSessions && ap.weekSessions[wk]) || [];
     const exBurn = sessions.filter(s => s.day === dayMon0).reduce((sum, s) => sum + estimateBurn(s), 0);
-    return { consumed: e ? e.consumed : null, used: exBurn > 0 ? exBurn : null, protkg: e ? +(prot / w).toFixed(2) : null, carbkg: e ? +(carb / w).toFixed(2) : null };
+    // RMR (Mifflin-St Jeor)
+    const isFemale = ap.sex === 'female';
+    const h = ap.height || 175;
+    const age = ap.age || 35;
+    const rmr = ap.rmr ? ap.rmr : (isFemale ? Math.round(10*w + 6.25*h - 5*age - 161) : Math.round(10*w + 6.25*h - 5*age + 5));
+    const dayBurned = rmr + exBurn;
+    return { consumed: e ? e.consumed : null, used: dayBurned, protkg: e ? +(prot / w).toFixed(2) : null, carbkg: e ? +(carb / w).toFixed(2) : null };
   }
 
   function avgBucket(arr) {
@@ -4481,7 +4486,7 @@ function renderCalorieChart() {
     borderWidth: 2, pointRadius: ptRadius, tension: 0.35, spanGaps: true, fill: true,
   });
   if (chartSeries.burned) datasets.push({
-    label: 'Calories Burned (Exercise)', data: used, yAxisID: 'y',
+    label: 'Calories Burned (RMR + Exercise)', data: used, yAxisID: 'y',
     borderColor: '#2d6a4f', backgroundColor: 'rgba(45,106,79,.06)',
     borderWidth: 2, borderDash: [6,4], pointRadius: ptRadius, tension: 0.35, spanGaps: true,
   });
@@ -4663,7 +4668,7 @@ function renderDashboard() {
   const rmr = ap.rmr ? ap.rmr : (isFemale
     ? Math.round(10*w + 6.25*h - 5*age - 161)
     : Math.round(10*w + 6.25*h - 5*age + 5));
-  const kcalBurned = exerciseBurn;
+  const kcalBurned = rmr * daysElapsed + exerciseBurn;
   const runKm = sessionsThisWeek.filter(s => s.type === 'run').reduce((a, s) => a + (s.dist || 0), 0);
   const strengthMins = sessionsThisWeek.filter(s => s.type === 'strength').reduce((a, s) => a + (s.dur || 0), 0);
   const pushups = sessionsThisWeek.filter(s => s.type === 'pushups').reduce((a, s) => a + (s.reps || 0), 0);
@@ -4684,9 +4689,8 @@ function renderDashboard() {
     }
   }
 
-  // Deficit / surplus per day: consumed minus TDEE (BMR×1.4 + exercise)
-  const weekTDEE = Math.round(rmr * 1.4) * daysElapsed + exerciseBurn;
-  const deficitTotal = kcalConsumed - weekTDEE;
+  // Deficit / surplus per day: consumed minus burned (RMR + exercise)
+  const deficitTotal = kcalConsumed - kcalBurned;
   const deficitPerDay = daysElapsed > 0 ? Math.round(deficitTotal / daysElapsed) : 0;
   const deficitLabel = deficitPerDay > 0 ? '+' + deficitPerDay : String(deficitPerDay);
   const deficitClass = deficitPerDay > 0 ? 'danger' : '';

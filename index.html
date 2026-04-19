@@ -25,33 +25,36 @@
     --warn:     #f0a946;
     --text:     #e0dfe6;
     --muted:    #8888a0;
-    --font-head: 'Playfair Display', Georgia, serif;
-    --font-body: 'DM Sans', system-ui, sans-serif;
-    --radius:   6px;
+    --font-head: 'Inter', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+    --radius:   10px;
   }
   html { font-size: 15px; }
   body {
     background: var(--bg);
     color: var(--text);
     font-family: var(--font-body);
-    line-height: 1.6;
+    line-height: 1.55;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   a { color: var(--accent); }
 
   /* ---- Layout ---- */
   #app { display: flex; flex-direction: column; min-height: 100vh; }
   header {
-    background: var(--accent);
-    color: #fff;
-    padding: 1rem 2rem;
+    background: var(--surface);
+    color: var(--text);
+    padding: .85rem 1.5rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: .5rem;
+    border-bottom: 1px solid var(--border);
   }
-  header h1 { font-family: var(--font-head); font-size: 1.5rem; font-weight: 700; letter-spacing: .02em; }
+  header h1 { font-family: var(--font-head); font-size: 1.25rem; font-weight: 800; letter-spacing: -.02em; color: var(--accent); }
   header span { font-size: .82rem; opacity: .75; }
   nav {
     background: var(--surface);
@@ -62,11 +65,13 @@
   }
   nav button {
     background: none; border: none; cursor: pointer;
-    padding: .65rem 1.4rem;
-    font-family: var(--font-body); font-size: .88rem; font-weight: 500;
-    color: var(--muted); border-bottom: 3px solid transparent;
+    padding: .65rem 1.2rem;
+    font-family: var(--font-body); font-size: .82rem; font-weight: 600;
+    color: var(--muted); border-bottom: 2px solid transparent;
     transition: color .15s, border-color .15s;
     white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: .04em;
   }
   nav button.active, nav button:hover { color: var(--accent); border-bottom-color: var(--accent); }
   main { flex: 1; padding: 1.5rem 2rem; max-width: 1100px; width: 100%; margin: 0 auto; }
@@ -84,8 +89,9 @@
     border-radius: var(--radius);
     padding: 1.25rem 1.5rem;
     margin-bottom: 1.25rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
   }
-  .card-title { font-family: var(--font-head); font-size: 1.05rem; font-weight: 600; margin-bottom: .75rem; }
+  .card-title { font-family: var(--font-head); font-size: 1rem; font-weight: 700; margin-bottom: .75rem; letter-spacing: -.01em; }
   .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
 
   /* ---- Upload zone ---- */
@@ -334,8 +340,9 @@
   .btn {
     display: inline-block; padding: .55rem 1.2rem;
     border: none; border-radius: var(--radius);
-    font-family: var(--font-body); font-size: .88rem; font-weight: 600;
+    font-family: var(--font-body); font-size: .85rem; font-weight: 600;
     cursor: pointer; transition: background .15s, transform .1s;
+    letter-spacing: .01em;
   }
   .btn:active { transform: scale(.98); }
   .btn-primary { background: var(--accent); color: #fff; }
@@ -478,7 +485,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 <!-- Login gate -->

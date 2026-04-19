@@ -3063,10 +3063,7 @@ function renderMealGrid() {
     // Get calorie data from dailyLog
     const logEntry = (ap.dailyLog || []).find(l => l.date === dateKey);
     const consumed = logEntry ? (logEntry.consumed || 0) : 0;
-    const target = logEntry ? (logEntry.target || 0) : dailyTargets(d).kcal;
     const items = logEntry ? (logEntry.items || []) : [];
-    const pct = target > 0 ? Math.min((consumed / target) * 100, 120) : 0;
-    const isOver = consumed > target && target > 0;
 
     // Macros from plate items
     const dayProt = items.reduce((s, i) => s + (i.prot || 0), 0);
@@ -3074,10 +3071,12 @@ function renderMealGrid() {
     const protKg = w > 0 ? (dayProt / w).toFixed(1) : '—';
     const carbKg = w > 0 ? (dayCarb / w).toFixed(1) : '—';
 
-    // Calorie deficit for this day
+    // Actual burned for this day (RMR + exercise)
     const daySessions = (weekSess || []).filter(s => s.day === d);
     const dayExBurn = daySessions.reduce((sum, s) => sum + estimateBurn(s), 0);
     const dayBurned = dayRmr + dayExBurn;
+    const pct = dayBurned > 0 ? Math.min((consumed / dayBurned) * 100, 120) : 0;
+    const isOver = consumed > dayBurned && dayBurned > 0;
     const dayDeficit = consumed > 0 ? consumed - dayBurned : 0;
     const defLabel = dayDeficit > 0 ? '+' + dayDeficit : String(dayDeficit);
     const defColor = consumed === 0 ? 'var(--muted)' : dayDeficit > 0 ? 'var(--warn, #e65100)' : '#2e7d32';
@@ -3098,7 +3097,7 @@ function renderMealGrid() {
       <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
       <div class="day-date">${dateLabel}</div>
       <div class="kcal-consumed">${consumed > 0 ? consumed.toLocaleString() : '—'}</div>
-      <div class="kcal-target">of ${target.toLocaleString()} kcal target</div>
+      <div class="kcal-target">of ${dayBurned.toLocaleString()} kcal burned</div>
       <div class="kcal-bar"><div class="kcal-bar-fill${isOver ? ' over' : ''}" style="width:${Math.min(pct, 100)}%"></div></div>
       ${consumed > 0 ? `<div style="font-size:.72rem; color:${defColor}; font-weight:600; margin-top:.2rem;">${defLabel} kcal deficit</div>` : ''}
       ${consumed > 0 ? `<div style="font-size:.68rem; color:var(--muted); margin-top:.1rem;">P: ${protKg} g/kg · C: ${carbKg} g/kg</div>` : ''}

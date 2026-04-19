@@ -4,8 +4,8 @@
   "description": "Nutrition companion for active lifestyles",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#f5f2ec",
-  "theme_color": "#2d6a4f",
+  "background_color": "#0c1220",
+  "theme_color": "#0c1220",
   "icons": [
     {
       "src": "icon-192.png",

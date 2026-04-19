@@ -9,22 +9,22 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Fuel & Run" />
-<meta name="theme-color" content="#2d6a4f" />
+<meta name="theme-color" content="#0c1220" />
 <link rel="manifest" href="manifest.json" />
 <style>
   /* ---- Reset & Base ---- */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg:       #f5f2ec;
-    --surface:  #ffffff;
-    --surface2: #eee9de;
-    --border:   #d6cfc2;
-    --accent:   #2d6a4f;
-    --accent2:  #52b788;
-    --danger:   #c0392b;
-    --warn:     #e67e22;
-    --text:     #1a1a18;
-    --muted:    #6b6659;
+    --bg:       #0c1220;
+    --surface:  #141e30;
+    --surface2: #1a2840;
+    --border:   #1e3050;
+    --accent:   #48dbfb;
+    --accent2:  #0abde3;
+    --danger:   #ee5a52;
+    --warn:     #f0a946;
+    --text:     #c8d6e5;
+    --muted:    #6a8caf;
     --font-head: 'Playfair Display', Georgia, serif;
     --font-body: 'DM Sans', system-ui, sans-serif;
     --radius:   6px;
@@ -130,14 +130,14 @@
     font-weight: 600;
     margin-bottom: .2rem;
   }
-  .tag-run    { background: #d4edda; color: #155724; }
-  .tag-bike   { background: #cce5ff; color: #004085; }
-  .tag-swim   { background: #d1ecf1; color: #0c5460; }
-  .tag-strength { background: #fff3cd; color: #856404; }
-  .tag-rest   { background: #f8f9fa; color: #6c757d; }
-  .tag-other  { background: #e2d9f3; color: #432874; }
-  .tag-walk   { background: #e8f5e9; color: #2e7d32; }
-  .tag-pushups { background: #fce4ec; color: #c62828; }
+  .tag-run    { background: #122e1e; color: #52b788; }
+  .tag-bike   { background: #0f2540; color: #48dbfb; }
+  .tag-swim   { background: #0f2530; color: #4dd0c8; }
+  .tag-strength { background: #2a2210; color: #f0a946; }
+  .tag-rest   { background: #1a1e28; color: #8888a0; }
+  .tag-other  { background: #201a30; color: #a78bfa; }
+  .tag-walk   { background: #122e1e; color: #52b788; }
+  .tag-pushups { background: #2a1520; color: #f87171; }
 
   /* ---- Meal week grid ---- */
   .meal-day-cell { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:.6rem .5rem; min-height:120px; font-size:.78rem; cursor:pointer; transition:box-shadow .15s; }
@@ -152,7 +152,7 @@
   /* Expanded detail overlay */
   .meal-detail-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:600; justify-content:center; align-items:center; }
   .meal-detail-overlay.open { display:flex; }
-  .meal-detail-card { background:#fff; border-radius:var(--radius); padding:1.5rem; max-width:420px; width:92%; max-height:80vh; overflow-y:auto; box-shadow:0 8px 30px rgba(0,0,0,.18); }
+  .meal-detail-card { background:var(--surface); border-radius:var(--radius); padding:1.5rem; max-width:420px; width:92%; max-height:80vh; overflow-y:auto; box-shadow:0 8px 30px rgba(0,0,0,.4); }
   .meal-detail-card h3 { margin:0 0 .75rem; font-size:1.05rem; }
   .meal-detail-card .detail-slot-label { font-size:.75rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin:.6rem 0 .2rem; }
   .meal-detail-card .detail-item { display:flex; justify-content:space-between; padding:.25rem 0; font-size:.85rem; border-bottom:1px solid var(--surface2); }
@@ -166,18 +166,18 @@
   /* ---- Workout detail overlay ---- */
   .workout-detail-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:600; justify-content:center; align-items:center; }
   .workout-detail-overlay.open { display:flex; }
-  .workout-detail-card { background:#fff; border-radius:var(--radius); padding:1.5rem; max-width:480px; width:94%; max-height:85vh; overflow-y:auto; box-shadow:0 8px 30px rgba(0,0,0,.18); }
+  .workout-detail-card { background:var(--surface); border-radius:var(--radius); padding:1.5rem; max-width:480px; width:94%; max-height:85vh; overflow-y:auto; box-shadow:0 8px 30px rgba(0,0,0,.4); }
   .workout-detail-card h3 { margin:0 0 .5rem; font-size:1.05rem; }
   .wo-summary { display:flex; flex-wrap:wrap; gap:.5rem .9rem; margin-bottom:.8rem; font-size:.85rem; }
   .wo-summary .wo-stat { display:flex; flex-direction:column; }
   .wo-summary .wo-stat-label { font-size:.68rem; text-transform:uppercase; color:var(--muted); font-weight:600; }
   .wo-summary .wo-stat-val { font-weight:700; font-size:.95rem; }
   .wo-class-badge { display:inline-block; padding:.25rem .65rem; border-radius:6px; font-size:.78rem; font-weight:700; margin-bottom:.6rem; }
-  .wo-class-easy { background:#d8f3dc; color:#1b4332; }
-  .wo-class-tempo { background:#fff3cd; color:#856404; }
-  .wo-class-threshold { background:#ffe0b2; color:#e65100; }
-  .wo-class-interval { background:#ffcdd2; color:#b71c1c; }
-  .wo-class-long { background:#d1ecf1; color:#0c5460; }
+  .wo-class-easy { background:#122e1e; color:#52b788; }
+  .wo-class-tempo { background:#2a2210; color:#f0a946; }
+  .wo-class-threshold { background:#2a1a0a; color:#f4a261; }
+  .wo-class-interval { background:#2a1520; color:#f87171; }
+  .wo-class-long { background:#0f2530; color:#4dd0c8; }
   .wo-class-recovery { background:#e8f5e9; color:#2e7d32; }
   .wo-class-race { background:#f3e5f5; color:#6a1b9a; }
   .wo-class-unknown { background:var(--surface2); color:var(--muted); }
@@ -247,8 +247,8 @@
   /* Detail popover (appears below chip on click) */
   .product-detail-pop {
     display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
-    background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
-    box-shadow: 0 6px 24px rgba(0,0,0,.12); padding: .65rem .85rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 6px 24px rgba(0,0,0,.35); padding: .65rem .85rem;
     min-width: 220px; max-width: 300px; font-size: .8rem;
   }
   .product-chip.active .product-detail-pop { display: block; }
@@ -288,7 +288,7 @@
     background: var(--surface2);
     user-select: none;
   }
-  .plate-zone.drag-over { border-color: var(--accent); background: #eaf4ee; border-style: solid; }
+  .plate-zone.drag-over { border-color: var(--accent); background: var(--surface2); border-style: solid; }
   .plate-zone p { font-size: .7rem; color: var(--muted); text-align: center; margin: 0; line-height: 1.4; }
   .plate-item-row {
     display: flex; align-items: center; gap: .35rem;
@@ -339,7 +339,7 @@
   }
   .btn:active { transform: scale(.98); }
   .btn-primary { background: var(--accent); color: #fff; }
-  .btn-primary:hover { background: #235c42; }
+  .btn-primary:hover { background: #36b0d4; }
   .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
   .btn-secondary:hover { background: var(--border); }
   .btn-sm { padding: .32rem .75rem; font-size: .78rem; }
@@ -369,10 +369,10 @@
     display: inline-block; font-size: .7rem; font-weight: 700;
     padding: .1rem .5rem; border-radius: 20px; text-transform: uppercase;
   }
-  .badge-green  { background: #d4edda; color: #155724; }
-  .badge-amber  { background: #fff3cd; color: #856404; }
-  .badge-red    { background: #f8d7da; color: #721c24; }
-  .badge-blue   { background: #cce5ff; color: #004085; }
+  .badge-green  { background: #122e1e; color: #52b788; }
+  .badge-amber  { background: #2a2210; color: #f0a946; }
+  .badge-red    { background: #2a1520; color: #f87171; }
+  .badge-blue   { background: #0f2540; color: #48dbfb; }
 
   /* ---- Scanner Modal ---- */
   #scanner-modal {
@@ -427,15 +427,15 @@
   .meal-chip .mchip-log:hover { opacity: .85; }
   .meal-detail-pop {
     display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
-    background: #fff; border: 1px solid var(--border); border-radius: var(--radius);
-    box-shadow: 0 6px 24px rgba(0,0,0,.12); padding: .65rem .85rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 6px 24px rgba(0,0,0,.35); padding: .65rem .85rem;
     min-width: 240px; max-width: 340px; font-size: .8rem;
   }
   .meal-chip.active .meal-detail-pop { display: block; }
   .meal-type-badge { display: inline-block; font-size: .7rem; font-weight: 600; padding: .15rem .5rem; border-radius: 20px; margin-bottom: .5rem; }
-  .meal-type-pantry { background: #d4edda; color: #155724; }
-  .meal-type-recipe { background: #cce5ff; color: #004085; }
-  .meal-type-manual { background: #fff3cd; color: #856404; }
+  .meal-type-pantry { background: #122e1e; color: #52b788; }
+  .meal-type-recipe { background: #0f2540; color: #48dbfb; }
+  .meal-type-manual { background: #2a2210; color: #f0a946; }
   .meal-ingredients { font-size: .8rem; color: var(--muted); margin-bottom: .4rem; line-height: 1.5; }
   .meal-macros { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .4rem; }
   .meal-macro-chip { background: var(--surface2); border-radius: 4px; padding: .15rem .5rem; font-size: .78rem; }
@@ -484,7 +484,7 @@
 <!-- Login gate -->
 <div id="login-gate" style="display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg); position:fixed; inset:0; z-index:9999;">
   <div style="background:var(--surface); padding:2rem; border-radius:var(--radius); max-width:340px; width:90%; text-align:center; box-shadow:0 2px 16px rgba(0,0,0,.1);">
-    <h2 style="margin-bottom:.3rem;">🌿 Fuel &amp; Run</h2>
+    <h2 style="margin-bottom:.3rem;">⚡ Fuel &amp; Run</h2>
     <p style="color:var(--muted); font-size:.85rem; margin-bottom:1.2rem;">Sign in to continue</p>
     <input type="text" id="login-user" placeholder="Username" autocomplete="username" style="width:100%; padding:.6rem .8rem; margin-bottom:.6rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.9rem;" />
     <div style="position:relative;">
@@ -499,7 +499,7 @@
 <div id="app" style="display:none;">
   <header>
     <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
-      <h1>🌿 Fuel &amp; Run</h1>
+      <h1>⚡ Fuel &amp; Run</h1>
       <div id="profile-switcher" style="display:flex; align-items:center; gap:.5rem;"></div>
       <div style="display:flex; gap:.4rem; align-items:center; margin-left:auto;">
         <button class="btn btn-secondary btn-sm" id="btn-strava-sync" style="font-size:.72rem; display:none;">🔄 Sync Strava</button>
@@ -3330,7 +3330,7 @@ function renderProducts() {
         ${p.nickname ? `<div style="font-size:.74rem; color:var(--muted);">${p.name}</div>` : ''}
         ${p.brand ? `<div style="font-size:.74rem; color:var(--muted);">${p.brand}</div>` : ''}
         ${p.notes ? `<div style="font-size:.73rem; color:var(--muted); margin:.2rem 0;">${p.notes}</div>` : ''}
-        ${(() => { const per = p.nutrPer || '100g'; const lbl = per === 'serving' ? `per single item/serving` : 'per 100g'; const typeBadge = per === 'serving' ? '<span style=\"font-size:.65rem; background:#fff3e0; color:#e65100; padding:.1rem .35rem; border-radius:3px; font-weight:600;\">PER SERVING</span>' : '<span style=\"font-size:.65rem; background:#e8f5e9; color:#2e7d32; padding:.1rem .35rem; border-radius:3px; font-weight:600;\">PER 100g</span>'; return `
+        ${(() => { const per = p.nutrPer || '100g'; const lbl = per === 'serving' ? `per single item/serving` : 'per 100g'; const typeBadge = per === 'serving' ? '<span style=\"font-size:.65rem; background:#2a1a0a; color:#f4a261; padding:.1rem .35rem; border-radius:3px; font-weight:600;\">PER SERVING</span>' : '<span style=\"font-size:.65rem; background:#122e1e; color:#52b788; padding:.1rem .35rem; border-radius:3px; font-weight:600;\">PER 100g</span>'; return `
         <div style="margin:.3rem 0;">${typeBadge}</div>
         ${per === 'serving' ? `<div class="nutrient-row"><span>Serving size</span><span>${p.serve || '—'}g/ml</span></div>` : ''}
         <div class="nutrient-row"><span>Calories</span><span><b>${p.kcal || '—'}</b> kcal <span style="font-size:.7rem;color:var(--muted);">${lbl}</span></span></div>

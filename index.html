@@ -487,7 +487,10 @@
     <h2 style="margin-bottom:.3rem;">🌿 Fuel &amp; Run</h2>
     <p style="color:var(--muted); font-size:.85rem; margin-bottom:1.2rem;">Sign in to continue</p>
     <input type="text" id="login-user" placeholder="Username" autocomplete="username" style="width:100%; padding:.6rem .8rem; margin-bottom:.6rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.9rem;" />
-    <input type="password" id="login-pass" placeholder="Password" autocomplete="current-password" style="width:100%; padding:.6rem .8rem; margin-bottom:.8rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.9rem;" />
+    <div style="position:relative;">
+      <input type="password" id="login-pass" placeholder="Password" autocomplete="current-password" style="width:100%; padding:.6rem .8rem; padding-right:2.4rem; margin-bottom:.8rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.9rem;" />
+      <button type="button" id="btn-toggle-pass" style="position:absolute; right:.5rem; top:.45rem; background:none; border:none; cursor:pointer; font-size:1.1rem; color:var(--muted); line-height:1;" title="Show password">👁️</button>
+    </div>
     <button class="btn btn-primary" id="btn-login" style="width:100%;">Sign In</button>
     <p id="login-error" style="color:var(--danger); font-size:.8rem; margin-top:.5rem; display:none;">Invalid username or password</p>
   </div>
@@ -583,7 +586,14 @@
     <!-- TODAY'S PLATE -->
     <section id="tab-plate" class="section">
       <div class="card">
-        <div class="card-title">🍽️ Today's Plate — Detailed Breakdown</div>
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>🍽️ Plate — Detailed Breakdown</span>
+          <div style="display:flex; align-items:center; gap:.4rem;">
+            <button class="btn btn-secondary btn-sm" id="btn-plate-prev" style="padding:.2rem .5rem;">◀</button>
+            <span id="plate-nav-label" style="font-size:.8rem; min-width:5rem; text-align:center;">Today</span>
+            <button class="btn btn-secondary btn-sm" id="btn-plate-next" style="padding:.2rem .5rem;" disabled>▶</button>
+          </div>
+        </div>
         <div id="plate-tab-date" style="text-align:center; font-size:.82rem; color:var(--muted); margin-bottom:.6rem;"></div>
         <div id="plate-tab-content"></div>
         <div id="plate-tab-totals" style="margin-top:1rem;"></div>
@@ -698,18 +708,6 @@
           <div id="product-list" class="product-list"></div>
           <p id="no-products" style="color:var(--muted); font-size:.85rem;">No products saved yet. Add one below.</p>
         </div>
-        <div class="card plate-panel" id="plate-products-wrap">
-          <div class="card-title" style="text-align:center;">🍽️ Today’s Plate</div>
-          <div class="plate-zone" id="plate-zone-products"
-               ondragover="event.preventDefault(); document.getElementById('plate-zone-products').classList.add('drag-over')"
-               ondragleave="document.getElementById('plate-zone-products').classList.remove('drag-over')"
-               ondrop="handleDrop(event,'plate-zone-products')">
-            🍽️<p>Drop food here<br>or tap ＋</p>
-          </div>
-          <div id="plate-items-products"></div>
-          <div id="plate-total-products" class="plate-total" style="display:none;"></div>
-          <div id="plate-date-products" style="text-align:center;font-size:.73rem;color:var(--muted);margin-top:.4rem;"></div>
-        </div>
       </div>
       <div class="card">
         <div class="card-title">Add a Product</div>
@@ -806,18 +804,6 @@
           </div>
           <div class="meal-grid" id="meal-grid"></div>
           <p id="no-meals" style="color:var(--muted); font-size:.85rem;">No meals saved yet. Create your first meal above.</p>
-        </div>
-        <div class="card plate-panel" id="plate-meals-wrap">
-          <div class="card-title" style="text-align:center;">🍽️ Today's Plate</div>
-          <div class="plate-zone" id="plate-zone-meals"
-               ondragover="event.preventDefault(); document.getElementById('plate-zone-meals').classList.add('drag-over')"
-               ondragleave="document.getElementById('plate-zone-meals').classList.remove('drag-over')"
-               ondrop="handleDrop(event,'plate-zone-meals')">
-            🍽️<p>Drop food here<br>or tap ＋</p>
-          </div>
-          <div id="plate-items-meals"></div>
-          <div id="plate-total-meals" class="plate-total" style="display:none;"></div>
-          <div id="plate-date-meals" style="text-align:center;font-size:.73rem;color:var(--muted);margin-top:.4rem;"></div>
         </div>
       </div>
     </section>
@@ -3059,7 +3045,7 @@ function renderMealGrid() {
     // Calorie deficit for this day
     const daySessions = (weekSess || []).filter(s => s.day === d);
     const dayExBurn = daySessions.reduce((sum, s) => sum + estimateBurn(s), 0);
-    const dayBurned = dayRmr + dayExBurn;
+    const dayBurned = dayExBurn;
     const dayDeficit = consumed > 0 ? consumed - dayBurned : 0;
     const defLabel = dayDeficit > 0 ? '+' + dayDeficit : String(dayDeficit);
     const defColor = consumed === 0 ? 'var(--muted)' : dayDeficit > 0 ? 'var(--warn, #e65100)' : '#2e7d32';
@@ -4592,7 +4578,7 @@ function renderDashboard() {
   const rmr = ap.rmr ? ap.rmr : (isFemale
     ? Math.round(10*w + 6.25*h - 5*age - 161)
     : Math.round(10*w + 6.25*h - 5*age + 5));
-  const kcalBurned = rmr * daysElapsed + exerciseBurn;
+  const kcalBurned = exerciseBurn;
   const runKm = sessionsThisWeek.filter(s => s.type === 'run').reduce((a, s) => a + (s.dist || 0), 0);
   const strengthMins = sessionsThisWeek.filter(s => s.type === 'strength').reduce((a, s) => a + (s.dur || 0), 0);
   const pushups = sessionsThisWeek.filter(s => s.type === 'pushups').reduce((a, s) => a + (s.reps || 0), 0);
@@ -5568,31 +5554,33 @@ function renderPlate() {
       F: ${totalFat.toFixed(1)}g (${fatPct}%)
     </div>` : '';
 
-  ['products', 'meals'].forEach(sfx => {
-    const iEl = document.getElementById('plate-items-' + sfx);
-    const tEl = document.getElementById('plate-total-' + sfx);
-    const dEl = document.getElementById('plate-date-' + sfx);
-    if (iEl) iEl.innerHTML = itemsHtml;
-    if (tEl) { tEl.innerHTML = 'Total: ' + total + ' kcal' + macroLine; tEl.style.display = items.length ? '' : 'none'; }
-    if (dEl) dEl.textContent = today;
-  });
 }
 
 // --- Detailed Plate tab ---
+let plateOffset = 0;
 function renderPlateTab() {
   const contentEl = document.getElementById('plate-tab-content');
   const totalsEl = document.getElementById('plate-tab-totals');
   const dateEl = document.getElementById('plate-tab-date');
   if (!contentEl) return;
 
-  const today = dateStr(new Date());
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() + plateOffset);
+  const today = dateStr(targetDate);
+  const isToday = plateOffset === 0;
   const ap = activeProfile();
   const entry = (ap.dailyLog || []).find(l => l.date === today);
   const items = entry ? (entry.items || []) : [];
   if (dateEl) dateEl.textContent = today;
 
+  // Update nav label and next button
+  const navLabel = document.getElementById('plate-nav-label');
+  const nextBtn = document.getElementById('btn-plate-next');
+  if (navLabel) navLabel.textContent = isToday ? 'Today' : today;
+  if (nextBtn) nextBtn.disabled = isToday;
+
   if (!items.length) {
-    contentEl.innerHTML = '<p style="text-align:center; color:var(--muted);">Nothing logged yet today — add food from My Products or My Meals.</p>';
+    contentEl.innerHTML = `<p style="text-align:center; color:var(--muted);">${isToday ? 'Nothing logged yet today — add food from My Products or My Meals.' : 'No food logged on this day.'}</p>`;
     if (totalsEl) totalsEl.innerHTML = '';
     return;
   }
@@ -5607,8 +5595,11 @@ function renderPlateTab() {
     const prot = (item.prot || 0).toFixed(1);
     const carb = (item.carb || 0).toFixed(1);
     const fat  = (item.fat  || 0).toFixed(1);
-    const editBtn = item.ingredients && item.ingredients.length
+    const editBtn = isToday && item.ingredients && item.ingredients.length
       ? `<button style="background:none; border:none; cursor:pointer; color:var(--accent); font-size:.82rem; margin-right:.2rem;" onclick="editPlateIngredients('${item.id}')" title="Edit ingredients">✏️</button>`
+      : '';
+    const removeBtn = isToday
+      ? `<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.82rem;" onclick="removeFromPlate('${item.id}')">✕</button>`
       : '';
     return `<tr>
       <td style="padding:.35rem .4rem; font-size:.82rem;">${item.name}</td>
@@ -5618,7 +5609,7 @@ function renderPlateTab() {
       <td style="padding:.35rem .4rem; text-align:right;">${prot}</td>
       <td style="padding:.35rem .4rem; text-align:right;">${fat}</td>
       <td style="padding:.35rem .2rem; text-align:center; white-space:nowrap;">
-        ${editBtn}<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.82rem;" onclick="removeFromPlate('${item.id}')">✕</button>
+        ${editBtn}${removeBtn}
       </td>
     </tr>`;
   }).join('');
@@ -5700,9 +5691,18 @@ async function doLogin() {
   }
 }
 
+document.getElementById('btn-plate-prev').addEventListener('click', () => { plateOffset--; renderPlateTab(); });
+document.getElementById('btn-plate-next').addEventListener('click', () => { if (plateOffset < 0) { plateOffset++; renderPlateTab(); } });
+
 document.getElementById('btn-login').addEventListener('click', doLogin);
 document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 document.getElementById('login-user').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('login-pass').focus(); });
+document.getElementById('btn-toggle-pass').addEventListener('click', () => {
+  const inp = document.getElementById('login-pass');
+  const btn = document.getElementById('btn-toggle-pass');
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; btn.title = 'Hide password'; }
+  else { inp.type = 'password'; btn.textContent = '👁️'; btn.title = 'Show password'; }
+});
 
 function initApp() {
   load();

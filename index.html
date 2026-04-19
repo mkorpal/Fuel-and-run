@@ -2265,14 +2265,14 @@ function dailyTargets(dayIdx) {
   const isHard = s && (s.intensity === 'hard' || s.intensity === 'race');
   const isRest = !s || s.type === 'rest';
 
-  // BMR (Mifflin-St Jeor, male default unless female set)
+  // RMR: use profile value if set, else Mifflin-St Jeor fallback
   const isFemale = ap.sex === 'female';
   const h = ap.height || 175;
   const age = ap.age || 35;
-  const bmr = isFemale
-    ? (10 * w + 6.25 * h - 5 * age - 161)
-    : (10 * w + 6.25 * h - 5 * age + 5);
-  const tdee = Math.round(bmr * 1.4 + burn); // sedentary NEAT * 1.4 + exercise
+  const rmr = ap.rmr ? ap.rmr : (isFemale
+    ? Math.round(10 * w + 6.25 * h - 5 * age - 161)
+    : Math.round(10 * w + 6.25 * h - 5 * age + 5));
+  const tdee = Math.round(rmr + burn); // RMR + exercise
   // Deficit strategy: 200–300 kcal on easy/rest, 0 on hard
   const deficit = isHard ? 0 : (isRest ? 300 : 200);
   const kcal = tdee - deficit;

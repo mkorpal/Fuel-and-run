@@ -2422,7 +2422,7 @@ function renderWeekGrid() {
       <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
       <div class="day-date">${dateLabel}</div>
       ${sessionsHtml}
-      <div style="margin-top:.4rem; font-size:.72rem; color:var(--muted);">${t.kcal} kcal target</div>
+      <div style="margin-top:.4rem; font-size:.72rem; color:var(--muted);">🔥 ${t.tdee.toLocaleString()} kcal burned</div>
       <div style="font-size:.7rem; color:var(--muted);">${t.carb}g C · ${t.prot}g P · ${t.fat}g F</div>
     `;
     if (daySessions.length) {

@@ -506,17 +506,14 @@
 
 <div id="app" style="display:none;">
   <header>
-    <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+    <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; width:100%;">
       <h1>⚡ Fuel &amp; Run</h1>
-      <div id="profile-switcher" style="display:flex; align-items:center; gap:.5rem;"></div>
-      <div style="display:flex; gap:.4rem; align-items:center; margin-left:auto;">
-        <button class="btn btn-secondary btn-sm" id="btn-strava-sync" style="font-size:.72rem; display:none;">🔄 Sync Strava</button>
-        <button class="btn btn-secondary btn-sm" id="btn-import-fit" onclick="document.getElementById('fit-input').click()" style="font-size:.72rem;">⌚ Import .fit</button>
-        <input type="file" id="fit-input" accept=".fit" multiple style="display:none" />
-        <button class="btn btn-sm" onclick="doLogout()" style="font-size:.72rem; background:transparent; color:var(--muted); border:1px solid var(--border);">🚪 Logout</button>
+      <button id="btn-add-to-plate" class="btn btn-primary btn-sm" style="font-size:.72rem; padding:.3rem .7rem;" onclick="document.querySelectorAll('#main-nav button').forEach(b=>{b.classList.remove('active');if(b.dataset.tab==='plate')b.classList.add('active');}); document.querySelectorAll('.section').forEach(s=>s.classList.remove('active')); document.getElementById('tab-plate').classList.add('active'); plateOffset=0; renderPlateTab();">+ Add to Plate</button>
+      <div style="display:flex; align-items:center; gap:.5rem; margin-left:auto;">
+        <div id="profile-switcher" style="display:flex; align-items:center; gap:.5rem;"></div>
+        <button class="btn btn-sm" onclick="doLogout()" style="font-size:.72rem; background:transparent; color:var(--muted); border:1px solid var(--border);">🚪</button>
       </div>
     </div>
-    <span>Nutrition Companion for Active Lifestyles</span>
   </header>
   <nav id="main-nav">
     <button class="active" data-tab="dashboard">Dashboard</button>
@@ -646,6 +643,11 @@
       <div class="card">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem;">
           <span>📅 My Week</span>
+          <div style="display:flex; gap:.4rem; align-items:center;">
+            <button class="btn btn-secondary btn-sm" id="btn-strava-sync" style="font-size:.68rem; display:none;">🔄 Sync Strava</button>
+            <button class="btn btn-secondary btn-sm" id="btn-import-fit" onclick="document.getElementById('fit-input').click()" style="font-size:.68rem;">⌚ Import .fit</button>
+            <input type="file" id="fit-input" accept=".fit" multiple style="display:none" />
+          </div>
         </div>
         <div class="week-nav">
           <button class="week-nav-btn" id="week-prev">← Prev</button>

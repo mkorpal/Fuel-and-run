@@ -1019,10 +1019,14 @@
     <div id="qty-meal-slot" style="margin-top:.5rem;">
       <label style="font-size:.78rem; color:var(--muted); margin-bottom:.3rem; display:block;">Meal</label>
       <div style="display:flex; gap:0; border:1.5px solid var(--border); border-radius:6px; overflow:hidden; font-size:.82rem;">
-        <button class="qty-slot-btn" data-slot="Breakfast" style="flex:1; padding:.35rem .3rem; border:none; cursor:pointer; font-weight:600; background:var(--surface); color:var(--text);">🌅 Breakfast</button>
-        <button class="qty-slot-btn" data-slot="Lunch" style="flex:1; padding:.35rem .3rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text);">☀️ Lunch</button>
-        <button class="qty-slot-btn" data-slot="Dinner" style="flex:1; padding:.35rem .3rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text);">🌙 Dinner</button>
-        <button class="qty-slot-btn" data-slot="Snack" style="flex:1; padding:.35rem .3rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text);">🍎 Snack</button>
+        <button class="qty-slot-btn" data-slot="Breakfast" style="flex:1; padding:.35rem .2rem; border:none; cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🌅 Breakfast</button>
+        <button class="qty-slot-btn" data-slot="Lunch" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">☀️ Lunch</button>
+        <button class="qty-slot-btn" data-slot="Dinner" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🌙 Dinner</button>
+      </div>
+      <div style="display:flex; gap:0; border:1.5px solid var(--border); border-top:none; border-radius:0 0 6px 6px; overflow:hidden; font-size:.82rem;">
+        <button class="qty-slot-btn" data-slot="Morning Snack" style="flex:1; padding:.35rem .2rem; border:none; cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🥐 AM Snack</button>
+        <button class="qty-slot-btn" data-slot="Afternoon Snack" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🍎 PM Snack</button>
+        <button class="qty-slot-btn" data-slot="Evening Snack" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🌙 Eve Snack</button>
       </div>
     </div>
     <div style="display:flex; gap:.75rem; margin-top:.5rem;">
@@ -5513,9 +5517,11 @@ function openQtyModal(type, id) {
 function guessDefaultMealSlot() {
   const h = new Date().getHours();
   if (h < 10) return 'Breakfast';
+  if (h < 11) return 'Morning Snack';
   if (h < 14) return 'Lunch';
-  if (h < 18) return 'Snack';
-  return 'Dinner';
+  if (h < 17) return 'Afternoon Snack';
+  if (h < 19) return 'Dinner';
+  return 'Evening Snack';
 }
 
 document.getElementById('qty-confirm').addEventListener('click', () => { if (_qtyResolve) _qtyResolve(true); });
@@ -5564,6 +5570,7 @@ window.removeFromPlate = (itemId) => {
 };
 
 // --- Change meal slot of a plate item ---
+const ALL_MEAL_SLOTS = ['Breakfast', 'Morning Snack', 'Lunch', 'Afternoon Snack', 'Dinner', 'Evening Snack'];
 window.changeMealSlot = (itemId) => {
   const today = dateStr(new Date());
   const ap = activeProfile();
@@ -5571,10 +5578,9 @@ window.changeMealSlot = (itemId) => {
   if (!entry) return;
   const item = (entry.items || []).find(i => i.id === itemId);
   if (!item) return;
-  const slots = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
-  const curIdx = slots.indexOf(item.mealSlot);
-  const nextIdx = (curIdx + 1) % slots.length;
-  item.mealSlot = slots[nextIdx];
+  const curIdx = ALL_MEAL_SLOTS.indexOf(item.mealSlot);
+  const nextIdx = (curIdx + 1) % ALL_MEAL_SLOTS.length;
+  item.mealSlot = ALL_MEAL_SLOTS[nextIdx];
   entry.updatedAt = new Date().toISOString();
   save();
   renderPlate();
@@ -5830,21 +5836,45 @@ function renderPlateTab() {
   }
 
   // Group items by meal slot
-  const slotOrder = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+  const slotOrder = typeof ALL_MEAL_SLOTS !== 'undefined' ? ALL_MEAL_SLOTS : ['Breakfast', 'Morning Snack', 'Lunch', 'Afternoon Snack', 'Dinner', 'Evening Snack'];
   const grouped = {};
   for (const slot of slotOrder) grouped[slot] = [];
   grouped['Other'] = [];
   for (const item of items) {
+    // Migrate legacy "Snack" to "Afternoon Snack"
+    if (item.mealSlot === 'Snack') item.mealSlot = 'Afternoon Snack';
     const s = item.mealSlot && grouped[item.mealSlot] ? item.mealSlot : 'Other';
     grouped[s].push(item);
   }
 
-  let tableRows = '';
+  const slotEmoji = { 'Breakfast': '🌅', 'Morning Snack': '🥐', 'Lunch': '☀️', 'Afternoon Snack': '🍎', 'Dinner': '🌙', 'Evening Snack': '🫖', 'Other': '🍽' };
+  let sections = '';
   for (const slot of [...slotOrder, 'Other']) {
     const group = grouped[slot];
     if (!group.length) continue;
     const slotKcal = group.reduce((s, i) => s + (i.kcal || 0), 0);
-    tableRows += `<tr><td colspan="7" style="padding:.5rem .4rem .2rem; font-size:.75rem; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.03em;">${slot} <span style="font-weight:400; color:var(--muted);">${slotKcal} kcal</span></td></tr>`;
+    const slotProt = group.reduce((s, i) => s + (i.prot || 0), 0).toFixed(1);
+    const slotCarb = group.reduce((s, i) => s + (i.carb || 0), 0).toFixed(1);
+    const slotFat  = group.reduce((s, i) => s + (i.fat  || 0), 0).toFixed(1);
+    const sid = 'plate-slot-' + slot.replace(/\s/g, '-');
+    const emoji = slotEmoji[slot] || '';
+    sections += `
+      <div style="margin-bottom:.5rem; border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+        <div onclick="document.getElementById('${sid}').style.display = document.getElementById('${sid}').style.display === 'none' ? '' : 'none'" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; padding:.5rem .6rem; background:var(--surface2);">
+          <span style="font-weight:700; font-size:.82rem; color:var(--accent); text-transform:uppercase; letter-spacing:.03em;">${emoji} ${slot}</span>
+          <span style="font-size:.78rem; color:var(--muted);">${slotKcal} kcal · P${slotProt} · C${slotCarb} · F${slotFat}</span>
+        </div>
+        <div id="${sid}" style="display:none;">
+          <table style="width:100%; border-collapse:collapse; font-size:.82rem;">
+            <thead><tr style="border-bottom:1px solid var(--border); font-size:.7rem; color:var(--muted); text-transform:uppercase;">
+              <th style="padding:.25rem .4rem; text-align:left;">Item</th>
+              <th style="padding:.25rem .4rem; text-align:left;">Qty</th>
+              <th style="padding:.25rem .4rem; text-align:right;">kcal</th>
+              <th style="padding:.25rem .4rem; text-align:right;">C</th>
+              <th style="padding:.25rem .4rem; text-align:right;">P</th>
+              <th style="padding:.25rem .4rem; text-align:right;">F</th>
+              <th style="padding:.25rem .2rem;"></th>
+            </tr></thead><tbody>`;
     for (const item of group) {
       let qtyLabel;
       if (item.unit === 'eaches') qtyLabel = '× ' + item.qty;
@@ -5863,35 +5893,22 @@ function renderPlateTab() {
       const removeBtn = isToday
         ? `<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.82rem;" onclick="removeFromPlate('${item.id}')">✕</button>`
         : '';
-      tableRows += `<tr>
-        <td style="padding:.35rem .4rem; font-size:.82rem;">${item.name}</td>
-        <td style="padding:.35rem .4rem; font-size:.78rem; color:var(--muted); white-space:nowrap;">${qtyLabel}</td>
-        <td style="padding:.35rem .4rem; text-align:right; font-weight:600;">${kcal}</td>
-        <td style="padding:.35rem .4rem; text-align:right;">${carb}</td>
-        <td style="padding:.35rem .4rem; text-align:right;">${prot}</td>
-        <td style="padding:.35rem .4rem; text-align:right;">${fat}</td>
-        <td style="padding:.35rem .2rem; text-align:center; white-space:nowrap;">
+      sections += `<tr>
+        <td style="padding:.3rem .4rem; font-size:.82rem;">${item.name}</td>
+        <td style="padding:.3rem .4rem; font-size:.78rem; color:var(--muted); white-space:nowrap;">${qtyLabel}</td>
+        <td style="padding:.3rem .4rem; text-align:right; font-weight:600;">${kcal}</td>
+        <td style="padding:.3rem .4rem; text-align:right;">${carb}</td>
+        <td style="padding:.3rem .4rem; text-align:right;">${prot}</td>
+        <td style="padding:.3rem .4rem; text-align:right;">${fat}</td>
+        <td style="padding:.3rem .2rem; text-align:center; white-space:nowrap;">
           ${editBtn}${slotBtn}${removeBtn}
         </td>
       </tr>`;
     }
+    sections += `</tbody></table></div></div>`;
   }
 
-  contentEl.innerHTML = `
-    <table style="width:100%; border-collapse:collapse; font-size:.82rem;">
-      <thead>
-        <tr style="border-bottom:2px solid var(--border); font-size:.75rem; color:var(--muted); text-transform:uppercase;">
-          <th style="padding:.35rem .4rem; text-align:left;">Item</th>
-          <th style="padding:.35rem .4rem; text-align:left;">Qty</th>
-          <th style="padding:.35rem .4rem; text-align:right;">kcal</th>
-          <th style="padding:.35rem .4rem; text-align:right;">Carbs (g)</th>
-          <th style="padding:.35rem .4rem; text-align:right;">Protein (g)</th>
-          <th style="padding:.35rem .4rem; text-align:right;">Fat (g)</th>
-          <th style="padding:.35rem .2rem;"></th>
-        </tr>
-      </thead>
-      <tbody style="border-bottom:2px solid var(--border);">${tableRows}</tbody>
-    </table>`;
+  contentEl.innerHTML = sections;
 
   // Totals
   const totalKcal = items.reduce((s, i) => s + (i.kcal || 0), 0);

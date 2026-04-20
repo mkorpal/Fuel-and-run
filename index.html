@@ -4819,10 +4819,11 @@ function renderDashboard() {
   const pushups = sessionsThisWeek.filter(s => s.type === 'pushups').reduce((a, s) => a + (s.reps || 0), 0);
   const breathworkMins = sessionsThisWeek.filter(s => s.type === 'breathwork').reduce((a, s) => a + (s.dur || 0), 0);
   const meditationMins = sessionsThisWeek.filter(s => s.type === 'meditation').reduce((a, s) => a + (s.dur || 0), 0);
+  const walkKm = sessionsThisWeek.filter(s => s.type === 'walk').reduce((a, s) => a + (s.dist || 0), 0);
 
   // Consumed + macros from dailyLog this week
   const log = ap.dailyLog || [];
-  let kcalConsumed = 0, totalProt = 0, totalCarb = 0;
+  let kcalConsumed = 0, totalProt = 0, totalCarb = 0, totalFat = 0;
   for (let d = 0; d < daysElapsed; d++) {
     const dt = new Date(monday);
     dt.setDate(monday.getDate() + d);
@@ -4833,6 +4834,7 @@ function renderDashboard() {
       const items = entry.items || [];
       totalProt += items.reduce((s, i) => s + (i.prot || 0), 0);
       totalCarb += items.reduce((s, i) => s + (i.carb || 0), 0);
+      totalFat  += items.reduce((s, i) => s + (i.fat  || 0), 0);
     }
   }
 
@@ -4844,12 +4846,14 @@ function renderDashboard() {
 
   const protPerKgDay = daysElapsed > 0 ? (totalProt / daysElapsed / w).toFixed(1) : '—';
   const carbPerKgDay = daysElapsed > 0 ? (totalCarb / daysElapsed / w).toFixed(1) : '—';
+  const fatPerDay = daysElapsed > 0 ? Math.round(totalFat / daysElapsed) : '—';
   const weekLabel = isPast ? 'that week' : isFuture ? 'upcoming' : 'this week';
 
   summary.innerHTML = `
     <div class="dash-section-label">🏃 Activity</div>
     <div class="targets-grid" style="grid-template-columns:repeat(3,1fr);">
       <div class="target-card"><div class="target-val">${runKm.toFixed(1)} km</div><div class="target-label">run</div></div>
+      <div class="target-card"><div class="target-val">${walkKm.toFixed(1)} km</div><div class="target-label">walk</div></div>
       <div class="target-card"><div class="target-val">${strengthMins} min</div><div class="target-label">strength</div></div>
       <div class="target-card"><div class="target-val">${pushups}</div><div class="target-label">push-ups</div></div>
       <div class="target-card"><div class="target-val">${breathworkMins} min</div><div class="target-label">breathwork</div></div>
@@ -4862,6 +4866,7 @@ function renderDashboard() {
       <div class="target-card ${deficitClass}"><div class="target-val">${daysElapsed > 0 ? deficitLabel : '—'}</div><div class="target-label">deficit/day</div></div>
       <div class="target-card"><div class="target-val">${protPerKgDay} g/kg</div><div class="target-label">protein/day</div></div>
       <div class="target-card"><div class="target-val">${carbPerKgDay} g/kg</div><div class="target-label">carbs/day</div></div>
+      <div class="target-card"><div class="target-val">${fatPerDay}g</div><div class="target-label">fat/day</div></div>
     </div>
   `;
 

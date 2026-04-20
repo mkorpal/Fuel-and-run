@@ -532,10 +532,10 @@
   <header>
     <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; width:100%;">
       <h1>⚡ Fuel &amp; Run</h1>
-      <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:var(--surface2); color:var(--text); border:1px solid var(--border);" onclick="document.querySelectorAll('#main-nav button').forEach(b=>{b.classList.remove('active');if(b.dataset.tab==='training')b.classList.add('active');}); document.querySelectorAll('.section').forEach(s=>s.classList.remove('active')); document.getElementById('tab-training').classList.add('active'); renderAll(); setTimeout(()=>{document.getElementById('card-log-activity').scrollIntoView({behavior:'smooth'});},100);">🔥 Log Activity</button>
-      <div style="display:flex; align-items:center; gap:.5rem; margin-left:auto;">
-        <div id="profile-switcher" style="display:flex; align-items:center; gap:.5rem;"></div>
-        <button class="btn btn-sm" onclick="doLogout()" style="font-size:.72rem; background:transparent; color:var(--muted); border:1px solid var(--border);">🚪</button>
+      <div id="profile-switcher" style="display:flex; align-items:center; gap:.5rem;"></div>
+      <button class="btn btn-sm" onclick="doLogout()" style="font-size:.72rem; background:transparent; color:var(--muted); border:1px solid var(--border);">🚪</button>
+      <div style="margin-left:auto;">
+        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:var(--accent); color:#fff; border:1px solid var(--accent);" onclick="openLogActivityModal()">🔥 Log Activity</button>
       </div>
     </div>
   </header>
@@ -624,24 +624,6 @@
         <div id="dash-tip" style="font-size:.9rem; color: var(--muted);"></div>
       </div>
 
-      <!-- Log Calories -->
-      <div class="card">
-        <div class="card-title">📝 Log Calories</div>
-        <div class="form-inline">
-          <div class="form-row" style="flex:2; min-width:180px;">
-            <label>Extra calories today (not in your plate)</label>
-            <input type="number" id="log-consumed" min="0" step="10" placeholder="e.g. 300" />
-          </div>
-          <div class="form-row" style="flex:1; min-width:140px;">
-            <label>Date</label>
-            <input type="date" id="log-date" />
-          </div>
-        </div>
-        <div style="display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
-          <button class="btn btn-primary btn-sm" id="btn-log-calories">Log</button>
-          <span id="log-target-hint" style="font-size:.82rem; color:var(--muted);"></span>
-        </div>
-      </div>
     </section>
 
     <!-- TODAY'S PLATE -->
@@ -687,24 +669,13 @@
         <div style="font-size:.78rem; font-weight:600; color:var(--muted); margin:.8rem 0 .3rem; text-transform:uppercase; letter-spacing:.04em;">🍽️ Meals &amp; Nutrition</div>
         <div class="week-grid" id="meal-week-grid"></div>
       </div>
+    </section>
 
-      <!-- ── Import &amp; Add Session ──────────────────────── -->
-      <div class="card">
-        <div class="card-title">Import TrainingPeaks Calendar (.ics)</div>
-        <div id="upload-zone" onclick="document.getElementById('ics-input').click()">
-          <div class="icon">📅</div>
-          <p><strong>Click to upload</strong> or drag &amp; drop your .ics file</p>
-          <p style="margin-top:.3rem;">Export from TrainingPeaks → Settings → Integrations → Calendar Sync</p>
-          <input type="file" id="ics-input" accept=".ics" />
-        </div>
-        <div style="margin-top:1rem; display:flex; gap:.75rem; align-items:center; flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-sm" id="btn-demo">Load Demo Week</button>
-          <button class="btn btn-secondary btn-sm" id="btn-clear-training">Clear Schedule</button>
-          <span id="ics-filename" style="font-size:.8rem; color:var(--muted);"></span>
-        </div>
-      </div>
-      <div class="card" id="card-log-activity">
-        <div class="card-title">Log Activity Manually</div>
+    <!-- Log Activity Modal -->
+    <div id="log-activity-modal" style="display:none; position:fixed; inset:0; z-index:700; background:rgba(0,0,0,.45); justify-content:center; align-items:flex-start; overflow-y:auto; padding:2rem .5rem;">
+      <div style="background:var(--surface); border-radius:var(--radius); padding:1.25rem; width:min(96vw,480px); position:relative; margin:auto;">
+        <button onclick="closeLogActivityModal()" style="position:absolute; top:.7rem; right:.9rem; background:none; border:none; font-size:1.3rem; cursor:pointer; color:var(--muted);">✕</button>
+        <h3 style="font-size:1rem; margin-bottom:.75rem;">🔥 Log Activity</h3>
         <div class="form-inline">
           <div class="form-row">
             <label>Date</label>
@@ -750,7 +721,7 @@
         </div>
         <button class="btn btn-primary" id="btn-add-session">Log Activity</button>
       </div>
-    </section>
+    </div>
 
     <!-- Meal Day Detail Overlay -->
     <div class="meal-detail-overlay" id="meal-detail-overlay">
@@ -1670,12 +1641,12 @@ function parseICS(text) {
 }
 
 // ============================================================
-// FILE UPLOAD
+// FILE UPLOAD (TrainingPeaks ICS — features removed but keep parser available)
 // ============================================================
 const icsInput = document.getElementById('ics-input');
 const uploadZone = document.getElementById('upload-zone');
 
-icsInput.addEventListener('change', e => {
+if (icsInput) icsInput.addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
@@ -1685,35 +1656,36 @@ icsInput.addEventListener('change', e => {
     ap.sessions = sess;
     if (!ap.weekSessions) ap.weekSessions = {};
     ap.weekSessions[isoWeekKey(new Date())] = sess;
-    document.getElementById('ics-filename').textContent = '✅ ' + file.name;
     save(); renderAll();
     toast('Calendar imported — ' + sess.length + ' session(s) found');
   };
   reader.readAsText(file);
 });
 
-uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
-uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
-uploadZone.addEventListener('drop', e => {
-  e.preventDefault(); uploadZone.classList.remove('drag-over');
-  const file = e.dataTransfer.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = evt => {
-    const ap = activeProfile();
-    const sess = parseICS(evt.target.result);
-    ap.sessions = sess;
-    if (!ap.weekSessions) ap.weekSessions = {};
-    ap.weekSessions[isoWeekKey(new Date())] = sess;
-    document.getElementById('ics-filename').textContent = '✅ ' + file.name;
-    save(); renderAll();
-    toast('Calendar imported — ' + sess.length + ' session(s) found');
-  };
-  reader.readAsText(file);
-});
+if (uploadZone) {
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault(); uploadZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = evt => {
+      const ap = activeProfile();
+      const sess = parseICS(evt.target.result);
+      ap.sessions = sess;
+      if (!ap.weekSessions) ap.weekSessions = {};
+      ap.weekSessions[isoWeekKey(new Date())] = sess;
+      save(); renderAll();
+      toast('Calendar imported — ' + sess.length + ' session(s) found');
+    };
+    reader.readAsText(file);
+  });
+}
 
 // Demo week
-document.getElementById('btn-demo').addEventListener('click', () => {
+const btnDemo = document.getElementById('btn-demo');
+if (btnDemo) btnDemo.addEventListener('click', () => {
   const demoSess = [
     { day:0, type:'run', dist:10, dur:55, intensity:'easy', title:'Easy Run' },
     { day:1, type:'run', dist:12, dur:65, intensity:'moderate', title:'Steady State Run' },
@@ -1727,18 +1699,17 @@ document.getElementById('btn-demo').addEventListener('click', () => {
   ap.sessions = demoSess;
   if (!ap.weekSessions) ap.weekSessions = {};
   ap.weekSessions[isoWeekKey(mondayOfOffset(weekOffset))] = demoSess;
-  document.getElementById('ics-filename').textContent = '✅ Demo week loaded';
   save(); renderAll();
   toast('Demo training week loaded');
 });
 
-document.getElementById('btn-clear-training').addEventListener('click', () => {
+const btnClearTraining = document.getElementById('btn-clear-training');
+if (btnClearTraining) btnClearTraining.addEventListener('click', () => {
   const ap = activeProfile();
   if (!ap.weekSessions) ap.weekSessions = {};
   const wk = isoWeekKey(mondayOfOffset(weekOffset));
   ap.weekSessions[wk] = [];
   if (weekOffset === 0) ap.sessions = [];
-  document.getElementById('ics-filename').textContent = '';
   save(); renderAll();
   toast('Schedule cleared');
 });
@@ -2246,6 +2217,16 @@ document.getElementById('man-type').addEventListener('change', function() {
   if (calRow) calRow.style.display = noBurnTypes.includes(this.value) ? 'none' : '';
 });
 
+window.openLogActivityModal = () => {
+  const el = document.getElementById('log-activity-modal');
+  const dateInput = document.getElementById('man-date');
+  if (dateInput && !dateInput.value) dateInput.value = dateStr(new Date());
+  el.style.display = 'flex';
+};
+window.closeLogActivityModal = () => {
+  document.getElementById('log-activity-modal').style.display = 'none';
+};
+
 document.getElementById('btn-add-session').addEventListener('click', () => {
   const dateVal = document.getElementById('man-date').value;
   if (!dateVal) { toast('Please select a date'); return; }
@@ -2276,6 +2257,7 @@ document.getElementById('btn-add-session').addEventListener('click', () => {
   const thisMonday = mondayOfOffset(0);
   weekOffset = Math.round((monday - thisMonday) / (7 * 86400000));
   save(); renderAll();
+  closeLogActivityModal();
   const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
   toast('Activity logged for ' + DAYS[dayIdx] + ' ' + dateVal);
 });
@@ -3899,16 +3881,6 @@ function renderRecommendations() {
 // ============================================================
 // DASHBOARD
 // ============================================================
-const TIPS = [
-  'On your long run day, aim for 60g of carbs per hour after the first 60 minutes — bananas, medjool dates, or homemade rice balls all work well.',
-  'Iron absorption doubles when you pair plant iron sources (lentils, spinach) with vitamin C-rich foods like capsicum or a squeeze of lemon.',
-  'Your most important post-run nutrition window is within 30–60 minutes: 20–40g protein + carbohydrates. Greek yoghurt + banana + a handful of oats is a perfect combo.',
-  'On rest and easy days, slightly lower your carb intake — this is where your 200–300 kcal daily deficit fits most naturally without impacting training quality.',
-  'Consistent protein spread matters: aim for at least 25–35g per meal across 4 meals rather than loading most protein at dinner.',
-  'Hydration tip: if your urine is pale yellow before a run, you\'re well hydrated. Dark yellow = drink more. Clear = possibly over-hydrated.',
-  'Omega-3s from oily fish (salmon, sardines, mackerel) help reduce post-run muscle soreness. A 2-serve-per-week habit is worth building.',
-  'Magnesium-rich foods like pumpkin seeds, dark chocolate, and leafy greens can improve sleep quality — crucial for recovery.',
-];
 
 // ============================================================
 // MEALS
@@ -4794,33 +4766,6 @@ document.querySelectorAll('.chart-series-btn').forEach(btn => {
   });
 });
 
-// Log calories handler
-document.getElementById('btn-log-calories').addEventListener('click', () => {
-  const consumed = +document.getElementById('log-consumed').value;
-  if (!consumed) { toast('Enter calories consumed first'); return; }
-  const dateInput = document.getElementById('log-date').value;
-  const date = dateInput || dateStr(new Date());
-  const ap = activeProfile();
-  if (!ap.dailyLog) ap.dailyLog = [];
-  // Derive TDEE from the day-of-week of the logged date
-  const logDate = new Date(date + 'T12:00:00');
-  const dayMon0 = (logDate.getDay() + 6) % 7;
-  const t = dailyTargets(dayMon0);
-  const existing = ap.dailyLog.find(l => l.date === date);
-  if (existing) {
-    const platePortion = (existing.items || []).reduce((s, i) => s + (i.kcal || 0), 0);
-    existing.consumed = platePortion + consumed;
-    existing.tdee = existing.tdee || t.tdee;
-    existing.updatedAt = new Date().toISOString();
-  } else {
-    ap.dailyLog.push({ date, consumed, tdee: t.tdee, target: t.kcal, items: [], updatedAt: new Date().toISOString() });
-  }
-  save();
-  renderCalorieChart();
-  document.getElementById('log-consumed').value = '';
-  toast(`✅ Logged ${consumed.toLocaleString()} kcal extra for ${date}`);
-});
-
 function renderDashboard() {
   const summary = document.getElementById('dash-summary');
   const guide = document.getElementById('dash-guide');
@@ -4965,29 +4910,54 @@ function renderDashboard() {
         <p>${deficitInsight}</p>
         <p style="margin-top:.3rem;">${protInsight}</p>
         <p style="margin-top:.3rem;">${carbInsight}</p>
-        <p style="margin-top:.6rem; font-size:.82rem; color:var(--muted);"><strong>Goal:</strong> Lose 2–3 kg while building lean muscle and maintaining running performance. Target a moderate deficit on easy/rest days, eat to maintenance on hard training days.</p>
+        <p style="margin-top:.6rem; font-size:.82rem; color:var(--muted);"><strong>Goal:</strong> ${w > (ap.goalWeight || w) ? `Lose ${(w - ap.goalWeight).toFixed(1)} kg (${w} → ${ap.goalWeight} kg)` : 'Maintain weight'} while building lean muscle and maintaining running performance. Target a moderate deficit on easy/rest days, eat to maintenance on hard training days.</p>
       </div>`;
   } else {
     guide.innerHTML = `<p style="font-size:.85rem; color:var(--muted);">Start logging your meals to see personalised diet insights here.</p>`;
   }
 
-  // Rotating tip
-  if (tipEl) tipEl.textContent = TIPS[Math.floor(Date.now() / 86400000) % TIPS.length];
+  // Rotating tip — dynamic, considers weight target & training volume
+  if (tipEl) {
+    const gw = ap.goalWeight || ap.weight;
+    const wDiff = w - gw;
+    const isLosing = wDiff > 0.5;
+    const isGaining = wDiff < -0.5;
+    const totalRunKm = sessions.reduce((s, x) => x.type === 'run' ? s + (x.dist || 0) : s, 0);
+    const totalSessCount = sessions.length;
+    const highVolume = totalRunKm >= 50;
+    const lowVolume = totalRunKm < 20 && totalSessCount < 3;
+    const tips = [];
 
-  // Pre-fill log date input and show today's target as hint
-  const logDateEl = document.getElementById('log-date');
-  const hintEl = document.getElementById('log-target-hint');
-  if (logDateEl && !logDateEl.value) logDateEl.value = dateStr(new Date());
-  if (hintEl) {
-    const todayMon0 = (new Date().getDay() + 6) % 7;
-    const t = dailyTargets(todayMon0);
-    const todayEntry = (ap.dailyLog || []).find(l => l.date === dateStr(new Date()));
-    const platePortion = todayEntry ? (todayEntry.items || []).reduce((s, i) => s + (i.kcal || 0), 0) : 0;
-    const extraPortion = todayEntry ? Math.max(0, (todayEntry.consumed || 0) - platePortion) : 0;
-    const plateLabel = platePortion > 0 ? ` · Plate: ${platePortion.toLocaleString()} kcal` : '';
-    const extraLabel = extraPortion > 0 ? ` · Extra: ${extraPortion.toLocaleString()} kcal` : '';
-    hintEl.textContent = `Target: ${t.kcal.toLocaleString()} kcal · TDEE: ${t.tdee.toLocaleString()} kcal${plateLabel}${extraLabel}`;
+    // Always-relevant tips
+    tips.push('Consistent protein spread matters: aim for at least 25–35g per meal across 4 meals rather than loading most protein at dinner.');
+    tips.push('Iron absorption doubles when you pair plant iron sources (lentils, spinach) with vitamin C-rich foods like capsicum or a squeeze of lemon.');
+    tips.push('Hydration tip: if your urine is pale yellow before a run, you\'re well hydrated. Dark yellow = drink more. Clear = possibly over-hydrated.');
+
+    if (isLosing) {
+      tips.push(`You're targeting ${gw} kg (${wDiff.toFixed(1)} kg to go). A moderate deficit of 300–500 kcal/day is sustainable — focus on easy/rest days for the larger deficit.`);
+      tips.push('When cutting weight, keep protein at 2.0+ g/kg to preserve muscle. Reduce fats and processed carbs before cutting nutrient-dense whole foods.');
+      if (highVolume) tips.push(`With ${totalRunKm.toFixed(0)} km this week, avoid deep deficits on hard training days — eat to maintenance or slight surplus to protect performance and recovery.`);
+    } else if (isGaining) {
+      tips.push(`You're aiming to reach ${gw} kg. A surplus of 200–300 kcal/day paired with strength training supports lean mass gain without excess fat.`);
+    } else {
+      tips.push('You\'re near your goal weight — focus on body composition by keeping protein high and maintaining a small deficit or eating to maintenance.');
+    }
+
+    if (highVolume) {
+      tips.push(`Big week — ${totalRunKm.toFixed(0)} km logged. Prioritise carbs (5–7 g/kg) on long run days and start fuelling with 40–60g carbs/hour after 60 minutes.`);
+      tips.push('Omega-3s from oily fish (salmon, sardines, mackerel) help reduce post-run muscle soreness. A 2-serve-per-week habit is worth building at high volume.');
+      tips.push('Magnesium-rich foods like pumpkin seeds, dark chocolate, and leafy greens can improve sleep quality — crucial for recovery during heavy training.');
+    } else if (lowVolume) {
+      tips.push('Lighter training week — a good opportunity to focus on a slightly larger deficit while keeping protein high and carbs moderate (3–4 g/kg).');
+      tips.push('Recovery weeks are an excellent time to batch-cook protein-rich meals for busier training weeks ahead.');
+    } else {
+      tips.push('On your long run day, aim for 60g of carbs per hour after the first 60 minutes — bananas, medjool dates, or homemade rice balls all work well.');
+      tips.push('Your most important post-run nutrition window is within 30–60 minutes: 20–40g protein + carbohydrates. Greek yoghurt + banana + oats is a perfect combo.');
+    }
+
+    tipEl.textContent = tips[Math.floor(Date.now() / 86400000) % tips.length];
   }
+
   renderCalorieChart();
 }
 
@@ -6072,12 +6042,12 @@ function renderPlateTab() {
       const gap2  = Math.max(0, 2.0 * w - totalProt);
       const gap22 = Math.max(0, 2.2 * w - totalProt);
       const products = (state.products || []).filter(p => !p.deletedAt);
-      // Build list of high-protein pantry items sorted by protein density
+      // Build list of high-protein pantry items — sort by lowest kcal cost to hit target
       const candidates = products.map(p => {
         const pg = productPerGram(p);
         if (!pg.prot || pg.prot < 0.05) return null; // at least 5g prot per 100g
-        return { name: p.nickname || p.name, protPer: pg.prot, kcalPer: pg.kcal, serve: p.serve || 100 };
-      }).filter(Boolean).sort((a, b) => b.protPer - a.protPer).slice(0, 8);
+        return { name: p.nickname || p.name, protPer: pg.prot, kcalPer: pg.kcal, carbPer: pg.carb || 0, serve: p.serve || 100 };
+      }).filter(Boolean);
 
       if (candidates.length) {
         let html = '';
@@ -6086,14 +6056,21 @@ function renderPlateTab() {
         if (gap22 > 0) targets.push({ label: '2.2 g/kg', gap: gap22 });
 
         for (const t of targets) {
-          html += `<div style="font-size:.78rem; font-weight:700; color:var(--accent); margin-top:.5rem; margin-bottom:.3rem;">Reach ${t.label} — need +${t.gap.toFixed(0)}g protein</div>`;
-          html += `<div style="display:flex; flex-direction:column; gap:.25rem;">`;
-          for (const c of candidates) {
+          // Sort candidates by kcal cost to fill this specific gap (ascending = lowest kcal first)
+          const sorted = candidates.map(c => {
             const grams = Math.ceil(t.gap / c.protPer);
             const kcal = Math.round(grams * c.kcalPer);
+            const addedCarb = grams * c.carbPer;
+            const resultCarbPerKg = ((totalCarb + addedCarb) / w).toFixed(1);
+            return { ...c, grams, kcal, resultCarbPerKg };
+          }).sort((a, b) => a.kcal - b.kcal).slice(0, 8);
+
+          html += `<div style="font-size:.78rem; font-weight:700; color:var(--accent); margin-top:.5rem; margin-bottom:.3rem;">Reach ${t.label} — need +${t.gap.toFixed(0)}g protein</div>`;
+          html += `<div style="display:flex; flex-direction:column; gap:.25rem;">`;
+          for (const c of sorted) {
             html += `<div style="font-size:.78rem; color:var(--text); padding:.25rem .4rem; background:var(--surface2); border-radius:6px; display:flex; justify-content:space-between;">
               <span>${c.name}</span>
-              <span style="color:var(--muted); white-space:nowrap;">${grams}g → +${kcal} kcal</span>
+              <span style="color:var(--muted); white-space:nowrap;">${c.grams}g → +${c.kcal} kcal · ${c.resultCarbPerKg} g/kg carbs</span>
             </div>`;
           }
           html += `</div>`;

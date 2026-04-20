@@ -114,7 +114,7 @@
   /* ---- Week navigation ---- */
   .week-nav { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin-bottom:.75rem; flex-wrap:wrap; }
   .week-nav-label { font-weight:700; font-size:.95rem; flex:1; text-align:center; }
-  .week-nav-btn { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:.3rem .8rem; cursor:pointer; font-size:.85rem; }
+  .week-nav-btn { background:var(--surface3, #353647); border:1px solid var(--border); border-radius:var(--radius); padding:.3rem .8rem; cursor:pointer; font-size:.85rem; color:var(--text); }
   .week-nav-btn:hover { background:var(--accent); color:#fff; }
 
   /* ---- Week grid ---- */
@@ -503,7 +503,8 @@
   @media (max-width: 640px) {
     main { padding: 1rem; }
     .week-grid { grid-template-columns: repeat(2, 1fr); }
-    header { padding: .8rem 1rem; }
+    header { padding: .8rem 1rem; flex-wrap:wrap; }
+    header .mobile-log-activity { order:10; width:100%; margin-top:.3rem; }
   }
 </style>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -534,7 +535,7 @@
       <h1>⚡ Fuel &amp; Run</h1>
       <div id="profile-switcher" style="display:flex; align-items:center; gap:.5rem;"></div>
       <button class="btn btn-sm" onclick="doLogout()" style="font-size:.72rem; background:transparent; color:var(--muted); border:1px solid var(--border);">🚪</button>
-      <div style="margin-left:auto;">
+      <div class="mobile-log-activity" style="margin-left:auto;">
         <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:var(--accent); color:#fff; border:1px solid var(--accent);" onclick="openLogActivityModal()">🔥 Log Activity</button>
       </div>
     </div>
@@ -2462,7 +2463,6 @@ function renderWeekGrid() {
       <div class="day-date">${dateLabel}</div>
       ${sessionsHtml}
       <div style="margin-top:.4rem; font-size:.72rem; color:var(--muted);">🔥 ${t.tdee.toLocaleString()} kcal burned</div>
-      <div style="font-size:.7rem; color:var(--muted);">${t.carb}g C · ${t.prot}g P · ${t.fat}g F</div>
     `;
     if (daySessions.length) {
       cell.style.cursor = 'pointer';
@@ -3155,8 +3155,10 @@ function renderMealGrid() {
     // Macros from plate items
     const dayProt = items.reduce((s, i) => s + (i.prot || 0), 0);
     const dayCarb = items.reduce((s, i) => s + (i.carb || 0), 0);
+    const dayFat  = items.reduce((s, i) => s + (i.fat  || 0), 0);
     const protKg = w > 0 ? (dayProt / w).toFixed(1) : '—';
     const carbKg = w > 0 ? (dayCarb / w).toFixed(1) : '—';
+    const fatKg  = w > 0 ? (dayFat  / w).toFixed(1) : '—';
 
     // Actual burned for this day (RMR + exercise)
     const daySessions = (weekSess || []).filter(s => s.day === d);
@@ -3187,8 +3189,7 @@ function renderMealGrid() {
       <div class="kcal-target">of ${dayBurned.toLocaleString()} kcal burned</div>
       <div class="kcal-bar"><div class="kcal-bar-fill${isOver ? ' over' : ''}" style="width:${Math.min(pct, 100)}%"></div></div>
       ${consumed > 0 ? `<div style="font-size:.72rem; color:${defColor}; font-weight:600; margin-top:.2rem;">${defLabel} kcal deficit</div>` : ''}
-      ${consumed > 0 ? `<div style="font-size:.68rem; color:var(--muted); margin-top:.1rem;">P: ${protKg} g/kg · C: ${carbKg} g/kg</div>` : ''}
-      ${previewItems ? `<div class="meal-items-preview">${previewItems}${moreCount}</div>` : ''}
+      ${consumed > 0 ? `<div style="font-size:.68rem; color:var(--muted); margin-top:.1rem;">P: ${protKg} · C: ${carbKg} · F: ${fatKg} g/kg</div>` : ''}
       ${plannedLabel ? `<div style="font-size:.68rem; color:var(--accent); margin-top:.15rem;">${plannedLabel}</div>` : ''}
       <div style="font-size:.68rem; color:var(--muted); margin-top:.2rem;">tap for details</div>
     `;
@@ -3844,38 +3845,52 @@ window.cancelProductEdit = () => {
 // RECOMMENDATIONS
 // ============================================================
 const AU_RECS = [
-  { emoji:'🫙', name:'Chobani Greek Yoghurt (170g)', cat:'Dairy', why:'~17g protein per serve, calcium, probiotics — perfect post-run recovery', where:'Woolworths, Coles, IGA' },
-  { emoji:'🐟', name:'John West Tuna in Springwater (95g)', cat:'Protein', why:'25g protein, omega-3, portable — great lunchbox protein hit', where:'Woolworths, Coles, petrol stations' },
-  { emoji:'🥚', name:'Free-range eggs (dozen)', cat:'Protein', why:'6g protein + B12, vitamin D, choline — eat daily, versatile', where:'All supermarkets — look for Pace Farm Free Range' },
-  { emoji:'🌱', name:'Macro Organic Red Lentils (500g)', cat:'Carbs & Protein', why:'Plant iron + protein, cheap, 20g protein / 100g dry — post-run dahl or soups', where:'Woolworths (own brand)' },
-  { emoji:'🐟', name:'Safcol Salmon in Springwater (415g)', cat:'Protein', why:'Omega-3 EPA+DHA, 30g+ protein, calcium from soft bones', where:'Woolworths, Coles' },
-  { emoji:'🥜', name:'Mayver\'s Natural Peanut Butter (375g)', cat:'Fats & Protein', why:'No added sugar/oil, 25g protein/100g, healthy fats, magnesium', where:'Woolworths, Coles, health food stores' },
-  { emoji:'🍌', name:'Bananas', cat:'Carbs', why:'Fast carbs + potassium — ideal pre-run snack; ~90 kcal each', where:'All supermarkets — Cavendish variety standard' },
-  { emoji:'🌾', name:'Uncle Tobys Traditional Oats (1kg)', cat:'Carbs', why:'Complex carbs, beta-glucan, low GI — best pre-run breakfast foundation', where:'Woolworths, Coles' },
-  { emoji:'🥑', name:'Odd Bunch Avocados', cat:'Fats', why:'Monounsaturated fat, potassium, vitamin K — reduce inflammation', where:'Woolworths (Odd Bunch range, cheaper)' },
-  { emoji:'🫐', name:'Lindt 85% Dark Chocolate', cat:'Snack', why:'Magnesium, antioxidants, small daily square supports mood & muscle relaxation', where:'Woolworths, Coles, Aldi' },
-  { emoji:'🥬', name:'Baby Spinach (120g bag)', cat:'Fruit & Veg', why:'Non-haem iron + vitamin C (when paired), folate, easy to add anywhere', where:'Woolworths, Coles' },
-  { emoji:'🫘', name:'Edgell Chickpeas in Brine (400g)', cat:'Carbs & Protein', why:'Fibre, plant iron, protein — roasted as snack or in salads', where:'Woolworths, Coles' },
-  { emoji:'🐟', name:'Tassal Tasmanian Salmon Fillets (fresh)', cat:'Protein', why:'Highest quality domestic omega-3 source; 2 serves/week target', where:'Woolworths fish section' },
-  { emoji:'🍫', name:'Sanitarium Weet-Bix (750g)', cat:'Carbs', why:'Iron-fortified, low sugar, wholegrain — runs on iron are real; great start', where:'All supermarkets' },
-  { emoji:'🥛', name:'Bonsoy Organic Soy Milk (1L)', cat:'Dairy alt', why:'Closest to dairy in protein (8g/250ml), calcium-fortified, B12 fortified', where:'Woolworths, health food stores, Aldi' },
-  { emoji:'🌰', name:'Aldi Almonds (500g)', cat:'Fats & Protein', why:'Calcium, vitamin E, magnesium — 30g handful as daily snack', where:'Aldi (best price)' },
-  { emoji:'🍠', name:'Sweet potato (loose)', cat:'Carbs', why:'Beta-carotene, complex carbs, potassium — excellent post-run dinner base', where:'All supermarkets' },
-  { emoji:'💊', name:'Blackmores Vitamin D3 1000IU', cat:'Supplement', why:'Widely deficient in Australians despite sun — especially runners with limited midday exposure', where:'Chemist Warehouse, Woolworths pharmacy' },
+  // ── Protein ──
+  { emoji:'🥚', name:'Free-range eggs', cat:'Protein', why:'6g protein each, B12, vitamin D, choline — most versatile whole protein source', where:'All supermarkets — look for Pace Farm or local farm gate' },
+  { emoji:'🐔', name:'Chicken breast (free-range)', cat:'Protein', why:'31g protein / 100g, very lean — grill, poach or slow-cook in bulk', where:'Woolworths, Coles, local butcher' },
+  { emoji:'🐟', name:'Tassal Tasmanian Salmon (fresh fillets)', cat:'Protein', why:'Omega-3 EPA+DHA, ~20g protein / 100g — aim for 2 serves per week', where:'Woolworths, Coles fish counter' },
+  { emoji:'🐟', name:'Sardines in olive oil (canned)', cat:'Protein', why:'Omega-3, calcium from bones, 25g protein per tin — cheap and shelf-stable', where:'Woolworths, Coles, Aldi' },
+  { emoji:'🐟', name:'Tuna in springwater (canned)', cat:'Protein', why:'25g protein per tin, portable, low fat — ideal lunchbox protein', where:'Woolworths, Coles' },
+  { emoji:'🦘', name:'Kangaroo mince', cat:'Protein', why:'Very lean (~2% fat), high iron, 24g protein / 100g — great in bolognese or meatballs', where:'Woolworths, Coles (chilled section)' },
+  { emoji:'🫙', name:'Greek yoghurt (plain, no added sugar)', cat:'Protein', why:'~10g protein per 100g, calcium, probiotics — post-run recovery with fruit', where:'Woolworths, Coles — choose Chobani Plain or Jalna' },
+  { emoji:'🧀', name:'Cottage cheese', cat:'Protein', why:'12g protein per 100g, casein protein for sustained release, low fat', where:'Woolworths, Coles' },
+  { emoji:'🌰', name:'Almonds (raw, unsalted)', cat:'Protein', why:'6g protein + vitamin E, magnesium, calcium per 30g handful', where:'Aldi (best price), Woolworths, Coles' },
+  { emoji:'🥜', name:'Natural peanut butter (100% peanuts)', cat:'Protein', why:'25g protein / 100g, healthy fats, magnesium — no added sugar or oil', where:'Woolworths, Coles — Mayver\'s or Pic\'s' },
+  // ── Carbs ──
+  { emoji:'🌾', name:'Rolled oats (traditional)', cat:'Carbs', why:'Complex carbs, beta-glucan, low GI — best pre-run breakfast base', where:'Woolworths, Coles — Uncle Tobys or store brand' },
+  { emoji:'🍠', name:'Sweet potato', cat:'Carbs', why:'Beta-carotene, complex carbs, potassium — excellent post-run dinner base', where:'All supermarkets, farmers markets' },
+  { emoji:'🍌', name:'Bananas', cat:'Carbs', why:'Fast-release carbs + potassium — ideal pre-run snack, ~90 kcal each', where:'All supermarkets' },
+  { emoji:'🌱', name:'Red lentils (dried)', cat:'Carbs', why:'Low GI, 24g protein + 60g carbs per 100g dry, iron — perfect in dahl or soups', where:'Woolworths, Coles — Macro Organic or store brand' },
+  { emoji:'🫘', name:'Chickpeas (dried or canned in water)', cat:'Carbs', why:'Fibre, plant iron, slow-release carbs — roast as snack or add to salads', where:'Woolworths, Coles' },
+  { emoji:'🍚', name:'Basmati rice (white or brown)', cat:'Carbs', why:'Clean carb source, lower GI than other white rice — pair with protein', where:'All supermarkets, Asian grocers' },
+  { emoji:'🫐', name:'Blueberries (fresh or frozen)', cat:'Carbs', why:'Antioxidants, low sugar for a fruit, anti-inflammatory — add to oats or yoghurt', where:'Woolworths, Coles — frozen is cheaper year-round' },
+  { emoji:'🥬', name:'Baby spinach', cat:'Carbs', why:'Iron, folate, vitamin K — very low calorie, add to anything for micronutrients', where:'Woolworths, Coles' },
+  { emoji:'🥦', name:'Broccoli', cat:'Carbs', why:'Vitamin C (boosts iron absorption), fibre, sulforaphane — steam or stir-fry', where:'All supermarkets' },
+  { emoji:'🥑', name:'Avocado', cat:'Carbs', why:'Monounsaturated fat, potassium, vitamin K — anti-inflammatory, satiating', where:'Woolworths Odd Bunch (cheaper), Coles, Aldi' },
+  { emoji:'🥕', name:'Pumpkin (Jap or Butternut)', cat:'Carbs', why:'Beta-carotene, complex carbs, low calorie — roast for easy meal prep', where:'All supermarkets, farmers markets' },
+  { emoji:'🥝', name:'Kiwifruit', cat:'Carbs', why:'More vitamin C than oranges, aids digestion, low sugar — 2 per day with skin on', where:'All supermarkets — Zespri green or gold' },
 ];
 
 function renderRecommendations() {
   const grid = document.getElementById('rec-grid');
   if (!grid) return;
-  grid.innerHTML = AU_RECS.map(r => `
-    <div class="rec-card">
-      <div class="rec-emoji">${r.emoji}</div>
-      <div class="rec-name">${r.name}</div>
-      <span class="ptag">${r.cat}</span>
-      <div class="rec-why">${r.why}</div>
-      <div class="rec-where">📍 ${r.where}</div>
-    </div>
-  `).join('');
+  // Gather product and meal names the user already has
+  const ownedNames = new Set();
+  (state.products || []).filter(p => !p.deletedAt).forEach(p => ownedNames.add(p.name.toLowerCase()));
+  (state.meals || []).filter(m => !m.deletedAt).forEach(m => ownedNames.add(m.name.toLowerCase()));
+  const groups = ['Protein', 'Carbs'];
+  grid.innerHTML = groups.map(g => {
+    const items = AU_RECS.filter(r => r.cat === g && !Array.from(ownedNames).some(n => r.name.toLowerCase().includes(n) || n.includes(r.name.toLowerCase())));
+    if (!items.length) return '';
+    return `<h3 style="grid-column:1/-1;margin:.8rem 0 .2rem;font-size:1rem;color:var(--accent)">${g}</h3>` +
+      items.map(r => `
+        <div class="rec-card">
+          <div class="rec-emoji">${r.emoji}</div>
+          <div class="rec-name">${r.name}</div>
+          <div class="rec-why">${r.why}</div>
+          <div class="rec-where">📍 ${r.where}</div>
+        </div>`).join('');
+  }).join('');
 }
 
 // ============================================================

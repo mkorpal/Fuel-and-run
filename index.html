@@ -4848,20 +4848,20 @@ function renderDashboard() {
 
   summary.innerHTML = `
     <div class="dash-section-label">🏃 Activity</div>
-    <div class="dash-row">
-      <div class="dash-stat"><div class="dash-stat-icon">🏃</div><div class="dash-stat-val">${runKm.toFixed(1)}</div><div class="dash-stat-label">km run</div></div>
-      <div class="dash-stat"><div class="dash-stat-icon">🏋️</div><div class="dash-stat-val">${strengthMins}</div><div class="dash-stat-label">min gym</div></div>
-      <div class="dash-stat"><div class="dash-stat-icon">💪</div><div class="dash-stat-val">${pushups}</div><div class="dash-stat-label">push-ups</div></div>
-      <div class="dash-stat"><div class="dash-stat-icon">🌬️</div><div class="dash-stat-val">${breathworkMins}</div><div class="dash-stat-label">min breath</div></div>
-      <div class="dash-stat"><div class="dash-stat-icon">🧘</div><div class="dash-stat-val">${meditationMins}</div><div class="dash-stat-label">min meditate</div></div>
+    <div class="targets-grid" style="grid-template-columns:repeat(3,1fr);">
+      <div class="target-card"><div class="target-val">${runKm.toFixed(1)} km</div><div class="target-label">run</div></div>
+      <div class="target-card"><div class="target-val">${strengthMins} min</div><div class="target-label">strength</div></div>
+      <div class="target-card"><div class="target-val">${pushups}</div><div class="target-label">push-ups</div></div>
+      <div class="target-card"><div class="target-val">${breathworkMins} min</div><div class="target-label">breathwork</div></div>
+      <div class="target-card"><div class="target-val">${meditationMins} min</div><div class="target-label">meditation</div></div>
     </div>
     <div class="dash-section-label">🥗 Nutrition</div>
-    <div class="dash-row">
-      <div class="dash-stat"><div class="dash-stat-icon">🔥</div><div class="dash-stat-val">${kcalBurned.toLocaleString()}</div><div class="dash-stat-label">burned</div></div>
-      <div class="dash-stat"><div class="dash-stat-icon">🍽️</div><div class="dash-stat-val">${kcalConsumed.toLocaleString()}</div><div class="dash-stat-label">consumed</div></div>
-      <div class="dash-stat"><div class="dash-stat-icon">⚖️</div><div class="dash-stat-val ${deficitClass}">${daysElapsed > 0 ? deficitLabel : '—'}</div><div class="dash-stat-label">deficit/d</div></div>
-      <div class="dash-stat"><div class="dash-stat-icon">🥩</div><div class="dash-stat-val">${protPerKgDay}</div><div class="dash-stat-label">g/kg prot</div></div>
-      <div class="dash-stat"><div class="dash-stat-icon">🍞</div><div class="dash-stat-val">${carbPerKgDay}</div><div class="dash-stat-label">g/kg carbs</div></div>
+    <div class="targets-grid" style="grid-template-columns:repeat(3,1fr);">
+      <div class="target-card"><div class="target-val">${kcalBurned.toLocaleString()}</div><div class="target-label">kcal burned</div></div>
+      <div class="target-card"><div class="target-val">${kcalConsumed.toLocaleString()}</div><div class="target-label">kcal consumed</div></div>
+      <div class="target-card ${deficitClass}"><div class="target-val">${daysElapsed > 0 ? deficitLabel : '—'}</div><div class="target-label">deficit/day</div></div>
+      <div class="target-card"><div class="target-val">${protPerKgDay} g/kg</div><div class="target-label">protein/day</div></div>
+      <div class="target-card"><div class="target-val">${carbPerKgDay} g/kg</div><div class="target-label">carbs/day</div></div>
     </div>
   `;
 

@@ -1016,6 +1016,15 @@
       <label id="qty-label">Quantity (g)</label>
       <input type="number" id="qty-input" min="1" step="1" style="font-size:1rem;" />
     </div>
+    <div id="qty-meal-slot" style="margin-top:.5rem;">
+      <label style="font-size:.78rem; color:var(--muted); margin-bottom:.3rem; display:block;">Meal</label>
+      <div style="display:flex; gap:0; border:1.5px solid var(--border); border-radius:6px; overflow:hidden; font-size:.82rem;">
+        <button class="qty-slot-btn" data-slot="Breakfast" style="flex:1; padding:.35rem .3rem; border:none; cursor:pointer; font-weight:600; background:var(--surface); color:var(--text);">🌅 Breakfast</button>
+        <button class="qty-slot-btn" data-slot="Lunch" style="flex:1; padding:.35rem .3rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text);">☀️ Lunch</button>
+        <button class="qty-slot-btn" data-slot="Dinner" style="flex:1; padding:.35rem .3rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text);">🌙 Dinner</button>
+        <button class="qty-slot-btn" data-slot="Snack" style="flex:1; padding:.35rem .3rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text);">🍎 Snack</button>
+      </div>
+    </div>
     <div style="display:flex; gap:.75rem; margin-top:.5rem;">
       <button class="btn btn-primary" id="qty-confirm">Add to Plate</button>
       <button class="btn btn-secondary" id="qty-cancel">Cancel</button>
@@ -5447,6 +5456,19 @@ function openQtyModal(type, id) {
     previewEl.textContent = parts.join(' · ');
   }
 
+  // Meal slot picker
+  let selectedSlot = guessDefaultMealSlot();
+  const slotBtns = overlay.querySelectorAll('.qty-slot-btn');
+  function highlightSlot() {
+    slotBtns.forEach(b => {
+      const active = b.dataset.slot === selectedSlot;
+      b.style.background = active ? 'var(--accent)' : 'var(--surface)';
+      b.style.color = active ? '#fff' : 'var(--text)';
+    });
+  }
+  slotBtns.forEach(b => b.onclick = () => { selectedSlot = b.dataset.slot; highlightSlot(); });
+  highlightSlot();
+
   // Set initial state
   labelEl.textContent = 'Quantity (' + unit + ')';
   input.value = defaultQty;
@@ -5484,8 +5506,16 @@ function openQtyModal(type, id) {
         ingredients = m.ingredients.map(i => ({ ...i, qty: parseFloat(i.qty) || 0 }));
       }
     }
-    addToPlate(type, id, name, rawQty, displayUnit, kcal, prot, carb, fat, ingredients);
+    addToPlate(type, id, name, rawQty, displayUnit, kcal, prot, carb, fat, ingredients, selectedSlot);
   };
+}
+
+function guessDefaultMealSlot() {
+  const h = new Date().getHours();
+  if (h < 10) return 'Breakfast';
+  if (h < 14) return 'Lunch';
+  if (h < 18) return 'Snack';
+  return 'Dinner';
 }
 
 document.getElementById('qty-confirm').addEventListener('click', () => { if (_qtyResolve) _qtyResolve(true); });
@@ -5494,7 +5524,7 @@ document.getElementById('qty-overlay').addEventListener('click', e => { if (e.ta
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && _qtyResolve) _qtyResolve(false); if (e.key === 'Enter' && document.getElementById('qty-overlay').style.display !== 'none' && _qtyResolve) _qtyResolve(true); });
 
 // --- Add / remove items ---
-function addToPlate(type, sourceId, name, qty, unit, kcal, prot, carb, fat, ingredients) {
+function addToPlate(type, sourceId, name, qty, unit, kcal, prot, carb, fat, ingredients, mealSlot) {
   const today = dateStr(new Date());
   const ap = activeProfile();
   if (!ap.dailyLog) ap.dailyLog = [];
@@ -5507,6 +5537,7 @@ function addToPlate(type, sourceId, name, qty, unit, kcal, prot, carb, fat, ingr
   }
   if (!entry.items) entry.items = [];
   const item = { id: Date.now().toString(), sourceId, type, name, qty, unit, kcal, prot, carb, fat };
+  if (mealSlot) item.mealSlot = mealSlot;
   if (ingredients) item.ingredients = ingredients;
   entry.items.push(item);
   entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
@@ -5530,6 +5561,25 @@ window.removeFromPlate = (itemId) => {
   renderPlate();
   renderPlateTab();
   renderCalorieChart();
+};
+
+// --- Change meal slot of a plate item ---
+window.changeMealSlot = (itemId) => {
+  const today = dateStr(new Date());
+  const ap = activeProfile();
+  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  if (!entry) return;
+  const item = (entry.items || []).find(i => i.id === itemId);
+  if (!item) return;
+  const slots = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+  const curIdx = slots.indexOf(item.mealSlot);
+  const nextIdx = (curIdx + 1) % slots.length;
+  item.mealSlot = slots[nextIdx];
+  entry.updatedAt = new Date().toISOString();
+  save();
+  renderPlate();
+  renderPlateTab();
+  toast('Moved to ' + item.mealSlot);
 };
 
 // --- Edit ingredients of a plate item ---
@@ -5716,9 +5766,10 @@ function renderPlate() {
         if (item.unit === 'eaches') qtyLabel = '× ' + item.qty;
         else if (item.unit === 'servings') qtyLabel = item.qty + ' srv';
         else qtyLabel = item.qty + 'g';
+        const slotBadge = item.mealSlot ? `<span class="pi-slot" style="font-size:.68rem; color:var(--muted); margin-right:.25rem;">${item.mealSlot}</span>` : '';
         return `
         <div class="plate-item-row">
-          <span class="pi-name" title="${item.name}">${item.name}</span>
+          <span class="pi-name" title="${item.name}">${slotBadge}${item.name}</span>
           <span class="pi-qty">${qtyLabel}</span>
           <span class="pi-kcal">${item.kcal} kcal</span>
           <button class="pi-del" onclick="removeFromPlate('${item.id}')">✕</button>
@@ -5778,34 +5829,53 @@ function renderPlateTab() {
     return;
   }
 
-  // Group items by meal type (product vs meal), then list individually
-  const rows = items.map(item => {
-    let qtyLabel;
-    if (item.unit === 'eaches') qtyLabel = '× ' + item.qty;
-    else if (item.unit === 'servings') qtyLabel = item.qty + ' srv';
-    else qtyLabel = item.qty + 'g';
-    const kcal = item.kcal || 0;
-    const prot = (item.prot || 0).toFixed(1);
-    const carb = (item.carb || 0).toFixed(1);
-    const fat  = (item.fat  || 0).toFixed(1);
-    const editBtn = isToday && item.ingredients && item.ingredients.length
-      ? `<button style="background:none; border:none; cursor:pointer; color:var(--accent); font-size:.82rem; margin-right:.2rem;" onclick="editPlateIngredients('${item.id}')" title="Edit ingredients">✏️</button>`
-      : '';
-    const removeBtn = isToday
-      ? `<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.82rem;" onclick="removeFromPlate('${item.id}')">✕</button>`
-      : '';
-    return `<tr>
-      <td style="padding:.35rem .4rem; font-size:.82rem;">${item.name}</td>
-      <td style="padding:.35rem .4rem; font-size:.78rem; color:var(--muted); white-space:nowrap;">${qtyLabel}</td>
-      <td style="padding:.35rem .4rem; text-align:right; font-weight:600;">${kcal}</td>
-      <td style="padding:.35rem .4rem; text-align:right;">${carb}</td>
-      <td style="padding:.35rem .4rem; text-align:right;">${prot}</td>
-      <td style="padding:.35rem .4rem; text-align:right;">${fat}</td>
-      <td style="padding:.35rem .2rem; text-align:center; white-space:nowrap;">
-        ${editBtn}${removeBtn}
-      </td>
-    </tr>`;
-  }).join('');
+  // Group items by meal slot
+  const slotOrder = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+  const grouped = {};
+  for (const slot of slotOrder) grouped[slot] = [];
+  grouped['Other'] = [];
+  for (const item of items) {
+    const s = item.mealSlot && grouped[item.mealSlot] ? item.mealSlot : 'Other';
+    grouped[s].push(item);
+  }
+
+  let tableRows = '';
+  for (const slot of [...slotOrder, 'Other']) {
+    const group = grouped[slot];
+    if (!group.length) continue;
+    const slotKcal = group.reduce((s, i) => s + (i.kcal || 0), 0);
+    tableRows += `<tr><td colspan="7" style="padding:.5rem .4rem .2rem; font-size:.75rem; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.03em;">${slot} <span style="font-weight:400; color:var(--muted);">${slotKcal} kcal</span></td></tr>`;
+    for (const item of group) {
+      let qtyLabel;
+      if (item.unit === 'eaches') qtyLabel = '× ' + item.qty;
+      else if (item.unit === 'servings') qtyLabel = item.qty + ' srv';
+      else qtyLabel = item.qty + 'g';
+      const kcal = item.kcal || 0;
+      const prot = (item.prot || 0).toFixed(1);
+      const carb = (item.carb || 0).toFixed(1);
+      const fat  = (item.fat  || 0).toFixed(1);
+      const editBtn = isToday && item.ingredients && item.ingredients.length
+        ? `<button style="background:none; border:none; cursor:pointer; color:var(--accent); font-size:.82rem; margin-right:.2rem;" onclick="editPlateIngredients('${item.id}')" title="Edit ingredients">✏️</button>`
+        : '';
+      const slotBtn = isToday
+        ? `<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.72rem; margin-right:.2rem;" onclick="changeMealSlot('${item.id}')" title="Change meal">🔀</button>`
+        : '';
+      const removeBtn = isToday
+        ? `<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.82rem;" onclick="removeFromPlate('${item.id}')">✕</button>`
+        : '';
+      tableRows += `<tr>
+        <td style="padding:.35rem .4rem; font-size:.82rem;">${item.name}</td>
+        <td style="padding:.35rem .4rem; font-size:.78rem; color:var(--muted); white-space:nowrap;">${qtyLabel}</td>
+        <td style="padding:.35rem .4rem; text-align:right; font-weight:600;">${kcal}</td>
+        <td style="padding:.35rem .4rem; text-align:right;">${carb}</td>
+        <td style="padding:.35rem .4rem; text-align:right;">${prot}</td>
+        <td style="padding:.35rem .4rem; text-align:right;">${fat}</td>
+        <td style="padding:.35rem .2rem; text-align:center; white-space:nowrap;">
+          ${editBtn}${slotBtn}${removeBtn}
+        </td>
+      </tr>`;
+    }
+  }
 
   contentEl.innerHTML = `
     <table style="width:100%; border-collapse:collapse; font-size:.82rem;">
@@ -5820,7 +5890,7 @@ function renderPlateTab() {
           <th style="padding:.35rem .2rem;"></th>
         </tr>
       </thead>
-      <tbody style="border-bottom:2px solid var(--border);">${rows}</tbody>
+      <tbody style="border-bottom:2px solid var(--border);">${tableRows}</tbody>
     </table>`;
 
   // Totals

@@ -2403,25 +2403,15 @@ function renderWeekGrid() {
     if (daySessions.length === 0) {
       sessionsHtml = `<span class="workout-tag tag-rest">Rest</span>`;
     } else {
-      for (const s of daySessions) {
+      for (let si = 0; si < daySessions.length; si++) {
+        const s = daySessions[si];
         const tagClass = `tag-${s.type}`;
         const tagLabel = s.type.charAt(0).toUpperCase() + s.type.slice(1);
         const burnKcal = estimateBurn(s);
-        const distInfo = s.dist ? `${s.dist}km` : '';
-        const durInfo = s.dur ? `${s.dur}min` : '';
-        const repsInfo = s.reps ? `${s.reps} reps` : '';
-        const burnLabel = burnKcal > 0 ? `<div style="font-size:.7rem; color:var(--accent); font-weight:600;">🔥 ${burnKcal.toLocaleString()} kcal</div>` : '';
-        const garminHr = s.avgHr ? `<div style="font-size:.7rem; color:#e05050;">❤️ ${s.avgHr} avg · ${s.maxHr || '—'} max</div>` : '';
-        const garminPace = s.pace ? `<div style="font-size:.7rem; color:var(--muted);">⏱ ${s.pace}/km</div>` : '';
-        const cls = classifyWorkout(s);
-        const clsLabel = s.avgHr || s.pace ? `<div style="font-size:.68rem; margin-top:.15rem;"><span class="wo-class-badge wo-class-${cls.type}" style="padding:.1rem .4rem; font-size:.65rem;">${cls.label}</span></div>` : '';
-        const title = s.title && daySessions.length > 1 ? `<div style="font-size:.68rem; color:var(--muted); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${s.title}</div>` : '';
-        sessionsHtml += `<div style="${daySessions.length > 1 ? 'border-bottom:1px solid var(--border); padding-bottom:.3rem; margin-bottom:.3rem;' : ''}">
-          ${title}
+        const burnLabel = burnKcal > 0 ? `<span style="font-size:.7rem; color:var(--accent); font-weight:600;">🔥 ${burnKcal.toLocaleString()}</span>` : '';
+        sessionsHtml += `<div style="display:flex; align-items:center; gap:.35rem; ${daySessions.length > 1 ? 'border-bottom:1px solid var(--border); padding-bottom:.25rem; margin-bottom:.25rem;' : ''} cursor:pointer;" onclick="event.stopPropagation(); openWorkoutDetail('${weekKey}',${d},'${dateLabel}',${si})">
           <span class="workout-tag ${tagClass}">${tagLabel}</span>
-          ${distInfo ? `<div style="font-size:.72rem; color:var(--muted);">${distInfo} ${durInfo}</div>` : ''}
-          ${repsInfo ? `<div style="font-size:.72rem; color:var(--muted);">${repsInfo}</div>` : ''}
-          ${burnLabel}${garminHr}${garminPace}${clsLabel}
+          ${burnLabel}
         </div>`;
       }
     }
@@ -2870,18 +2860,41 @@ function formatDuration(totalSec) {
   return `${m}:${String(s).padStart(2,'0')}`;
 }
 
-function openWorkoutDetail(weekKey, dayIdx, dateLabel) {
+function openWorkoutDetail(weekKey, dayIdx, dateLabel, sessionIndex) {
   const daySessions = sessionsForWeekDay(weekKey, dayIdx).filter(s => s.type !== 'rest');
   if (!daySessions.length) return;
-  let fullHtml = '';
-  for (const s of daySessions) {
-  fullHtml += renderSingleWorkoutDetail(s, dayIdx, dateLabel);
-  if (daySessions.length > 1) fullHtml += '<hr style="margin:1rem 0; border-color:var(--border);">';
+  // If sessionIndex provided, show only that session; otherwise show first
+  const idx = (sessionIndex != null && sessionIndex < daySessions.length) ? sessionIndex : 0;
+  const s = daySessions[idx];
+  let fullHtml = renderSingleWorkoutDetail(s, dayIdx, dateLabel);
+  // Delete button for manual activities (no stravaId, no startTime)
+  if (!s.stravaId && !s.startTime) {
+    fullHtml += `<div style="margin-top:.6rem; text-align:center;"><button class="btn btn-sm" style="background:var(--danger); color:#fff; font-size:.72rem;" onclick="deleteManualSession('${weekKey}',${dayIdx},'${s.updatedAt || ''}')">🗑 Delete Activity</button></div>`;
   }
-  fullHtml += `<div style="margin-top:1rem; text-align:center;"><button class="btn btn-secondary btn-sm" onclick="closeWorkoutDetail()">Close</button></div>`;
+  // Navigation if multiple sessions on this day
+  if (daySessions.length > 1) {
+    fullHtml += `<div style="margin-top:.6rem; display:flex; justify-content:center; gap:.5rem;">`;
+    for (let i = 0; i < daySessions.length; i++) {
+      const active = i === idx;
+      const label = daySessions[i].title || daySessions[i].type;
+      fullHtml += `<button class="btn btn-sm ${active ? 'btn-primary' : 'btn-secondary'}" style="font-size:.7rem;" onclick="openWorkoutDetail('${weekKey}',${dayIdx},'${dateLabel}',${i})">${label}</button>`;
+    }
+    fullHtml += `</div>`;
+  }
+  fullHtml += `<div style="margin-top:.8rem; text-align:center;"><button class="btn btn-secondary btn-sm" onclick="closeWorkoutDetail()">Close</button></div>`;
   document.getElementById('workout-detail-card').innerHTML = fullHtml;
   document.getElementById('workout-detail-overlay').classList.add('open');
 }
+
+window.deleteManualSession = function(weekKey, dayIdx, updatedAt) {
+  if (!confirm('Delete this manually added activity?')) return;
+  const ap = activeProfile();
+  if (!ap.weekSessions || !ap.weekSessions[weekKey]) return;
+  ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(s => !(s.day === dayIdx && s.updatedAt === updatedAt && !s.stravaId && !s.startTime));
+  save(); renderAll();
+  closeWorkoutDetail();
+  toast('Activity deleted');
+};
 
 window.promptOverrideCal = function(updatedAt, dayIdx) {
   const ap = activeProfile();
@@ -4450,7 +4463,8 @@ function aggregateCalorieData(log, days) {
       const dd = dayData(ds);
       consumed.push(dd.consumed); used.push(dd.used); protkg.push(dd.protkg); carbkg.push(dd.carbkg);
     }
-    return { labels, consumed, used, protkg, carbkg };
+    const deficit = consumed.map((c, i) => (c != null && used[i] != null) ? used[i] - c : null);
+    return { labels, consumed, used, protkg, carbkg, deficit };
   }
 
   // Bucket by week or month
@@ -4474,8 +4488,36 @@ function aggregateCalorieData(log, days) {
     const a = avgBucket(b.data);
     labels.push(b.label); consumed.push(a.consumed != null ? Math.round(a.consumed) : null); used.push(a.used != null ? Math.round(a.used) : null); protkg.push(a.protkg); carbkg.push(a.carbkg);
   }
-  return { labels, consumed, used, protkg, carbkg };
+  const deficit = consumed.map((c, i) => (c != null && used[i] != null) ? used[i] - c : null);
+  return { labels, consumed, used, protkg, carbkg, deficit };
 }
+
+// Chart.js plugin: horizontal shaded range band
+const rangeBandPlugin = {
+  id: 'rangeBand',
+  beforeDraw(chart) {
+    const bands = chart.options.plugins.rangeBand;
+    if (!bands || !bands.length) return;
+    const { ctx } = chart;
+    for (const band of bands) {
+      const yScale = chart.scales[band.yAxisID || 'y'];
+      if (!yScale) continue;
+      const yTop = yScale.getPixelForValue(band.max);
+      const yBot = yScale.getPixelForValue(band.min);
+      ctx.save();
+      ctx.fillStyle = band.color || 'rgba(110,198,160,0.12)';
+      ctx.fillRect(chart.chartArea.left, yTop, chart.chartArea.right - chart.chartArea.left, yBot - yTop);
+      if (band.label) {
+        ctx.fillStyle = band.labelColor || 'rgba(110,198,160,0.6)';
+        ctx.font = '10px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(band.label, chart.chartArea.right - 4, yTop + 12);
+      }
+      ctx.restore();
+    }
+  }
+};
+Chart.register(rangeBandPlugin);
 
 function renderCalorieChart() {
   const canvas = document.getElementById('calorie-chart');
@@ -4483,7 +4525,7 @@ function renderCalorieChart() {
   const isDashboardActive = document.getElementById('tab-dashboard').classList.contains('active');
   const ap = activeProfile();
   const log = ap.dailyLog || [];
-  const { labels, consumed, used } = aggregateCalorieData(log, chartPeriodDays);
+  const { labels, consumed, used, deficit } = aggregateCalorieData(log, chartPeriodDays);
   const hasData = consumed.some(v => v !== null) || used.some(v => v !== null);
   const noDataEl = document.getElementById('chart-no-data');
   const deficitEl = document.getElementById('chart-deficit-text');
@@ -4522,7 +4564,15 @@ function renderCalorieChart() {
     borderColor: '#2d6a4f', backgroundColor: 'rgba(45,106,79,.06)',
     borderWidth: 2, borderDash: [6,4], pointRadius: ptRadius, tension: 0.35, spanGaps: true,
   });
+  // Deficit series
+  if (chartSeries.consumed && chartSeries.burned) datasets.push({
+    label: 'Daily Deficit', data: deficit, yAxisID: 'yDeficit',
+    borderColor: '#6ec6a0', backgroundColor: 'rgba(110,198,160,.15)',
+    borderWidth: 2, pointRadius: ptRadius, tension: 0.35, spanGaps: true, fill: true,
+    segment: { borderColor: ctx => (ctx.p0.parsed.y < 200) ? '#ee5a52' : (ctx.p0.parsed.y > 500) ? '#f0a946' : '#6ec6a0' },
+  });
 
+  const showDeficit = chartSeries.consumed && chartSeries.burned;
   const scales = {
     x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } },
     y: {
@@ -4530,7 +4580,15 @@ function renderCalorieChart() {
       title: { display: true, text: 'kcal', font: { size: 11 } },
       beginAtZero: false, ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' },
     },
+    yDeficit: {
+      display: showDeficit,
+      position: 'right',
+      title: { display: showDeficit, text: 'deficit kcal', font: { size: 10 } },
+      ticks: { font: { size: 10 } },
+      grid: { drawOnChartArea: false },
+    },
   };
+  const deficitBands = showDeficit ? [{ yAxisID: 'yDeficit', min: 200, max: 500, color: 'rgba(110,198,160,0.12)', label: 'Optimal deficit 200–500', labelColor: 'rgba(110,198,160,0.5)' }] : [];
 
   calorieChart = new Chart(canvas, {
     type: 'line',
@@ -4548,6 +4606,7 @@ function renderCalorieChart() {
             }
           }
         },
+        rangeBand: deficitBands,
       },
       scales,
     },
@@ -4579,7 +4638,7 @@ function renderMacroCharts() {
         }] },
         options: {
           responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) + ' g/kg' : 'not logged' } } },
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) + ' g/kg' : 'not logged' } }, rangeBand: [{ yAxisID: 'y', min: 1.8, max: 2.2, color: 'rgba(231,111,81,0.10)', label: 'Target 1.8\u20132.2 g/kg', labelColor: 'rgba(231,111,81,0.5)' }] },
           scales: { x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } }, y: { beginAtZero: true, title: { display: true, text: 'g / kg', font: { size: 11 } }, ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' } } },
         },
       });

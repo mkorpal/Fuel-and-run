@@ -4922,8 +4922,8 @@ function renderDashboard() {
     const wDiff = w - gw;
     const isLosing = wDiff > 0.5;
     const isGaining = wDiff < -0.5;
-    const totalRunKm = sessions.reduce((s, x) => x.type === 'run' ? s + (x.dist || 0) : s, 0);
-    const totalSessCount = sessions.length;
+    const totalRunKm = weekSessions.reduce((s, x) => x.type === 'run' ? s + (x.dist || 0) : s, 0);
+    const totalSessCount = weekSessions.length;
     const highVolume = totalRunKm >= 50;
     const lowVolume = totalRunKm < 20 && totalSessCount < 3;
     const tips = [];

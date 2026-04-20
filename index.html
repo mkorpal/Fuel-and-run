@@ -145,6 +145,8 @@
   .tag-other  { background: #201a30; color: #a78bfa; }
   .tag-walk   { background: #122e1e; color: #52b788; }
   .tag-pushups { background: #2a1520; color: #f87171; }
+  .tag-breathwork { background: #1a2530; color: #81d4fa; }
+  .tag-meditation { background: #201a30; color: #ce93d8; }
 
   /* ---- Meal week grid ---- */
   .meal-day-cell { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:.6rem .5rem; min-height:120px; font-size:.78rem; cursor:pointer; transition:box-shadow .15s; }
@@ -212,19 +214,20 @@
   .fill-kcal  { background: #f4a261; }
 
   /* ---- Nutrition targets ---- */
-  .targets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
+  .targets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: .5rem; }
   .target-card {
     background: var(--surface2);
     border-radius: var(--radius);
-    padding: .9rem 1rem;
-    border-left: 4px solid var(--accent);
+    padding: .5rem .6rem;
+    border-left: 3px solid var(--accent);
   }
   .target-card.warn { border-left-color: var(--warn); }
   .target-card.danger { border-left-color: var(--danger); }
-  .target-val { font-family: var(--font-head); font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+  .target-val { font-family: var(--font-head); font-size: 1.15rem; font-weight: 700; color: var(--accent); }
   .target-card.warn .target-val { color: var(--warn); }
   .target-card.danger .target-val { color: var(--danger); }
-  .target-label { font-size: .75rem; color: var(--muted); margin-top: .1rem; }
+  .target-label { font-size: .68rem; color: var(--muted); margin-top: .05rem; }
+  .dash-section-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: .6rem 0 .3rem; }
 
   /* ---- Products ---- */
   .product-group-title {
@@ -695,6 +698,8 @@
               <option value="swim">Swim</option>
               <option value="strength">Strength Training</option>
               <option value="pushups">Push-ups</option>
+              <option value="breathwork">Breathwork</option>
+              <option value="meditation">Meditation</option>
               <option value="rest">Rest</option>
               <option value="other">Other</option>
             </select>
@@ -2204,6 +2209,12 @@ document.getElementById('btn-strava-sync').addEventListener('click', () => {
 document.getElementById('man-type').addEventListener('change', function() {
   const repsRow = document.getElementById('man-reps-row');
   if (repsRow) repsRow.style.display = this.value === 'pushups' ? '' : 'none';
+  // Hide dist/cal for breathwork/meditation
+  const noBurnTypes = ['breathwork', 'meditation'];
+  const distRow = document.getElementById('man-dist').closest('.form-row');
+  const calRow = document.getElementById('man-cal').closest('.form-row');
+  if (distRow) distRow.style.display = noBurnTypes.includes(this.value) ? 'none' : '';
+  if (calRow) calRow.style.display = noBurnTypes.includes(this.value) ? 'none' : '';
 });
 
 document.getElementById('btn-add-session').addEventListener('click', () => {
@@ -2226,7 +2237,8 @@ document.getElementById('btn-add-session').addEventListener('click', () => {
   if (!ap.weekSessions[wk]) ap.weekSessions[wk] = [];
   // Allow multiple sessions per day — remove only if same day + same type (update)
   ap.weekSessions[wk] = ap.weekSessions[wk].filter(s => !(s.day === dayIdx && s.type === type && !s.stravaId && !s.startTime));
-  const session = { day: dayIdx, type, dist, dur, intensity, calories: cal, title: type === 'pushups' ? 'Push-ups' : type.charAt(0).toUpperCase()+type.slice(1), updatedAt: new Date().toISOString() };
+  const titleMap = { pushups: 'Push-ups', breathwork: 'Breathwork', meditation: 'Meditation' };
+  const session = { day: dayIdx, type, dist, dur, intensity, calories: cal, title: titleMap[type] || type.charAt(0).toUpperCase()+type.slice(1), updatedAt: new Date().toISOString() };
   if (type === 'pushups' && reps) session.reps = reps;
   ap.weekSessions[wk].push(session);
   const curWk = isoWeekKey(mondayOfOffset(0));
@@ -2275,6 +2287,7 @@ function estimateBurn(session) {
   if (session.type === 'swim') return Math.round((dur / 60) * w * 9);
   if (session.type === 'strength') return Math.round((dur / 60) * w * 5);
   if (session.type === 'pushups') return Math.round((session.reps || 0) * 0.5);
+  if (session.type === 'breathwork' || session.type === 'meditation') return 0;
   return Math.round((dur / 60) * w * 5);
 }
 
@@ -4789,6 +4802,8 @@ function renderDashboard() {
   const runKm = sessionsThisWeek.filter(s => s.type === 'run').reduce((a, s) => a + (s.dist || 0), 0);
   const strengthMins = sessionsThisWeek.filter(s => s.type === 'strength').reduce((a, s) => a + (s.dur || 0), 0);
   const pushups = sessionsThisWeek.filter(s => s.type === 'pushups').reduce((a, s) => a + (s.reps || 0), 0);
+  const breathworkMins = sessionsThisWeek.filter(s => s.type === 'breathwork').reduce((a, s) => a + (s.dur || 0), 0);
+  const meditationMins = sessionsThisWeek.filter(s => s.type === 'meditation').reduce((a, s) => a + (s.dur || 0), 0);
 
   // Consumed + macros from dailyLog this week
   const log = ap.dailyLog || [];
@@ -4817,14 +4832,22 @@ function renderDashboard() {
   const weekLabel = isPast ? 'that week' : isFuture ? 'upcoming' : 'this week';
 
   summary.innerHTML = `
-    <div class="target-card"><div class="target-val">${runKm.toFixed(1)} km</div><div class="target-label">run ${weekLabel}</div></div>
-    <div class="target-card"><div class="target-val">${strengthMins} min</div><div class="target-label">strength training</div></div>
-    <div class="target-card"><div class="target-val">${pushups}</div><div class="target-label">push-ups</div></div>
-    <div class="target-card"><div class="target-val">${kcalBurned.toLocaleString()} kcal</div><div class="target-label">burned ${weekLabel}</div></div>
-    <div class="target-card"><div class="target-val">${kcalConsumed.toLocaleString()} kcal</div><div class="target-label">consumed ${weekLabel}</div></div>
-    <div class="target-card ${deficitClass}"><div class="target-val">${daysElapsed > 0 ? deficitLabel + ' kcal' : '—'}</div><div class="target-label">deficit/surplus per day</div></div>
-    <div class="target-card"><div class="target-val">${protPerKgDay} g/kg</div><div class="target-label">protein per day</div></div>
-    <div class="target-card"><div class="target-val">${carbPerKgDay} g/kg</div><div class="target-label">carbs per day</div></div>
+    <div class="dash-section-label">🏃 Activity</div>
+    <div class="targets-grid">
+      <div class="target-card"><div class="target-val">${runKm.toFixed(1)}</div><div class="target-label">km run</div></div>
+      <div class="target-card"><div class="target-val">${strengthMins}</div><div class="target-label">min strength</div></div>
+      <div class="target-card"><div class="target-val">${pushups}</div><div class="target-label">push-ups</div></div>
+      <div class="target-card"><div class="target-val">${breathworkMins}</div><div class="target-label">min breathwork</div></div>
+      <div class="target-card"><div class="target-val">${meditationMins}</div><div class="target-label">min meditation</div></div>
+    </div>
+    <div class="dash-section-label">🥗 Nutrition</div>
+    <div class="targets-grid">
+      <div class="target-card"><div class="target-val">${kcalBurned.toLocaleString()}</div><div class="target-label">kcal burned</div></div>
+      <div class="target-card"><div class="target-val">${kcalConsumed.toLocaleString()}</div><div class="target-label">kcal consumed</div></div>
+      <div class="target-card ${deficitClass}"><div class="target-val">${daysElapsed > 0 ? deficitLabel : '—'}</div><div class="target-label">deficit/day</div></div>
+      <div class="target-card"><div class="target-val">${protPerKgDay}</div><div class="target-label">g/kg protein</div></div>
+      <div class="target-card"><div class="target-val">${carbPerKgDay}</div><div class="target-label">g/kg carbs</div></div>
+    </div>
   `;
 
   // Weekly guide text

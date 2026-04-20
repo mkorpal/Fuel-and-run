@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fuel & Run — Theme & Logo Preview</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', system-ui, sans-serif; background: #1a1a1a; color: #eee; padding: 1rem; }
+  h1 { text-align: center; margin: 1rem 0 .5rem; font-size: 1.4rem; }
+  h2 { text-align: center; margin: 2rem 0 1rem; font-size: 1.1rem; color: #aaa; text-transform: uppercase; letter-spacing: .1rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1.2rem; max-width: 1200px; margin: 0 auto; }
+  .preview {
+    border-radius: 16px; overflow: hidden; border: 1px solid #333;
+    display: flex; flex-direction: column;
+  }
+  .preview-label {
+    text-align: center; padding: .5rem; font-size: .75rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .08rem; color: #999; background: #111;
+  }
+  .phone {
+    padding: 1rem; min-height: 520px;
+  }
+  .phone header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .6rem .8rem; border-radius: 10px 10px 0 0; margin-bottom: .6rem;
+  }
+  .phone header h3 { font-size: 1rem; }
+  .phone nav {
+    display: flex; gap: .15rem; overflow-x: auto; padding-bottom: .4rem;
+    border-bottom: 2px solid; margin-bottom: .8rem; font-size: .7rem;
+  }
+  .phone nav span {
+    padding: .35rem .5rem; white-space: nowrap; border-bottom: 2px solid transparent;
+    cursor: default; font-weight: 600;
+  }
+  .phone nav span.active { border-bottom-color: currentColor; }
+  .phone .card {
+    border-radius: 8px; padding: .8rem; margin-bottom: .6rem;
+  }
+  .phone .card-title { font-weight: 700; font-size: .82rem; margin-bottom: .4rem; }
+  .phone .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; }
+  .phone .stat { text-align: center; padding: .5rem .3rem; border-radius: 6px; }
+  .phone .stat .val { font-size: 1rem; font-weight: 800; }
+  .phone .stat .label { font-size: .62rem; text-transform: uppercase; margin-top: .15rem; }
+  .phone .bar { height: 6px; border-radius: 3px; margin: .4rem 0; overflow: hidden; }
+  .phone .bar-fill { height: 100%; border-radius: 3px; }
+  .phone .day-row { display: flex; justify-content: space-between; align-items: center; padding: .35rem 0; font-size: .78rem; }
+  .phone .day-row:not(:last-child) { border-bottom: 1px solid; }
+  .phone .tag { padding: .15rem .4rem; border-radius: 4px; font-size: .65rem; font-weight: 700; }
+
+  /* Logo section */
+  .logo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; max-width: 1000px; margin: 0 auto; }
+  .logo-option {
+    text-align: center; padding: 1.5rem 1rem; border-radius: 14px; border: 1px solid #333;
+  }
+  .logo-option .logo { font-size: 2.2rem; margin-bottom: .4rem; }
+  .logo-option .name { font-size: 1.1rem; font-weight: 800; letter-spacing: .02rem; }
+  .logo-option .sub { font-size: .7rem; color: #999; margin-top: .2rem; }
+  .logo-option .variant-label { font-size: .65rem; color: #777; margin-top: .6rem; text-transform: uppercase; letter-spacing: .05rem; }
+</style>
+</head>
+<body>
+
+<h1>Fuel & Run — Theme & Logo Options</h1>
+
+<!-- ============================== -->
+<h2>🎨 Theme Options</h2>
+<!-- ============================== -->
+<div class="grid">
+
+  <!-- THEME 1: Current (Light Natural) -->
+  <div class="preview">
+    <div class="preview-label">A — Current: Light Natural</div>
+    <div class="phone" style="background:#f5f2ec; color:#1a1a18;">
+      <header style="background:#fff; border: 1px solid #d6cfc2;">
+        <h3 style="color:#2d6a4f;">🌿 Fuel & Run</h3>
+        <span style="font-size:.72rem; color:#6b6659;">Michal</span>
+      </header>
+      <nav style="border-color:#d6cfc2; color:#6b6659;">
+        <span class="active" style="color:#2d6a4f; border-bottom-color:#2d6a4f;">Dashboard</span>
+        <span>My Week</span><span>Plate</span><span>Products</span>
+      </nav>
+      <div class="card" style="background:#fff; border:1px solid #d6cfc2;">
+        <div class="card-title" style="color:#1a1a18;">Weekly Overview</div>
+        <div class="stats">
+          <div class="stat" style="background:#eee9de;"><div class="val" style="color:#2d6a4f;">12.4 km</div><div class="label" style="color:#6b6659;">run</div></div>
+          <div class="stat" style="background:#eee9de;"><div class="val" style="color:#2d6a4f;">2,608</div><div class="label" style="color:#6b6659;">burned</div></div>
+          <div class="stat" style="background:#eee9de;"><div class="val" style="color:#2d6a4f;">2,335</div><div class="label" style="color:#6b6659;">consumed</div></div>
+        </div>
+      </div>
+      <div class="card" style="background:#fff; border:1px solid #d6cfc2;">
+        <div class="card-title" style="color:#1a1a18;">Today</div>
+        <div class="bar" style="background:#eee9de;"><div class="bar-fill" style="width:72%; background:#2d6a4f;"></div></div>
+        <div class="day-row" style="border-color:#d6cfc2; color:#6b6659;"><span>🏃 Run 8.2km</span><span style="color:#2d6a4f; font-weight:700;">🔥 484 kcal</span></div>
+        <div class="day-row" style="border-color:#d6cfc2; color:#6b6659;"><span>💪 Strength 30min</span><span style="color:#2d6a4f; font-weight:700;">🔥 214 kcal</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- THEME 2: Dark Forest -->
+  <div class="preview">
+    <div class="preview-label">B — Dark Forest</div>
+    <div class="phone" style="background:#0d1b14; color:#d4e4d8;">
+      <header style="background:#142a1e; border:1px solid #1e3a2a;">
+        <h3 style="color:#52b788;">🌿 Fuel & Run</h3>
+        <span style="font-size:.72rem; color:#7a9985;">Michal</span>
+      </header>
+      <nav style="border-color:#1e3a2a; color:#7a9985;">
+        <span class="active" style="color:#52b788; border-bottom-color:#52b788;">Dashboard</span>
+        <span>My Week</span><span>Plate</span><span>Products</span>
+      </nav>
+      <div class="card" style="background:#142a1e; border:1px solid #1e3a2a;">
+        <div class="card-title" style="color:#d4e4d8;">Weekly Overview</div>
+        <div class="stats">
+          <div class="stat" style="background:#1a3528;"><div class="val" style="color:#52b788;">12.4 km</div><div class="label" style="color:#7a9985;">run</div></div>
+          <div class="stat" style="background:#1a3528;"><div class="val" style="color:#52b788;">2,608</div><div class="label" style="color:#7a9985;">burned</div></div>
+          <div class="stat" style="background:#1a3528;"><div class="val" style="color:#52b788;">2,335</div><div class="label" style="color:#7a9985;">consumed</div></div>
+        </div>
+      </div>
+      <div class="card" style="background:#142a1e; border:1px solid #1e3a2a;">
+        <div class="card-title" style="color:#d4e4d8;">Today</div>
+        <div class="bar" style="background:#1a3528;"><div class="bar-fill" style="width:72%; background:#52b788;"></div></div>
+        <div class="day-row" style="border-color:#1e3a2a; color:#7a9985;"><span>🏃 Run 8.2km</span><span style="color:#52b788; font-weight:700;">🔥 484 kcal</span></div>
+        <div class="day-row" style="border-color:#1e3a2a; color:#7a9985;"><span>💪 Strength 30min</span><span style="color:#52b788; font-weight:700;">🔥 214 kcal</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- THEME 3: Dark Slate -->
+  <div class="preview">
+    <div class="preview-label">C — Dark Slate</div>
+    <div class="phone" style="background:#121318; color:#e0dfe6;">
+      <header style="background:#1c1d26; border:1px solid #2a2b38;">
+        <h3 style="color:#6ec6a0;">🌿 Fuel & Run</h3>
+        <span style="font-size:.72rem; color:#8888a0;">Michal</span>
+      </header>
+      <nav style="border-color:#2a2b38; color:#8888a0;">
+        <span class="active" style="color:#6ec6a0; border-bottom-color:#6ec6a0;">Dashboard</span>
+        <span>My Week</span><span>Plate</span><span>Products</span>
+      </nav>
+      <div class="card" style="background:#1c1d26; border:1px solid #2a2b38;">
+        <div class="card-title" style="color:#e0dfe6;">Weekly Overview</div>
+        <div class="stats">
+          <div class="stat" style="background:#242530;"><div class="val" style="color:#6ec6a0;">12.4 km</div><div class="label" style="color:#8888a0;">run</div></div>
+          <div class="stat" style="background:#242530;"><div class="val" style="color:#6ec6a0;">2,608</div><div class="label" style="color:#8888a0;">burned</div></div>
+          <div class="stat" style="background:#242530;"><div class="val" style="color:#6ec6a0;">2,335</div><div class="label" style="color:#8888a0;">consumed</div></div>
+        </div>
+      </div>
+      <div class="card" style="background:#1c1d26; border:1px solid #2a2b38;">
+        <div class="card-title" style="color:#e0dfe6;">Today</div>
+        <div class="bar" style="background:#242530;"><div class="bar-fill" style="width:72%; background:linear-gradient(90deg,#2d6a4f,#6ec6a0);"></div></div>
+        <div class="day-row" style="border-color:#2a2b38; color:#8888a0;"><span>🏃 Run 8.2km</span><span style="color:#6ec6a0; font-weight:700;">🔥 484 kcal</span></div>
+        <div class="day-row" style="border-color:#2a2b38; color:#8888a0;"><span>💪 Strength 30min</span><span style="color:#6ec6a0; font-weight:700;">🔥 214 kcal</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- THEME 4: Midnight Blue -->
+  <div class="preview">
+    <div class="preview-label">D — Midnight Blue</div>
+    <div class="phone" style="background:#0c1220; color:#c8d6e5;">
+      <header style="background:#141e30; border:1px solid #1e3050;">
+        <h3 style="color:#48dbfb;">⚡ Fuel & Run</h3>
+        <span style="font-size:.72rem; color:#6a8caf;">Michal</span>
+      </header>
+      <nav style="border-color:#1e3050; color:#6a8caf;">
+        <span class="active" style="color:#48dbfb; border-bottom-color:#48dbfb;">Dashboard</span>
+        <span>My Week</span><span>Plate</span><span>Products</span>
+      </nav>
+      <div class="card" style="background:#141e30; border:1px solid #1e3050;">
+        <div class="card-title" style="color:#c8d6e5;">Weekly Overview</div>
+        <div class="stats">
+          <div class="stat" style="background:#1a2840;"><div class="val" style="color:#48dbfb;">12.4 km</div><div class="label" style="color:#6a8caf;">run</div></div>
+          <div class="stat" style="background:#1a2840;"><div class="val" style="color:#48dbfb;">2,608</div><div class="label" style="color:#6a8caf;">burned</div></div>
+          <div class="stat" style="background:#1a2840;"><div class="val" style="color:#48dbfb;">2,335</div><div class="label" style="color:#6a8caf;">consumed</div></div>
+        </div>
+      </div>
+      <div class="card" style="background:#141e30; border:1px solid #1e3050;">
+        <div class="card-title" style="color:#c8d6e5;">Today</div>
+        <div class="bar" style="background:#1a2840;"><div class="bar-fill" style="width:72%; background:linear-gradient(90deg,#0abde3,#48dbfb);"></div></div>
+        <div class="day-row" style="border-color:#1e3050; color:#6a8caf;"><span>🏃 Run 8.2km</span><span style="color:#48dbfb; font-weight:700;">🔥 484 kcal</span></div>
+        <div class="day-row" style="border-color:#1e3050; color:#6a8caf;"><span>💪 Strength 30min</span><span style="color:#48dbfb; font-weight:700;">🔥 214 kcal</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- THEME 5: Warm Charcoal -->
+  <div class="preview">
+    <div class="preview-label">E — Warm Charcoal</div>
+    <div class="phone" style="background:#1a1816; color:#e8e0d4;">
+      <header style="background:#252220; border:1px solid #3a3530;">
+        <h3 style="color:#e6a44e;">🌾 Fuel & Run</h3>
+        <span style="font-size:.72rem; color:#9a8e7f;">Michal</span>
+      </header>
+      <nav style="border-color:#3a3530; color:#9a8e7f;">
+        <span class="active" style="color:#e6a44e; border-bottom-color:#e6a44e;">Dashboard</span>
+        <span>My Week</span><span>Plate</span><span>Products</span>
+      </nav>
+      <div class="card" style="background:#252220; border:1px solid #3a3530;">
+        <div class="card-title" style="color:#e8e0d4;">Weekly Overview</div>
+        <div class="stats">
+          <div class="stat" style="background:#302c28;"><div class="val" style="color:#e6a44e;">12.4 km</div><div class="label" style="color:#9a8e7f;">run</div></div>
+          <div class="stat" style="background:#302c28;"><div class="val" style="color:#e6a44e;">2,608</div><div class="label" style="color:#9a8e7f;">burned</div></div>
+          <div class="stat" style="background:#302c28;"><div class="val" style="color:#e6a44e;">2,335</div><div class="label" style="color:#9a8e7f;">consumed</div></div>
+        </div>
+      </div>
+      <div class="card" style="background:#252220; border:1px solid #3a3530;">
+        <div class="card-title" style="color:#e8e0d4;">Today</div>
+        <div class="bar" style="background:#302c28;"><div class="bar-fill" style="width:72%; background:linear-gradient(90deg,#c47d1a,#e6a44e);"></div></div>
+        <div class="day-row" style="border-color:#3a3530; color:#9a8e7f;"><span>🏃 Run 8.2km</span><span style="color:#e6a44e; font-weight:700;">🔥 484 kcal</span></div>
+        <div class="day-row" style="border-color:#3a3530; color:#9a8e7f;"><span>💪 Strength 30min</span><span style="color:#e6a44e; font-weight:700;">🔥 214 kcal</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- THEME 6: OLED Black -->
+  <div class="preview">
+    <div class="preview-label">F — OLED Black</div>
+    <div class="phone" style="background:#000000; color:#e0e0e0;">
+      <header style="background:#0a0a0a; border:1px solid #222;">
+        <h3 style="color:#40c486;">🌿 Fuel & Run</h3>
+        <span style="font-size:.72rem; color:#666;">Michal</span>
+      </header>
+      <nav style="border-color:#222; color:#666;">
+        <span class="active" style="color:#40c486; border-bottom-color:#40c486;">Dashboard</span>
+        <span>My Week</span><span>Plate</span><span>Products</span>
+      </nav>
+      <div class="card" style="background:#0a0a0a; border:1px solid #222;">
+        <div class="card-title" style="color:#e0e0e0;">Weekly Overview</div>
+        <div class="stats">
+          <div class="stat" style="background:#141414;"><div class="val" style="color:#40c486;">12.4 km</div><div class="label" style="color:#666;">run</div></div>
+          <div class="stat" style="background:#141414;"><div class="val" style="color:#40c486;">2,608</div><div class="label" style="color:#666;">burned</div></div>
+          <div class="stat" style="background:#141414;"><div class="val" style="color:#40c486;">2,335</div><div class="label" style="color:#666;">consumed</div></div>
+        </div>
+      </div>
+      <div class="card" style="background:#0a0a0a; border:1px solid #222;">
+        <div class="card-title" style="color:#e0e0e0;">Today</div>
+        <div class="bar" style="background:#141414;"><div class="bar-fill" style="width:72%; background:#40c486;"></div></div>
+        <div class="day-row" style="border-color:#222; color:#666;"><span>🏃 Run 8.2km</span><span style="color:#40c486; font-weight:700;">🔥 484 kcal</span></div>
+        <div class="day-row" style="border-color:#222; color:#666;"><span>💪 Strength 30min</span><span style="color:#40c486; font-weight:700;">🔥 214 kcal</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================== -->
+<h2>🏷️ Logo Options</h2>
+<!-- ============================== -->
+<div class="logo-grid">
+
+  <div class="logo-option" style="background:#0d1b14;">
+    <div class="logo">🌿</div>
+    <div class="name" style="color:#52b788;">Fuel & Run</div>
+    <div class="sub">Nutrition Companion</div>
+    <div class="variant-label">Current — Leaf</div>
+  </div>
+
+  <div class="logo-option" style="background:#0d1b14;">
+    <div class="logo">⚡</div>
+    <div class="name" style="color:#48dbfb;">Fuel & Run</div>
+    <div class="sub">Nutrition Companion</div>
+    <div class="variant-label">Lightning Bolt</div>
+  </div>
+
+  <div class="logo-option" style="background:#0d1b14;">
+    <div class="logo">🔥</div>
+    <div class="name" style="color:#f4a261;">Fuel & Run</div>
+    <div class="sub">Nutrition Companion</div>
+    <div class="variant-label">Flame</div>
+  </div>
+
+  <div class="logo-option" style="background:#0d1b14;">
+    <div class="logo">🏃‍♂️</div>
+    <div class="name" style="color:#52b788;">Fuel & Run</div>
+    <div class="sub">Nutrition Companion</div>
+    <div class="variant-label">Runner</div>
+  </div>
+
+  <div class="logo-option" style="background:#0d1b14;">
+    <div class="logo" style="font-size:1.6rem; font-weight:900; color:#52b788; letter-spacing:-.05rem;">F<span style="color:#f4a261;">&</span>R</div>
+    <div class="name" style="color:#52b788;">Fuel & Run</div>
+    <div class="sub">Nutrition Companion</div>
+    <div class="variant-label">Monogram</div>
+  </div>
+
+  <div class="logo-option" style="background:#0d1b14;">
+    <div class="logo">🥗</div>
+    <div class="name" style="color:#6ec6a0;">Fuel & Run</div>
+    <div class="sub">Nutrition Companion</div>
+    <div class="variant-label">Salad Bowl</div>
+  </div>
+
+  <div class="logo-option" style="background:#0d1b14;">
+    <div class="logo">🌾</div>
+    <div class="name" style="color:#e6a44e;">Fuel & Run</div>
+    <div class="sub">Nutrition Companion</div>
+    <div class="variant-label">Wheat / Natural</div>
+  </div>
+
+  <div class="logo-option" style="background:#0d1b14;">
+    <div class="logo" style="font-size:1.8rem;">🍃🏃</div>
+    <div class="name" style="color:#52b788;">Fuel & Run</div>
+    <div class="sub">Nutrition Companion</div>
+    <div class="variant-label">Leaf + Runner Combo</div>
+  </div>
+
+</div>
+
+<p style="text-align:center; color:#555; margin:2rem 0 1rem; font-size:.8rem;">
+  Open this file on your phone or resize browser to see mobile rendering. Tell me which theme letter (A–F) and logo you prefer.
+</p>
+
+</body>
+</html>

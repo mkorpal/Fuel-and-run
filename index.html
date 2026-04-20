@@ -508,7 +508,11 @@
   <header>
     <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; width:100%;">
       <h1>⚡ Fuel &amp; Run</h1>
-      <button id="btn-add-to-plate" class="btn btn-primary btn-sm" style="font-size:.72rem; padding:.3rem .7rem;" onclick="document.querySelectorAll('#main-nav button').forEach(b=>{b.classList.remove('active');if(b.dataset.tab==='plate')b.classList.add('active');}); document.querySelectorAll('.section').forEach(s=>s.classList.remove('active')); document.getElementById('tab-plate').classList.add('active'); plateOffset=0; renderPlateTab();">+ Add to Plate</button>
+      <div style="display:flex; gap:.3rem; align-items:center;">
+        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:var(--surface2); color:var(--text); border:1px solid var(--border);" onclick="document.querySelectorAll('#main-nav button').forEach(b=>{b.classList.remove('active');if(b.dataset.tab==='products')b.classList.add('active');}); document.querySelectorAll('.section').forEach(s=>s.classList.remove('active')); document.getElementById('tab-products').classList.add('active'); renderAll();">🛒 Pantry → Plate</button>
+        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:var(--surface2); color:var(--text); border:1px solid var(--border);" onclick="document.querySelectorAll('#main-nav button').forEach(b=>{b.classList.remove('active');if(b.dataset.tab==='meals')b.classList.add('active');}); document.querySelectorAll('.section').forEach(s=>s.classList.remove('active')); document.getElementById('tab-meals').classList.add('active'); renderAll();">🍽 Meal → Plate</button>
+        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:var(--surface2); color:var(--text); border:1px solid var(--border);" onclick="document.querySelectorAll('#main-nav button').forEach(b=>{b.classList.remove('active');if(b.dataset.tab==='training')b.classList.add('active');}); document.querySelectorAll('.section').forEach(s=>s.classList.remove('active')); document.getElementById('tab-training').classList.add('active'); renderAll(); setTimeout(()=>{document.getElementById('card-log-activity').scrollIntoView({behavior:'smooth'});},100);">🔥 Log Activity</button>
+      </div>
       <div style="display:flex; align-items:center; gap:.5rem; margin-left:auto;">
         <div id="profile-switcher" style="display:flex; align-items:center; gap:.5rem;"></div>
         <button class="btn btn-sm" onclick="doLogout()" style="font-size:.72rem; background:transparent; color:var(--muted); border:1px solid var(--border);">🚪</button>
@@ -677,7 +681,7 @@
           <span id="ics-filename" style="font-size:.8rem; color:var(--muted);"></span>
         </div>
       </div>
-      <div class="card">
+      <div class="card" id="card-log-activity">
         <div class="card-title">Log Activity Manually</div>
         <div class="form-inline">
           <div class="form-row">

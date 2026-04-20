@@ -632,8 +632,10 @@
           </div>
         </div>
         <div id="plate-tab-date" style="text-align:center; font-size:.82rem; color:var(--muted); margin-bottom:.6rem;"></div>
+        <div id="plate-macro-pie" style="display:flex; justify-content:center; margin-bottom:.8rem;"><canvas id="plate-pie-chart" width="220" height="220"></canvas></div>
         <div id="plate-tab-content"></div>
         <div id="plate-tab-totals" style="margin-top:1rem;"></div>
+        <div id="plate-protein-suggestions" style="margin-top:1rem;"></div>
       </div>
     </section>
 
@@ -4638,6 +4640,7 @@ function renderCalorieChart() {
 
 // --- Macro charts (Protein/kg, Carbs/kg) ---
 let proteinChart = null, carbsChart = null;
+let platePieChart = null;
 let macroPeriodDays = 7;
 
 function renderMacroCharts() {
@@ -5832,6 +5835,11 @@ function renderPlateTab() {
   if (!items.length) {
     contentEl.innerHTML = `<p style="text-align:center; color:var(--muted);">${isToday ? 'Nothing logged yet today — add food from My Products or My Meals.' : 'No food logged on this day.'}</p>`;
     if (totalsEl) totalsEl.innerHTML = '';
+    const pieWrap = document.getElementById('plate-macro-pie');
+    if (pieWrap) pieWrap.style.display = 'none';
+    if (platePieChart) { platePieChart.destroy(); platePieChart = null; }
+    const sugEl = document.getElementById('plate-protein-suggestions');
+    if (sugEl) sugEl.innerHTML = '';
     return;
   }
 
@@ -5922,6 +5930,46 @@ function renderPlateTab() {
   const carbPct = Math.round(carbKcal / macroTotal * 100);
   const fatPct  = Math.round(fatKcal  / macroTotal * 100);
 
+  // --- Macro pie chart ---
+  const pieWrap = document.getElementById('plate-macro-pie');
+  const pieCanvas = document.getElementById('plate-pie-chart');
+  if (pieWrap) pieWrap.style.display = items.length ? 'flex' : 'none';
+  if (platePieChart) { platePieChart.destroy(); platePieChart = null; }
+  if (pieCanvas && items.length) {
+    platePieChart = new Chart(pieCanvas, {
+      type: 'doughnut',
+      data: {
+        labels: [
+          `Carbs ${carbPct}% · ${(totalCarb/w).toFixed(1)} g/kg`,
+          `Protein ${protPct}% · ${(totalProt/w).toFixed(1)} g/kg`,
+          `Fat ${fatPct}%`,
+        ],
+        datasets: [{
+          data: [totalCarb, totalProt, totalFat],
+          backgroundColor: ['#f0a946', '#e76f51', '#457b9d'],
+          borderColor: 'var(--surface)',
+          borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: false,
+        cutout: '55%',
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10, boxWidth: 14, color: 'var(--text)' } },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const g = ctx.parsed;
+                const label = ctx.label;
+                return `${label} (${g.toFixed(1)}g)`;
+              }
+            }
+          },
+        },
+      },
+    });
+  }
+
   if (totalsEl) totalsEl.innerHTML = `
     <table style="width:100%; border-collapse:collapse; font-size:.88rem; font-weight:700;">
       <tr style="border-top:2px solid var(--accent);">
@@ -5933,12 +5981,55 @@ function renderPlateTab() {
         <td style="padding:.5rem .4rem; text-align:right;">${totalFat.toFixed(1)}</td>
         <td style="padding:.5rem .2rem;"></td>
       </tr>
-    </table>
-    <div style="text-align:center; margin-top:.6rem; font-size:.82rem; color:var(--muted); line-height:1.7;">
-      Carbs: ${totalCarb.toFixed(1)}g (${carbPct}%) · ${(totalCarb/w).toFixed(1)} g/kg<br>
-      Protein: ${totalProt.toFixed(1)}g (${protPct}%) · ${(totalProt/w).toFixed(1)} g/kg<br>
-      Fat: ${totalFat.toFixed(1)}g (${fatPct}%)
-    </div>`;
+    </table>`;
+
+  // --- Protein top-up suggestions from pantry ---
+  const sugEl = document.getElementById('plate-protein-suggestions');
+  if (sugEl) {
+    const protPerKg = totalProt / w;
+    if (protPerKg < 2.2 && isToday) {
+      const gap2  = Math.max(0, 2.0 * w - totalProt);
+      const gap22 = Math.max(0, 2.2 * w - totalProt);
+      const products = (state.products || []).filter(p => !p.deletedAt);
+      // Build list of high-protein pantry items sorted by protein density
+      const candidates = products.map(p => {
+        const pg = productPerGram(p);
+        if (!pg.prot || pg.prot < 0.05) return null; // at least 5g prot per 100g
+        return { name: p.nickname || p.name, protPer: pg.prot, kcalPer: pg.kcal, serve: p.serve || 100 };
+      }).filter(Boolean).sort((a, b) => b.protPer - a.protPer).slice(0, 8);
+
+      if (candidates.length) {
+        let html = '';
+        const targets = [];
+        if (gap2 > 0) targets.push({ label: '2.0 g/kg', gap: gap2 });
+        if (gap22 > 0) targets.push({ label: '2.2 g/kg', gap: gap22 });
+
+        for (const t of targets) {
+          html += `<div style="font-size:.78rem; font-weight:700; color:var(--accent); margin-top:.5rem; margin-bottom:.3rem;">Reach ${t.label} — need +${t.gap.toFixed(0)}g protein</div>`;
+          html += `<div style="display:flex; flex-direction:column; gap:.25rem;">`;
+          for (const c of candidates) {
+            const grams = Math.ceil(t.gap / c.protPer);
+            const kcal = Math.round(grams * c.kcalPer);
+            html += `<div style="font-size:.78rem; color:var(--text); padding:.25rem .4rem; background:var(--surface2); border-radius:6px; display:flex; justify-content:space-between;">
+              <span>${c.name}</span>
+              <span style="color:var(--muted); white-space:nowrap;">${grams}g → +${kcal} kcal</span>
+            </div>`;
+          }
+          html += `</div>`;
+        }
+        sugEl.innerHTML = `<div style="border-top:1px solid var(--border); padding-top:.6rem;">
+          <div style="font-size:.82rem; font-weight:700; color:var(--text);">🥩 Protein Top-Up Suggestions</div>
+          ${html}
+        </div>`;
+      } else {
+        sugEl.innerHTML = '';
+      }
+    } else {
+      sugEl.innerHTML = protPerKg >= 2.2 && isToday
+        ? `<div style="border-top:1px solid var(--border); padding-top:.6rem; font-size:.82rem; color:var(--accent);">✅ Protein target reached (${protPerKg.toFixed(1)} g/kg)</div>`
+        : '';
+    }
+  }
 }
 
 // ============================================================

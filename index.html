@@ -214,12 +214,14 @@
   .fill-kcal  { background: #f4a261; }
 
   /* ---- Nutrition targets ---- */
-  .targets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: .5rem; }
+  .targets-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
   .target-card {
     background: var(--surface2);
     border-radius: var(--radius);
     padding: .5rem .6rem;
     border-left: 3px solid var(--accent);
+    display: flex; flex-direction: column; justify-content: center;
+    min-height: 52px;
   }
   .target-card.warn { border-left-color: var(--warn); }
   .target-card.danger { border-left-color: var(--danger); }
@@ -227,7 +229,8 @@
   .target-card.warn .target-val { color: var(--warn); }
   .target-card.danger .target-val { color: var(--danger); }
   .target-label { font-size: .68rem; color: var(--muted); margin-top: .05rem; }
-  .dash-section-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: .6rem 0 .3rem; }
+  .dash-section-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: .75rem 0 .35rem; }
+  .dash-section-label:first-child { margin-top: 0; }
 
   .dash-row {
     display: flex;
@@ -551,7 +554,7 @@
     <section id="tab-dashboard" class="section active">
       <div class="card">
         <div class="card-title">Weekly Overview</div>
-        <div id="dash-summary" class="targets-grid"></div>
+        <div id="dash-summary"></div>
       </div>
 
       <!-- Calorie Chart -->
@@ -4886,7 +4889,7 @@ function renderDashboard() {
 
   summary.innerHTML = `
     <div class="dash-section-label">🏃 Activity</div>
-    <div class="targets-grid" style="grid-template-columns:repeat(3,1fr);">
+    <div class="targets-grid">
       <div class="target-card"><div class="target-val">${runKm.toFixed(1)} km</div><div class="target-label">run</div></div>
       <div class="target-card"><div class="target-val">${walkKm.toFixed(1)} km</div><div class="target-label">walk</div></div>
       <div class="target-card"><div class="target-val">${strengthMins} min</div><div class="target-label">strength</div></div>
@@ -4895,7 +4898,7 @@ function renderDashboard() {
       <div class="target-card"><div class="target-val">${meditationMins} min</div><div class="target-label">meditation</div></div>
     </div>
     <div class="dash-section-label">🥗 Nutrition</div>
-    <div class="targets-grid" style="grid-template-columns:repeat(3,1fr);">
+    <div class="targets-grid">
       <div class="target-card"><div class="target-val">${kcalBurned.toLocaleString()}</div><div class="target-label">kcal burned</div></div>
       <div class="target-card"><div class="target-val">${kcalConsumed.toLocaleString()}</div><div class="target-label">kcal consumed</div></div>
       <div class="target-card ${deficitClass}"><div class="target-val">${daysElapsed > 0 ? deficitLabel : '—'}</div><div class="target-label">deficit/day</div></div>

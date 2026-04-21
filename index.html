@@ -535,8 +535,10 @@
       <h1>⚡ Fuel &amp; Run</h1>
       <div id="profile-switcher" style="display:flex; align-items:center; gap:.5rem;"></div>
       <button class="btn btn-sm" onclick="doLogout()" style="font-size:.72rem; background:transparent; color:var(--muted); border:1px solid var(--border);">🚪</button>
-      <div class="mobile-log-activity" style="margin-left:auto;">
+      <div class="mobile-log-activity" style="margin-left:auto; display:flex; gap:.4rem; flex-wrap:wrap;">
         <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:var(--accent); color:#fff; border:1px solid var(--accent);" onclick="openLogActivityModal()">🔥 Log Activity</button>
+        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:#1a8a3f; color:#fff; border:1px solid #1a8a3f;" onclick="openAddToPlateModal('product')">＋ Add Product to Plate</button>
+        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:#1a8a3f; color:#fff; border:1px solid #1a8a3f;" onclick="openAddToPlateModal('meal')">＋ Add Meal to Plate</button>
       </div>
     </div>
   </header>
@@ -640,7 +642,97 @@
         </div>
         <div id="plate-tab-date" style="text-align:center; font-size:.82rem; color:var(--muted); margin-bottom:.6rem;"></div>
         <div id="plate-macro-pie" style="display:flex; justify-content:center; margin-bottom:.8rem;"><canvas id="plate-pie-chart" width="220" height="220"></canvas></div>
+        <div id="plate-deficit" style="text-align:center; font-size:.95rem; color:var(--warn, #e65100); margin-bottom:.5rem;"></div>
         <div id="plate-tab-content"></div>
+        <!-- Add to Plate Modal -->
+        <div id="add-to-plate-modal" style="display:none; position:fixed; inset:0; z-index:800; background:rgba(0,0,0,.45); justify-content:center; align-items:flex-start; overflow-y:auto; padding:2rem .5rem;">
+          <div style="background:var(--surface); border-radius:var(--radius); padding:1.25rem; width:min(96vw,420px); position:relative; margin:auto;">
+            <button onclick="closeAddToPlateModal()" style="position:absolute; top:.7rem; right:.9rem; background:none; border:none; font-size:1.6rem; cursor:pointer; color:var(--muted); padding:.3rem;">✕</button>
+            <div id="add-to-plate-step-category">
+              <h3 style="margin-bottom:.7rem;">Select Category</h3>
+              <div id="add-to-plate-categories" style="display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:1rem;"></div>
+            </div>
+            <div id="add-to-plate-step-list" style="display:none;">
+              <input id="add-to-plate-search" type="text" placeholder="Search by name..." style="width:100%; margin-bottom:.7rem; padding:.4rem; border-radius:6px; border:1px solid var(--border); font-size:.95rem;" />
+              <div id="add-to-plate-list" style="max-height:320px; overflow-y:auto;"></div>
+            </div>
+          </div>
+        </div>
+        <script>
+        // --- Add to Plate Modal Logic ---
+        let _addToPlateMode = null;
+        let _addToPlateCat = null;
+        let _addToPlateItems = [];
+        function openAddToPlateModal(mode) {
+          _addToPlateMode = mode; // 'product' or 'meal'
+          _addToPlateCat = null;
+          document.getElementById('add-to-plate-modal').style.display = '';
+          document.getElementById('add-to-plate-step-category').style.display = '';
+          document.getElementById('add-to-plate-step-list').style.display = 'none';
+          // List categories
+          const cats = mode === 'product' ? ['Dairy','Protein','Carbs','Fruit & Veg','Snack','Drink','Supplement','Other'] : ['Breakfast','Lunch','Dinner','Snack','Other'];
+          const catDiv = document.getElementById('add-to-plate-categories');
+          catDiv.innerHTML = cats.map(cat => `<button class="btn btn-secondary btn-sm" style="font-size:.92rem;" onclick="selectAddToPlateCategory('${cat.replace(/'/g,'\\\'')}')">${cat}</button>`).join('');
+        }
+        function selectAddToPlateCategory(cat) {
+          _addToPlateCat = cat;
+          document.getElementById('add-to-plate-step-category').style.display = 'none';
+          document.getElementById('add-to-plate-step-list').style.display = '';
+          const search = document.getElementById('add-to-plate-search');
+          search.value = '';
+          search.oninput = filterAddToPlateList;
+          // Get items
+          if (_addToPlateMode === 'product') {
+            _addToPlateItems = (state.products || []).filter(p => (p.cat || 'Other') === cat && !p.deletedAt);
+          } else {
+            _addToPlateItems = (state.meals || []).filter(m => (m.cat || 'Other') === cat && !m.deletedAt);
+          }
+          renderAddToPlateList();
+        }
+        function filterAddToPlateList() {
+          const q = document.getElementById('add-to-plate-search').value.trim().toLowerCase();
+          renderAddToPlateList(q);
+        }
+        function renderAddToPlateList(q) {
+          const listDiv = document.getElementById('add-to-plate-list');
+          let items = _addToPlateItems;
+          if (q) items = items.filter(i => (i.name||'').toLowerCase().includes(q));
+          if (!items.length) {
+            listDiv.innerHTML = '<div style="color:var(--muted); font-size:.95rem; text-align:center;">No items found.</div>';
+            return;
+          }
+          listDiv.innerHTML = items.map(i => `<div class="product-chip" style="cursor:pointer;" onclick="addToPlateFromModal('${i.id}')">${i.nickname||i.name}</div>`).join('');
+        }
+        function addToPlateFromModal(id) {
+          closeAddToPlateModal();
+          if (_addToPlateMode === 'product') openQtyModal('product', id);
+          else openQtyModal('meal', id);
+        }
+        function closeAddToPlateModal() {
+          document.getElementById('add-to-plate-modal').style.display = 'none';
+        }
+        // --- Plate Deficit Display ---
+        function updatePlateDeficit() {
+          const ap = activeProfile();
+          const today = dateStr(new Date());
+          const logEntry = (ap.dailyLog || []).find(l => l.date === today);
+          const consumed = logEntry ? (logEntry.consumed || 0) : 0;
+          const t = dailyTargets((new Date()).getDay());
+          const deficit = consumed - t.kcal;
+          let label = '';
+          if (consumed === 0) label = '<span style="color:var(--muted);">No intake logged yet</span>';
+          else if (deficit < 0) label = `Deficit: <b>${Math.abs(deficit)}</b> kcal`;
+          else if (deficit > 0) label = `Surplus: <b>${deficit}</b> kcal`;
+          else label = 'On target!';
+          document.getElementById('plate-deficit').innerHTML = label;
+        }
+        // Patch into renderPlate()
+        const _origRenderPlate = window.renderPlate;
+        window.renderPlate = function() {
+          _origRenderPlate.apply(this, arguments);
+          updatePlateDeficit();
+        }
+        </script>
         <div id="plate-tab-totals" style="margin-top:1rem;"></div>
         <div id="plate-protein-suggestions" style="margin-top:1rem;"></div>
       </div>
@@ -743,8 +835,8 @@
             <span>My Product Pantry</span>
             <div style="display:flex; gap:.35rem; flex-wrap:wrap;">
               <button class="btn btn-secondary btn-sm" id="btn-scan-barcode" style="font-size:.72rem;">📷 Scan</button>
-              <button class="btn btn-secondary btn-sm" style="font-size:.72rem;" onclick="openProductModal('add')">➕ Add Product</button>
               <button class="btn btn-secondary btn-sm" style="font-size:.72rem; background:#1a8a3f; border-color:#1a8a3f; color:#fff;" onclick="openProductModal('search')">🛒 Search Coles / Woolies</button>
+              <button class="btn btn-secondary btn-sm" style="font-size:.72rem;" onclick="openProductModal('add')">➕ New Product</button>
             </div>
           </div>
           <p style="font-size:.8rem; color:var(--muted); margin-bottom:.75rem;">Click a product to see nutrition details. Tap <strong>＋</strong> to log it.</p>

@@ -712,7 +712,8 @@
           const today = dateStr(new Date());
           const logEntry = (ap.dailyLog || []).find(l => l.date === today);
           const consumed = logEntry ? (logEntry.consumed || 0) : 0;
-          const t = dailyTargets((new Date()).getDay());
+          const todayIdx = (new Date().getDay() + 6) % 7;
+          const t = dailyTargets(todayIdx);
           const deficit = consumed - t.kcal;
           const el = document.getElementById('plate-deficit');
           if (!el) return;

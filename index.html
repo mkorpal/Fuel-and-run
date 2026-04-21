@@ -1008,6 +1008,21 @@
         </div>
         <button class="btn btn-primary" id="btn-save-profile">Save Profile</button>
       </div>
+      <div class="card" style="border-left:4px solid #7b5ea7;">
+        <div class="card-title">🤖 AI Nutrition Analysis</div>
+        <p style="font-size:.85rem; color:var(--muted); margin-bottom:.75rem;">
+          Used to estimate nutrition from ingredient descriptions or restaurant menu items.
+          Your key is stored locally on this device only and never shared.
+        </p>
+        <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+          <input type="password" id="anthropic-api-key-input" placeholder="sk-ant-…"
+                 autocomplete="off" spellcheck="false"
+                 style="flex:1; min-width:220px; padding:.45rem .75rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.88rem;" />
+          <button class="btn btn-primary btn-sm" id="btn-save-anthropic-key" style="background:#7b5ea7; border-color:#7b5ea7;">Save Key</button>
+          <button class="btn btn-secondary btn-sm" id="btn-clear-anthropic-key">Clear</button>
+        </div>
+        <div id="anthropic-key-status" style="font-size:.8rem; color:var(--muted); margin-top:.4rem;"></div>
+      </div>
       <div class="card" id="red-s-card" style="border-left: 4px solid var(--warn); display:none;">
         <div class="card-title">⚠️ RED-S Awareness</div>
         <p style="font-size:.85rem;">Relative Energy Deficiency in Sport (RED-S) can occur in high-volume runners on a calorie deficit. Watch for: persistent fatigue, poor recovery, disrupted sleep, mood changes, or stress fractures. If you notice these, increase fuelling and consult a sports dietitian or GP.</p>
@@ -1147,6 +1162,8 @@
       <button class="meal-type-tab active" data-mtype="pantry">🛒 From my pantry</button>
       <button class="meal-type-tab" data-mtype="recipe">🌐 Internet recipe</button>
       <button class="meal-type-tab" data-mtype="manual">✍️ Manual</button>
+      <button class="meal-type-tab" data-mtype="ai-ingredients">🤖 AI Ingredients</button>
+      <button class="meal-type-tab" data-mtype="ai-restaurant">🍴 Restaurant</button>
     </div>
     <div class="form-row">
       <label>Meal Name</label>
@@ -1210,6 +1227,40 @@
         <label>Notes <span style="font-weight:400; color:var(--muted);">(optional)</span></label>
         <input type="text" id="meal-m-notes" placeholder="e.g. Quick weeknight dinner, high protein" />
       </div>
+    </div>
+    <!-- AI Ingredients section -->
+    <div id="meal-ai-ingredients-section" style="display:none;">
+      <p style="font-size:.81rem; color:var(--muted); margin-bottom:.6rem;">Describe your ingredients and quantities. AI will estimate the nutrition, then auto-fill the fields below.</p>
+      <div class="form-row">
+        <label>Ingredients &amp; quantities</label>
+        <textarea id="meal-ai-ingredients-text" rows="5" placeholder="e.g. 150g chicken breast, 80g basmati rice (dry), 200g broccoli, 1 tbsp olive oil, 2 cloves garlic" style="width:100%;"></textarea>
+      </div>
+      <div class="form-row">
+        <label>Total serving weight (g)</label>
+        <input type="number" id="meal-ai-serving-weight" placeholder="e.g. 500" min="1" style="width:100%;" />
+      </div>
+      <button class="btn btn-sm" id="btn-ai-analyse-ingredients" style="background:#7b5ea7; color:#fff; border:none; margin-bottom:.6rem; padding:.45rem .9rem; border-radius:7px; cursor:pointer;">🤖 Analyse with AI</button>
+      <div id="ai-ingredients-status" style="font-size:.83rem; color:var(--muted); margin-bottom:.5rem;"></div>
+      <div id="ai-ingredients-preview" style="display:none; background:var(--surface2); border-radius:8px; padding:.7rem; margin-bottom:.5rem; font-size:.85rem;"></div>
+    </div>
+    <!-- AI Restaurant section -->
+    <div id="meal-ai-restaurant-section" style="display:none;">
+      <p style="font-size:.81rem; color:var(--muted); margin-bottom:.6rem;">Describe the dish. AI will estimate calories, protein, carbs and fat based on typical restaurant recipes.</p>
+      <div class="form-row">
+        <label>Dish name</label>
+        <input type="text" id="meal-ai-restaurant-dish" placeholder="e.g. Chicken Pho, Pad Thai, Grilled Salmon" style="width:100%;" />
+      </div>
+      <div class="form-row">
+        <label>Restaurant / cuisine <span style="font-weight:400; color:var(--muted);">(optional)</span></label>
+        <input type="text" id="meal-ai-restaurant-name" placeholder="e.g. Thai restaurant, McDonald's, Grill'd burger" style="width:100%;" />
+      </div>
+      <div class="form-row">
+        <label>Serving size (g) <span style="font-weight:400; color:var(--muted);">— leave blank to let AI estimate</span></label>
+        <input type="number" id="meal-ai-restaurant-serving" placeholder="e.g. 400" min="1" style="width:100%;" />
+      </div>
+      <button class="btn btn-sm" id="btn-ai-analyse-restaurant" style="background:#7b5ea7; color:#fff; border:none; margin-bottom:.6rem; padding:.45rem .9rem; border-radius:7px; cursor:pointer;">🤖 Estimate with AI</button>
+      <div id="ai-restaurant-status" style="font-size:.83rem; color:var(--muted); margin-bottom:.5rem;"></div>
+      <div id="ai-restaurant-preview" style="display:none; background:var(--surface2); border-radius:8px; padding:.7rem; margin-bottom:.5rem; font-size:.85rem;"></div>
     </div>
     <div style="display:flex; gap:.75rem; margin-top:.5rem;">
       <button class="btn btn-primary" id="btn-save-meal">Save Meal</button>
@@ -4108,6 +4159,8 @@ function setMealBuilderType(type) {
   document.getElementById('meal-pantry-section').style.display = type === 'pantry' ? '' : 'none';
   document.getElementById('meal-recipe-section').style.display = type === 'recipe' ? '' : 'none';
   document.getElementById('meal-manual-section').style.display = type === 'manual' ? '' : 'none';
+  document.getElementById('meal-ai-ingredients-section').style.display = type === 'ai-ingredients' ? '' : 'none';
+  document.getElementById('meal-ai-restaurant-section').style.display = type === 'ai-restaurant' ? '' : 'none';
 }
 
 function addIngredientRow(productId, qty, unit) {
@@ -5241,6 +5294,148 @@ document.getElementById('btn-save-profile').addEventListener('click', () => {
   toast('Profile saved: ' + ap.name);
 });
 
+// ============================================================
+// ANTHROPIC API KEY MANAGEMENT
+// ============================================================
+function loadAnthropicKey() { return localStorage.getItem('fuelrun_anthropic_key') || ''; }
+
+function updateAnthropicKeyStatus() {
+  const key = loadAnthropicKey();
+  const el = document.getElementById('anthropic-key-status');
+  if (!el) return;
+  if (key) {
+    el.textContent = '✅ Key saved (' + key.slice(0,12) + '…)';
+    el.style.color = 'var(--accent)';
+  } else {
+    el.textContent = 'No key saved. Enter your Anthropic key above to enable AI features.';
+    el.style.color = 'var(--muted)';
+  }
+}
+
+document.getElementById('btn-save-anthropic-key').addEventListener('click', () => {
+  const input = document.getElementById('anthropic-api-key-input');
+  const key = input.value.trim();
+  if (!key.startsWith('sk-ant-')) {
+    const el = document.getElementById('anthropic-key-status');
+    el.textContent = '⚠️ Key should start with sk-ant-';
+    el.style.color = '#e74c3c';
+    return;
+  }
+  localStorage.setItem('fuelrun_anthropic_key', key);
+  input.value = '';
+  updateAnthropicKeyStatus();
+  toast('API key saved');
+});
+
+document.getElementById('btn-clear-anthropic-key').addEventListener('click', () => {
+  localStorage.removeItem('fuelrun_anthropic_key');
+  document.getElementById('anthropic-api-key-input').value = '';
+  updateAnthropicKeyStatus();
+  toast('API key cleared');
+});
+
+// ============================================================
+// CLAUDE AI NUTRITION ANALYSIS
+// ============================================================
+async function callClaude(userPrompt) {
+  const key = loadAnthropicKey();
+  if (!key) throw new Error('No API key set. Go to Profile → AI Nutrition Analysis to add your Anthropic key.');
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-3-haiku-20240307',
+      max_tokens: 512,
+      messages: [{ role: 'user', content: userPrompt }]
+    })
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error('Anthropic API error ' + resp.status + (errText ? ': ' + errText.slice(0,120) : ''));
+  }
+  const data = await resp.json();
+  return data.content[0].text;
+}
+
+function parseAiNutritionJson(text) {
+  // Extract first JSON object from the response text
+  const match = text.match(/\{[\s\S]*?\}/);
+  if (!match) throw new Error('No JSON found in AI response');
+  return JSON.parse(match[0]);
+}
+
+function applyAiNutritionToManual(result) {
+  // result: { serving_g, kcal, protein_g, carbs_g, fat_g }
+  document.getElementById('meal-m-serve').value = Math.round(result.serving_g || 0);
+  document.getElementById('meal-m-kcal').value = Math.round(result.kcal || 0);
+  document.getElementById('meal-m-prot').value = parseFloat((result.protein_g || 0).toFixed(1));
+  document.getElementById('meal-m-carb').value = parseFloat((result.carbs_g || 0).toFixed(1));
+  document.getElementById('meal-m-fat').value = parseFloat((result.fat_g || 0).toFixed(1));
+}
+
+function renderAiPreview(divId, result) {
+  const el = document.getElementById(divId);
+  if (!el) return;
+  el.style.display = '';
+  el.innerHTML = `
+    <div style="font-weight:600; margin-bottom:.35rem; color:#7b5ea7;">🤖 AI Nutrition Estimate</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:.25rem .75rem;">
+      <span style="color:var(--muted);">Serving:</span><span><strong>${Math.round(result.serving_g||0)}g</strong></span>
+      <span style="color:var(--muted);">Calories:</span><span><strong>${Math.round(result.kcal||0)} kcal</strong></span>
+      <span style="color:var(--muted);">Protein:</span><span><strong>${parseFloat((result.protein_g||0).toFixed(1))}g</strong></span>
+      <span style="color:var(--muted);">Carbs:</span><span><strong>${parseFloat((result.carbs_g||0).toFixed(1))}g</strong></span>
+      <span style="color:var(--muted);">Fat:</span><span><strong>${parseFloat((result.fat_g||0).toFixed(1))}g</strong></span>
+    </div>
+    ${result.notes ? `<div style="margin-top:.4rem; font-size:.8rem; color:var(--muted);">${result.notes}</div>` : ''}
+    <button class="btn btn-sm" onclick="setMealBuilderType('manual')" style="margin-top:.55rem; background:#7b5ea7; color:#fff; border:none; padding:.4rem .85rem; border-radius:7px; cursor:pointer;">✏️ Edit &amp; Save</button>`;
+}
+
+document.getElementById('btn-ai-analyse-ingredients').addEventListener('click', async () => {
+  const ingredients = document.getElementById('meal-ai-ingredients-text').value.trim();
+  const servingW = document.getElementById('meal-ai-serving-weight').value.trim();
+  const statusEl = document.getElementById('ai-ingredients-status');
+  const previewEl = document.getElementById('ai-ingredients-preview');
+  if (!ingredients) { statusEl.textContent = '⚠️ Please describe your ingredients first.'; return; }
+  statusEl.textContent = '⏳ Analysing with AI…';
+  previewEl.style.display = 'none';
+  try {
+    const prompt = `You are a sports dietitian assistant. Estimate the nutritional content of a meal with these ingredients:\n\n${ingredients}\n\nTotal finished meal weight: ${servingW ? servingW + 'g' : 'estimate based on ingredients'}.\n\nRespond ONLY with a single JSON object (no extra text) with these keys:\n{"serving_g": <number>, "kcal": <number>, "protein_g": <number>, "carbs_g": <number>, "fat_g": <number>, "notes": "<brief notes>"}\n\nAll numbers are for the WHOLE meal (the given serving weight). Be accurate for a sports nutrition context.`;
+    const text = await callClaude(prompt);
+    const result = parseAiNutritionJson(text);
+    applyAiNutritionToManual(result);
+    renderAiPreview('ai-ingredients-preview', result);
+    statusEl.textContent = '✅ Done! Values filled in — click "Edit & Save" to review.';
+  } catch (e) {
+    statusEl.textContent = '❌ ' + e.message;
+  }
+});
+
+document.getElementById('btn-ai-analyse-restaurant').addEventListener('click', async () => {
+  const dish = document.getElementById('meal-ai-restaurant-dish').value.trim();
+  const restaurant = document.getElementById('meal-ai-restaurant-name').value.trim();
+  const servingW = document.getElementById('meal-ai-restaurant-serving').value.trim();
+  const statusEl = document.getElementById('ai-restaurant-status');
+  const previewEl = document.getElementById('ai-restaurant-preview');
+  if (!dish) { statusEl.textContent = '⚠️ Please enter a dish name first.'; return; }
+  statusEl.textContent = '⏳ Estimating with AI…';
+  previewEl.style.display = 'none';
+  try {
+    const prompt = `You are a sports dietitian assistant. Estimate the nutritional content of this restaurant meal:\n\nDish: ${dish}${restaurant ? '\nRestaurant/cuisine: ' + restaurant : ''}${servingW ? '\nServing size: ' + servingW + 'g' : ''}\n\nRespond ONLY with a single JSON object (no extra text) with these keys:\n{"serving_g": <number>, "kcal": <number>, "protein_g": <number>, "carbs_g": <number>, "fat_g": <number>, "notes": "<brief notes, e.g. estimation basis>"}\n\nAll numbers are for the whole serving. Be accurate for a sports nutrition context. If serving size not given, estimate a typical restaurant portion.`;
+    const text = await callClaude(prompt);
+    const result = parseAiNutritionJson(text);
+    applyAiNutritionToManual(result);
+    renderAiPreview('ai-restaurant-preview', result);
+    statusEl.textContent = '✅ Done! Values filled in — click "Edit & Save" to review.';
+  } catch (e) {
+    statusEl.textContent = '❌ ' + e.message;
+  }
+});
+
 function renderProfileCards() {
   const el = document.getElementById('profile-list-cards');
   if (!el) return;
@@ -5274,6 +5469,7 @@ function loadProfileForm() {
   document.getElementById('prof-pb-10k').value = p.pb10k || '';
   document.getElementById('prof-pb-5k').value = p.pb5k || '';
   document.getElementById('prof-notes').value = p.notes || '';
+  updateAnthropicKeyStatus();
 }
 
 function renderProfileSummary() {

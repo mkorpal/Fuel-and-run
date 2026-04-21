@@ -658,46 +658,45 @@
         // --- Add to Plate Modal Logic ---
         let _addToPlateMode = null;
         let _addToPlateCat = null;
-        let _addToPlateItems = [];
         function openAddToPlateModal(mode) {
-          _addToPlateMode = mode; // 'product' or 'meal'
+          _addToPlateMode = mode;
           _addToPlateCat = null;
           document.getElementById('add-to-plate-modal').style.display = '';
-          document.getElementById('add-to-plate-step-category').style.display = '';
-          document.getElementById('add-to-plate-step-list').style.display = 'none';
-          // List categories
-          const cats = mode === 'product' ? ['Dairy','Protein','Carbs','Fruit & Veg','Snack','Drink','Supplement','Other'] : ['Breakfast','Lunch','Dinner','Snack','Other'];
+          const cats = mode === 'product'
+            ? ['Dairy','Protein','Carbs','Fruit & Veg','Snack','Drink','Supplement','Other']
+            : ['Breakfast','Lunch','Dinner','Snack','Other'];
           const catDiv = document.getElementById('add-to-plate-categories');
-          catDiv.innerHTML = cats.map(cat => `<button class="btn btn-secondary btn-sm" style="font-size:.92rem;" onclick="selectAddToPlateCategory('${cat.replace(/'/g,'\\\'')}')">${cat}</button>`).join('');
-        }
-        function selectAddToPlateCategory(cat) {
-          _addToPlateCat = cat;
-          document.getElementById('add-to-plate-step-category').style.display = 'none';
-          document.getElementById('add-to-plate-step-list').style.display = '';
-          const search = document.getElementById('add-to-plate-search');
-          search.value = '';
-          search.oninput = filterAddToPlateList;
-          // Get items
-          if (_addToPlateMode === 'product') {
-            _addToPlateItems = (state.products || []).filter(p => (p.cat || 'Other') === cat && !p.deletedAt);
-          } else {
-            _addToPlateItems = (state.meals || []).filter(m => (m.cat || 'Other') === cat && !m.deletedAt);
-          }
+          catDiv.innerHTML = cats.map(cat =>
+            `<button class="btn btn-secondary btn-sm" style="font-size:.82rem;" onclick="filterAddToPlateByCategory('${cat.replace(/'/g, "\\'")}')">${cat}</button>`
+          ).join('');
+          document.getElementById('add-to-plate-search').value = '';
+          document.getElementById('add-to-plate-search').oninput = renderAddToPlateList;
           renderAddToPlateList();
         }
-        function filterAddToPlateList() {
-          const q = document.getElementById('add-to-plate-search').value.trim().toLowerCase();
-          renderAddToPlateList(q);
+        function filterAddToPlateByCategory(cat) {
+          _addToPlateCat = _addToPlateCat === cat ? null : cat;
+          document.querySelectorAll('#add-to-plate-categories .btn').forEach(b => {
+            const active = b.textContent.trim() === _addToPlateCat;
+            b.style.background = active ? 'var(--accent)' : '';
+            b.style.color = active ? '#fff' : '';
+          });
+          renderAddToPlateList();
         }
-        function renderAddToPlateList(q) {
+        function renderAddToPlateList() {
           const listDiv = document.getElementById('add-to-plate-list');
-          let items = _addToPlateItems;
-          if (q) items = items.filter(i => (i.name||'').toLowerCase().includes(q));
+          const q = document.getElementById('add-to-plate-search').value.trim().toLowerCase();
+          let items = _addToPlateMode === 'product'
+            ? (state.products || []).filter(p => !p.deletedAt)
+            : (state.meals   || []).filter(m => !m.deletedAt);
+          if (_addToPlateCat) items = items.filter(i => (i.cat || 'Other') === _addToPlateCat);
+          if (q) items = items.filter(i => (i.name || '').toLowerCase().includes(q));
           if (!items.length) {
-            listDiv.innerHTML = '<div style="color:var(--muted); font-size:.95rem; text-align:center;">No items found.</div>';
+            listDiv.innerHTML = '<div style="color:var(--muted);font-size:.9rem;text-align:center;padding:.5rem;">No items found.</div>';
             return;
           }
-          listDiv.innerHTML = items.map(i => `<div class="product-chip" style="cursor:pointer;" onclick="addToPlateFromModal('${i.id}')">${i.nickname||i.name}</div>`).join('');
+          listDiv.innerHTML = items.map(i =>
+            `<div class="product-chip" style="cursor:pointer;display:block;margin:.2rem 0;" onclick="addToPlateFromModal('${i.id}')">${i.nickname || i.name}</div>`
+          ).join('');
         }
         function addToPlateFromModal(id) {
           closeAddToPlateModal();
@@ -707,7 +706,7 @@
         function closeAddToPlateModal() {
           document.getElementById('add-to-plate-modal').style.display = 'none';
         }
-        // --- Plate Deficit Display ---
+        // --- Plate Deficit Display (called from renderPlateTab) ---
         function updatePlateDeficit() {
           const ap = activeProfile();
           const today = dateStr(new Date());
@@ -715,22 +714,17 @@
           const consumed = logEntry ? (logEntry.consumed || 0) : 0;
           const t = dailyTargets((new Date()).getDay());
           const deficit = consumed - t.kcal;
-          let label = '';
-          if (consumed === 0) label = '<span style="color:var(--muted);">No intake logged yet</span>';
-          else if (deficit < 0) label = `Deficit: <b>${Math.abs(deficit)}</b> kcal`;
-          else if (deficit > 0) label = `Surplus: <b>${deficit}</b> kcal`;
-          else label = 'On target!';
-          document.getElementById('plate-deficit').innerHTML = label;
-        }
-        // Patch into renderPlate()
-        const _origRenderPlate = window.renderPlate;
-        window.renderPlate = function() {
-          _origRenderPlate.apply(this, arguments);
-          updatePlateDeficit();
+          const el = document.getElementById('plate-deficit');
+          if (!el) return;
+          if (consumed === 0) el.innerHTML = '<span style="color:var(--muted);">No intake logged yet</span>';
+          else if (deficit < 0) el.innerHTML = `<span style="color:var(--accent);">Deficit: <b>${Math.abs(deficit)}</b> kcal</span>`;
+          else if (deficit > 0) el.innerHTML = `<span style="color:var(--warn);">Surplus: <b>${deficit}</b> kcal</span>`;
+          else el.innerHTML = '<span style="color:var(--accent);">✅ On target!</span>';
         }
         </script>
         <div id="plate-tab-totals" style="margin-top:1rem;"></div>
         <div id="plate-protein-suggestions" style="margin-top:1rem;"></div>
+        <div id="plate-carb-suggestions" style="margin-top:.5rem;"></div>
       </div>
     </section>
 
@@ -6231,6 +6225,55 @@ function renderPlateTab() {
       sugEl.innerHTML = protPerKg >= 2.2 && isToday
         ? `<div style="border-top:1px solid var(--border); padding-top:.6rem; font-size:.82rem; color:var(--accent);">✅ Protein target reached (${protPerKg.toFixed(1)} g/kg)</div>`
         : '';
+    }
+  }
+
+  // --- Calorie deficit ---
+  if (isToday) updatePlateDeficit();
+
+  // --- Carb top-up suggestions ---
+  const carbSugEl = document.getElementById('plate-carb-suggestions');
+  if (carbSugEl) {
+    if (!isToday || !items.length) { carbSugEl.innerHTML = ''; return; }
+    const carbPerKgNow = totalCarb / w;
+    const targetCarbPerKg = 5.0;
+    if (carbPerKgNow >= targetCarbPerKg) {
+      carbSugEl.innerHTML = `<div style="border-top:1px solid var(--border); padding-top:.6rem; font-size:.82rem; color:var(--accent);">✅ Carb target reached (${carbPerKgNow.toFixed(1)} g/kg)</div>`;
+    } else {
+      const neededCarb = targetCarbPerKg * w - totalCarb;
+      const products = (state.products || []).filter(p => !p.deletedAt);
+      const candidates = products.map(p => {
+        const pg = productPerGram(p);
+        if (!pg.carb || pg.carb < 0.05) return null;
+        const grams = Math.ceil(neededCarb / pg.carb);
+        const addKcal = Math.round(grams * pg.kcal);
+        const addCarb = grams * pg.carb;
+        const addProt = grams * (pg.prot || 0);
+        return {
+          name: p.nickname || p.name,
+          grams,
+          addKcal,
+          resultCarbPerKg: ((totalCarb + addCarb) / w).toFixed(2),
+          resultProtPerKg: ((totalProt + addProt) / w).toFixed(2),
+          kcalPerCarb: pg.kcal / pg.carb,
+        };
+      }).filter(Boolean).sort((a, b) => a.kcalPerCarb - b.kcalPerCarb).slice(0, 4);
+
+      if (candidates.length) {
+        const rows = candidates.map(c =>
+          `<div style="font-size:.78rem; color:var(--text); padding:.25rem .4rem; background:var(--surface2); border-radius:6px; display:flex; justify-content:space-between; margin-bottom:.25rem; flex-wrap:wrap; gap:.2rem;">
+            <span>${c.name}</span>
+            <span style="color:var(--muted); white-space:nowrap;">${c.grams}g → +${c.addKcal} kcal · C: ${c.resultCarbPerKg} g/kg · P: ${c.resultProtPerKg} g/kg</span>
+          </div>`
+        ).join('');
+        carbSugEl.innerHTML = `<div style="border-top:1px solid var(--border); padding-top:.6rem;">
+          <div style="font-size:.82rem; font-weight:700; color:var(--text);">🍚 Carb Top-Up Suggestions</div>
+          <div style="font-size:.78rem; font-weight:700; color:var(--accent); margin:.4rem 0 .3rem;">Reach 5.0 g/kg — need +${neededCarb.toFixed(0)}g carbs</div>
+          ${rows}
+        </div>`;
+      } else {
+        carbSugEl.innerHTML = '';
+      }
     }
   }
 }

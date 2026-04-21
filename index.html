@@ -6258,7 +6258,7 @@ function renderPlateTab() {
           resultProtPerKg: ((totalProt + addProt) / w).toFixed(2),
           kcalPerCarb: pg.kcal / pg.carb,
         };
-      }).filter(Boolean).sort((a, b) => a.kcalPerCarb - b.kcalPerCarb).slice(0, 4);
+      }).filter(Boolean).sort((a, b) => a.kcalPerCarb - b.kcalPerCarb).slice(0, 8);
 
       if (candidates.length) {
         const rows = candidates.map(c =>

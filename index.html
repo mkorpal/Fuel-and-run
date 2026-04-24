@@ -716,32 +716,36 @@
         function closeAddToPlateModal() {
           document.getElementById('add-to-plate-modal').style.display = 'none';
         }
-        // --- Plate Deficit Display (called from renderPlateTab) ---
-        function updatePlateDeficit() {
+        // --- Plate Deficit Display (called from renderPlateTab with the viewed date) ---
+        function updatePlateDeficit(viewedDate, dayIdx) {
           const ap = activeProfile();
-          const today = dateStr(new Date());
-          const logEntry = (ap.dailyLog || []).find(l => l.date === today);
+          const logEntry = (ap.dailyLog || []).find(l => l.date === viewedDate);
           const consumed = logEntry ? (logEntry.consumed || 0) : 0;
-          const todayIdx = (new Date().getDay() + 6) % 7;
-          const t = dailyTargets(todayIdx);
+          // Use weekOffset=0 snapshot for dailyTargets (it reads weekOffset internally via sessionsForDay)
+          // We temporarily swap weekOffset to match the viewed week if needed — simpler: compute inline
+          const dd = new Date(viewedDate + 'T12:00:00');
+          const mon = new Date(dd); mon.setDate(dd.getDate() - dayIdx); mon.setHours(0,0,0,0);
+          const wk = isoWeekKey(mon);
+          const wSess = (ap.weekSessions && ap.weekSessions[wk]) || [];
+          const w = ap.weight || 72;
+          const isFemale = ap.sex === 'female';
+          const h = ap.height || 175; const age = ap.age || 35;
+          const rmr = ap.rmr ? ap.rmr : (isFemale ? Math.round(10*w+6.25*h-5*age-161) : Math.round(10*w+6.25*h-5*age+5));
+          const { estimateBurn: _eb } = window; // use global if available, else inline
+          const exBurn = wSess.filter(s => s.day === dayIdx).reduce((sum, s) => sum + estimateBurn(s), 0);
+          const tdee = rmr + exBurn;
           const el = document.getElementById('plate-deficit');
           if (!el) return;
           if (consumed === 0) {
-            el.innerHTML = `<span style="color:var(--muted);">No intake logged yet · target ${t.kcal.toLocaleString()} kcal</span>`;
+            el.innerHTML = `<span style="color:var(--muted);">No intake logged yet · TDEE ${tdee.toLocaleString()} kcal</span>`;
             return;
           }
-          // Energy balance vs TDEE — same basis as week view and dashboard chart
-          const balance = consumed - t.tdee;
+          const balance = consumed - tdee;
           const balColor = balance <= 0 ? 'var(--accent)' : 'var(--warn)';
           const balLabel = balance <= 0
             ? `Deficit: <b>${Math.abs(balance).toLocaleString()} kcal</b>`
             : `Surplus: <b>+${balance.toLocaleString()} kcal</b>`;
-          // Secondary: progress vs intake target (TDEE minus strategic deficit)
-          const remaining = t.kcal - consumed;
-          const targetNote = remaining >= 0
-            ? `${remaining.toLocaleString()} kcal below intake target (${t.kcal.toLocaleString()})`
-            : `${Math.abs(remaining).toLocaleString()} kcal over intake target (${t.kcal.toLocaleString()})`;
-          el.innerHTML = `<span style="color:${balColor};">${balLabel}</span><span style="font-size:.79rem; color:var(--muted);"> · ${targetNote}</span>`;
+          el.innerHTML = `<span style="color:${balColor};">${balLabel}</span><span style="font-size:.79rem; color:var(--muted);"> · ${consumed.toLocaleString()} / ${tdee.toLocaleString()} kcal burned</span>`;
         }
         </script>
         <div id="plate-tab-totals" style="margin-top:1rem;"></div>
@@ -1742,6 +1746,8 @@ document.querySelectorAll('#main-nav button').forEach(btn => {
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    // Reset plate to today whenever navigating away from or to the plate tab
+    plateOffset = 0;
     renderAll();
   });
 });
@@ -5944,15 +5950,29 @@ document.getElementById('qty-overlay').addEventListener('click', e => { if (e.ta
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && _qtyResolve) _qtyResolve(false); if (e.key === 'Enter' && document.getElementById('qty-overlay').style.display !== 'none' && _qtyResolve) _qtyResolve(true); });
 
 // --- Add / remove items ---
+function _plateTargetDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + plateOffset);
+  return dateStr(d);
+}
 function addToPlate(type, sourceId, name, qty, unit, kcal, prot, carb, fat, ingredients, mealSlot) {
-  const today = dateStr(new Date());
+  const targetDateStr = _plateTargetDate();
   const ap = activeProfile();
   if (!ap.dailyLog) ap.dailyLog = [];
-  let entry = ap.dailyLog.find(l => l.date === today);
+  let entry = ap.dailyLog.find(l => l.date === targetDateStr);
   if (!entry) {
-    const dayMon0 = (new Date().getDay() + 6) % 7;
-    const t = dailyTargets(dayMon0);
-    entry = { date: today, consumed: 0, tdee: t.tdee, target: t.kcal, items: [] };
+    const dd = new Date(targetDateStr + 'T12:00:00');
+    const dayMon0 = (dd.getDay() + 6) % 7;
+    const mon = new Date(dd); mon.setDate(dd.getDate() - dayMon0);
+    const wk = isoWeekKey(mon);
+    const wSess = (ap.weekSessions && ap.weekSessions[wk]) || [];
+    const w = ap.weight || 72;
+    const isFemale = ap.sex === 'female'; const h = ap.height || 175; const age = ap.age || 35;
+    const rmr = ap.rmr ? ap.rmr : (isFemale ? Math.round(10*w+6.25*h-5*age-161) : Math.round(10*w+6.25*h-5*age+5));
+    const exBurn = wSess.filter(s => s.day === dayMon0).reduce((sum, s) => sum + estimateBurn(s), 0);
+    const tdee = rmr + exBurn;
+    const deficit = 250;
+    entry = { date: targetDateStr, consumed: 0, tdee, target: tdee - deficit, items: [] };
     ap.dailyLog.push(entry);
   }
   if (!entry.items) entry.items = [];
@@ -5966,13 +5986,14 @@ function addToPlate(type, sourceId, name, qty, unit, kcal, prot, carb, fat, ingr
   renderPlate();
   renderPlateTab();
   renderCalorieChart();
-  toast('✅ ' + name + ' added to today\'s plate');
+  const label = plateOffset === 0 ? 'today\'s plate' : targetDateStr;
+  toast('✅ ' + name + ' added to ' + label);
 }
 
-window.removeFromPlate = (itemId) => {
-  const today = dateStr(new Date());
+window.removeFromPlate = (itemId, dateKey) => {
+  const key = dateKey || _plateTargetDate();
   const ap = activeProfile();
-  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  const entry = (ap.dailyLog || []).find(l => l.date === key);
   if (!entry || !entry.items) return;
   entry.items = entry.items.filter(i => i.id !== itemId);
   entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
@@ -5985,10 +6006,10 @@ window.removeFromPlate = (itemId) => {
 
 // --- Change meal slot of a plate item ---
 const ALL_MEAL_SLOTS = ['Breakfast', 'Morning Snack', 'Pre-Run', 'Lunch', 'Afternoon Snack', 'Dinner', 'Evening Snack'];
-window.changeMealSlot = (itemId) => {
-  const today = dateStr(new Date());
+window.changeMealSlot = (itemId, dateKey) => {
+  const key = dateKey || _plateTargetDate();
   const ap = activeProfile();
-  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  const entry = (ap.dailyLog || []).find(l => l.date === key);
   if (!entry) return;
   const item = (entry.items || []).find(i => i.id === itemId);
   if (!item) return;
@@ -6003,10 +6024,10 @@ window.changeMealSlot = (itemId) => {
 };
 
 // --- Edit ingredients of a plate item ---
-function editPlateIngredients(itemId) {
-  const today = dateStr(new Date());
+function editPlateIngredients(itemId, dateKey) {
+  const key = dateKey || _plateTargetDate();
   const ap = activeProfile();
-  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  const entry = (ap.dailyLog || []).find(l => l.date === key);
   if (!entry) return;
   const item = (entry.items || []).find(i => i.id === itemId);
   if (!item || !item.ingredients || !item.ingredients.length) return;
@@ -6086,16 +6107,16 @@ function editPlateIngredients(itemId) {
 }
 
 function removePlateIngredient(itemId, ingIdx) {
-  const today = dateStr(new Date());
+  const key = _plateTargetDate();
   const ap = activeProfile();
-  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  const entry = (ap.dailyLog || []).find(l => l.date === key);
   if (!entry) return;
   const item = (entry.items || []).find(i => i.id === itemId);
   if (!item || !item.ingredients) return;
   item.ingredients.splice(ingIdx, 1);
   // If no ingredients left, remove the whole item
   if (!item.ingredients.length) {
-    removeFromPlate(itemId);
+    removeFromPlate(itemId, key);
     return;
   }
   // Recalculate macros
@@ -6112,9 +6133,9 @@ function cancelIngredientEdit(itemId) {
 }
 
 function savePlateIngredientEdits(itemId) {
-  const today = dateStr(new Date());
+  const key = _plateTargetDate();
   const ap = activeProfile();
-  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  const entry = (ap.dailyLog || []).find(l => l.date === key);
   if (!entry) return;
   const item = (entry.items || []).find(i => i.id === itemId);
   if (!item || !item.ingredients) return;
@@ -6134,7 +6155,7 @@ function savePlateIngredientEdits(itemId) {
   // Remove zero-qty ingredients
   item.ingredients = item.ingredients.filter(i => (parseFloat(i.qty) || 0) > 0);
   if (!item.ingredients.length) {
-    removeFromPlate(itemId);
+    removeFromPlate(itemId, key);
     return;
   }
 
@@ -6230,27 +6251,36 @@ function renderPlateTab() {
 
   const targetDate = new Date();
   targetDate.setDate(targetDate.getDate() + plateOffset);
-  const today = dateStr(targetDate);
+  const viewedDate = dateStr(targetDate);
   const isToday = plateOffset === 0;
+  const viewedDayIdx = (targetDate.getDay() + 6) % 7;
   const ap = activeProfile();
-  const entry = (ap.dailyLog || []).find(l => l.date === today);
+  const entry = (ap.dailyLog || []).find(l => l.date === viewedDate);
   const items = entry ? (entry.items || []) : [];
-  if (dateEl) dateEl.textContent = today;
+  if (dateEl) dateEl.textContent = viewedDate;
 
   // Update nav label and next button
   const navLabel = document.getElementById('plate-nav-label');
   const nextBtn = document.getElementById('btn-plate-next');
-  if (navLabel) navLabel.textContent = isToday ? 'Today' : today;
+  if (navLabel) navLabel.textContent = isToday ? 'Today' : viewedDate;
   if (nextBtn) nextBtn.disabled = isToday;
 
+  // "Add food to this day" button for past days
+  const addFoodBtn = `<div style="text-align:center; margin-bottom:.6rem;">
+    <button class="btn btn-secondary btn-sm" onclick="openAddToPlateModal('product')" style="margin-right:.4rem;">🛒 Add Product</button>
+    <button class="btn btn-secondary btn-sm" onclick="openAddToPlateModal('meal')">🍽️ Add Meal</button>
+    ${!isToday ? '<span style="font-size:.75rem; color:var(--muted); margin-left:.4rem;">to ' + viewedDate + '</span>' : ''}
+  </div>`;
+
   if (!items.length) {
-    contentEl.innerHTML = `<p style="text-align:center; color:var(--muted);">${isToday ? 'Nothing logged yet today — add food from My Products or My Meals.' : 'No food logged on this day.'}</p>`;
+    contentEl.innerHTML = `<p style="text-align:center; color:var(--muted); margin-bottom:.75rem;">${isToday ? 'Nothing logged yet today.' : 'No food logged on this day.'}</p>${addFoodBtn}`;
     if (totalsEl) totalsEl.innerHTML = '';
     const pieWrap = document.getElementById('plate-macro-pie');
     if (pieWrap) pieWrap.style.display = 'none';
     if (platePieChart) { platePieChart.destroy(); platePieChart = null; }
     const sugEl = document.getElementById('plate-protein-suggestions');
     if (sugEl) sugEl.innerHTML = '';
+    updatePlateDeficit(viewedDate, viewedDayIdx);
     return;
   }
 
@@ -6303,15 +6333,11 @@ function renderPlateTab() {
       const prot = (item.prot || 0).toFixed(1);
       const carb = (item.carb || 0).toFixed(1);
       const fat  = (item.fat  || 0).toFixed(1);
-      const editBtn = isToday && item.ingredients && item.ingredients.length
-        ? `<button style="background:none; border:none; cursor:pointer; color:var(--accent); font-size:.82rem; margin-right:.2rem;" onclick="editPlateIngredients('${item.id}')" title="Edit ingredients">✏️</button>`
+      const editBtn = item.ingredients && item.ingredients.length
+        ? `<button style="background:none; border:none; cursor:pointer; color:var(--accent); font-size:.82rem; margin-right:.2rem;" onclick="editPlateIngredients('${item.id}','${viewedDate}')" title="Edit ingredients">✏️</button>`
         : '';
-      const slotBtn = isToday
-        ? `<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.72rem; margin-right:.2rem;" onclick="changeMealSlot('${item.id}')" title="Change meal">🔀</button>`
-        : '';
-      const removeBtn = isToday
-        ? `<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.82rem;" onclick="removeFromPlate('${item.id}')">✕</button>`
-        : '';
+      const slotBtn = `<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.72rem; margin-right:.2rem;" onclick="changeMealSlot('${item.id}','${viewedDate}')" title="Change meal">🔀</button>`;
+      const removeBtn = `<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.82rem;" onclick="removeFromPlate('${item.id}','${viewedDate}')">✕</button>`;
       sections += `<tr>
         <td style="padding:.3rem .4rem; font-size:.82rem;">${item.name}</td>
         <td style="padding:.3rem .4rem; font-size:.78rem; color:var(--muted); white-space:nowrap;">${qtyLabel}</td>
@@ -6327,6 +6353,8 @@ function renderPlateTab() {
     sections += `</tbody></table></div></div>`;
   }
 
+  // Add food button (shown above totals for all days)
+  sections += addFoodBtn;
   contentEl.innerHTML = sections;
 
   // Totals
@@ -6449,8 +6477,8 @@ function renderPlateTab() {
     }
   }
 
-  // --- Calorie deficit ---
-  if (isToday) updatePlateDeficit();
+  // --- Calorie deficit (always shown, for the viewed day) ---
+  updatePlateDeficit(viewedDate, viewedDayIdx);
 
   // --- Carb top-up suggestions ---
   const carbSugEl = document.getElementById('plate-carb-suggestions');

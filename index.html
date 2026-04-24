@@ -658,6 +658,7 @@
         // --- Add to Plate Modal Logic ---
         let _addToPlateMode = null;
         let _addToPlateCat = null;
+        let _wdCtx = {};
         function openAddToPlateModal(mode) {
           _addToPlateMode = mode;
           _addToPlateCat = null;
@@ -3086,6 +3087,7 @@ function openWorkoutDetail(weekKey, dayIdx, dateLabel, sessionIndex) {
   if (!daySessions.length) return;
   // If sessionIndex provided, show only that session; otherwise show first
   const idx = (sessionIndex != null && sessionIndex < daySessions.length) ? sessionIndex : 0;
+  _wdCtx = { weekKey, dayIdx, dateLabel, sessionIdx: idx };
   const s = daySessions[idx];
   let fullHtml = renderSingleWorkoutDetail(s, dayIdx, dateLabel);
   // Delete button for manual activities (no stravaId, no startTime)
@@ -3278,8 +3280,35 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
     html += `<p style="font-size:.82rem; color:var(--muted); margin-top:.6rem;">No split data available. Import a Garmin .fit file to see detailed splits.</p>`;
   }
 
+  // Energy level (Strava-synced sessions only)
+  if (s.stravaId) {
+    const el = s.energyLevel || 0;
+    const levelLabels = ['', '😴 Drained', '😓 Tired', '😐 Neutral', '😊 Good', '💪 Peak'];
+    html += `<div style="margin-top:.8rem; padding:.5rem .6rem; border:1px solid var(--border); border-radius:8px;">
+      <div style="font-size:.72rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:.4rem;">⚡ Energy Level${el ? ` — ${levelLabels[el]}` : ''}</div>
+      <div style="display:flex; gap:.3rem;">
+        ${[1,2,3,4,5].map(n => `<button onclick="window.saveEnergyLevel('${s.stravaId}',${dayIdx},${n})" style="flex:1; padding:.35rem; border:1.5px solid ${el===n ? 'var(--accent)' : 'var(--border)'}; border-radius:6px; background:${el===n ? 'var(--accent)' : 'var(--surface)'}; color:${el===n ? '#fff' : 'var(--muted)'}; cursor:pointer; font-size:.88rem; font-weight:700;">${n}</button>`).join('')}
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:.68rem; color:var(--muted); margin-top:.25rem;"><span>Lowest</span><span>Highest</span></div>
+    </div>`;
+  }
+
   return html;
 }
+
+window.saveEnergyLevel = function(stravaId, dayIdx, level) {
+  const ap = activeProfile();
+  for (const sessions of Object.values(ap.weekSessions || {})) {
+    const s = sessions.find(s => s.stravaId === stravaId);
+    if (s) {
+      s.energyLevel = level;
+      save();
+      openWorkoutDetail(_wdCtx.weekKey, _wdCtx.dayIdx, _wdCtx.dateLabel, _wdCtx.sessionIdx);
+      return;
+    }
+  }
+  toast('Session not found');
+};
 
 function closeWorkoutDetail() {
   document.getElementById('workout-detail-overlay').classList.remove('open');
@@ -6394,7 +6423,7 @@ function renderPlateTab() {
       <div style="margin-bottom:.5rem; border:1px solid var(--border); border-radius:8px; overflow:hidden;">
         <div onclick="document.getElementById('${sid}').style.display = document.getElementById('${sid}').style.display === 'none' ? '' : 'none'" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; padding:.5rem .6rem; background:var(--surface2);">
           <span style="font-weight:700; font-size:.82rem; color:var(--accent); text-transform:uppercase; letter-spacing:.03em;">${emoji} ${slot}</span>
-          <span style="font-size:.78rem; color:var(--muted);">${slotKcal} kcal · P${slotProt} · C${slotCarb} · F${slotFat}</span>
+          <span style="font-size:.78rem; color:var(--muted);">${slotKcal} kcal · ${slotProt} P · ${slotCarb} C · ${slotFat} F</span>
         </div>
         <div id="${sid}" style="display:none;">
           <table style="width:100%; border-collapse:collapse; font-size:.82rem;">

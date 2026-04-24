@@ -1150,16 +1150,30 @@
     </div>
     <div id="qty-meal-slot" style="margin-top:.5rem;">
       <label style="font-size:.78rem; color:var(--muted); margin-bottom:.3rem; display:block;">Meal</label>
-      <div style="display:flex; gap:0; border:1.5px solid var(--border); border-radius:6px; overflow:hidden; font-size:.82rem;">
-        <button class="qty-slot-btn" data-slot="Breakfast" style="flex:1; padding:.35rem .2rem; border:none; cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🌅 Breakfast</button>
+      <div style="display:flex; gap:0; border:1.5px solid var(--border); border-radius:6px 6px 0 0; overflow:hidden; font-size:.82rem;">
+        <button class="qty-slot-btn" data-slot="Pre-Run" style="flex:1; padding:.35rem .2rem; border:none; cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🏃 Pre-Run</button>
+        <button class="qty-slot-btn" data-slot="Breakfast" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🌅 Breakfast</button>
         <button class="qty-slot-btn" data-slot="Lunch" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">☀️ Lunch</button>
         <button class="qty-slot-btn" data-slot="Dinner" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🌙 Dinner</button>
       </div>
       <div style="display:flex; gap:0; border:1.5px solid var(--border); border-top:none; border-radius:0 0 6px 6px; overflow:hidden; font-size:.82rem;">
         <button class="qty-slot-btn" data-slot="Morning Snack" style="flex:1; padding:.35rem .2rem; border:none; cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🥐 AM Snack</button>
-        <button class="qty-slot-btn" data-slot="Pre-Run" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🏃 Pre-Run</button>
         <button class="qty-slot-btn" data-slot="Afternoon Snack" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🍎 PM Snack</button>
         <button class="qty-slot-btn" data-slot="Evening Snack" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🌙 Eve Snack</button>
+      </div>
+    </div>
+    <div id="qty-ing-section" style="display:none; margin-top:.5rem;">
+      <button id="qty-ing-toggle" onclick="window.toggleQtyIngEditor()" style="background:none; border:1px solid var(--border); border-radius:6px; padding:.3rem .7rem; font-size:.78rem; cursor:pointer; color:var(--accent); width:100%; text-align:left;">✏️ Edit ingredients</button>
+      <div id="qty-ing-editor" style="display:none; margin-top:.4rem; border:1px solid var(--border); border-radius:6px; padding:.5rem; max-height:200px; overflow-y:auto;">
+        <table style="width:100%; border-collapse:collapse; font-size:.78rem;">
+          <thead><tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:left; padding:.2rem .3rem; font-size:.7rem; color:var(--muted); font-weight:500;">Ingredient</th>
+            <th style="padding:.2rem .3rem; width:70px; font-size:.7rem; color:var(--muted); font-weight:500;">Qty</th>
+            <th style="padding:.2rem .3rem; width:35px; font-size:.7rem; color:var(--muted); font-weight:500;">unit</th>
+            <th style="text-align:right; padding:.2rem .3rem; width:50px; font-size:.7rem; color:var(--muted); font-weight:500;">kcal</th>
+          </tr></thead>
+          <tbody id="qty-ing-tbody"></tbody>
+        </table>
       </div>
     </div>
     <div style="display:flex; gap:.75rem; margin-top:.5rem;">
@@ -2622,11 +2636,13 @@ function renderWeekGrid() {
       }
     }
 
+    const dayExBurn = daySessions.reduce((sum, s) => sum + estimateBurn(s), 0);
     cell.innerHTML = `
       <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
       <div class="day-date">${dateLabel}</div>
       ${sessionsHtml}
-      <div style="margin-top:.4rem; font-size:.72rem; color:var(--muted);">🔥 ${t.tdee.toLocaleString()} kcal burned</div>
+      ${dayExBurn > 0 ? `<div style="margin-top:.3rem; font-size:.72rem; color:var(--accent); font-weight:600;">⚡ ${dayExBurn.toLocaleString()} active kcal</div>` : ''}
+      <div style="margin-top:.2rem; font-size:.72rem; color:var(--muted);">🔥 ${t.tdee.toLocaleString()} kcal burned</div>
     `;
     if (daySessions.length) {
       cell.style.cursor = 'pointer';
@@ -5742,6 +5758,15 @@ function getEachWeight(productName) {
   return null;
 }
 
+window.toggleQtyIngEditor = function() {
+  const ed = document.getElementById('qty-ing-editor');
+  const btn = document.getElementById('qty-ing-toggle');
+  if (!ed) return;
+  const isOpen = ed.style.display !== 'none';
+  ed.style.display = isOpen ? 'none' : '';
+  if (btn) btn.style.background = isOpen ? '' : 'var(--surface2)';
+};
+
 function openQtyModal(type, id) {
   const overlay = document.getElementById('qty-overlay');
   const titleEl = document.getElementById('qty-modal-title');
@@ -5756,6 +5781,7 @@ function openQtyModal(type, id) {
   let currentUnit = 'grams'; // 'grams' or 'eaches'
   // Per-serving macros for eaches mode (bypasses gram conversion)
   let perServingMacros = null;
+  let editableIngredients = null;
 
   if (type === 'product') {
     const p = state.products.find(x => x.id === id);
@@ -5901,6 +5927,61 @@ function openQtyModal(type, id) {
   overlay.style.display = 'flex';
   input.focus(); input.select();
 
+  // Ingredient editor (pantry meals only)
+  const ingSection = document.getElementById('qty-ing-section');
+  const ingToggleBtn = document.getElementById('qty-ing-toggle');
+  const ingEditor = document.getElementById('qty-ing-editor');
+  const ingTbody = document.getElementById('qty-ing-tbody');
+  if (ingSection) ingSection.style.display = 'none';
+  if (ingEditor) ingEditor.style.display = 'none';
+  editableIngredients = null;
+
+  function recalcFromIngredients() {
+    if (!editableIngredients || !ingTbody) return;
+    let totalKcal = 0, totalProt = 0, totalCarb = 0, totalFat = 0;
+    editableIngredients.forEach((ing, idx) => {
+      const p = state.products.find(x => x.id === ing.productId);
+      const pg = productPerGram(p);
+      const q = parseFloat(ing.qty) || 0;
+      const mult = ing.unit === 'serves' ? (p && p.serve ? p.serve : 1) : 1;
+      const ingKcal = pg.kcal * q * mult;
+      totalKcal += ingKcal; totalProt += pg.prot * q * mult;
+      totalCarb += pg.carb * q * mult; totalFat += pg.fat * q * mult;
+      const kcalCell = ingTbody.querySelector(`[data-ing-kcal="${idx}"]`);
+      if (kcalCell) kcalCell.textContent = Math.round(ingKcal);
+    });
+    kcalPer = totalKcal; protPer = totalProt; carbPer = totalCarb; fatPer = totalFat;
+    updatePreview();
+  }
+
+  if (type === 'meal') {
+    const mPantry = state.meals.find(x => x.id === id);
+    if (mPantry && mPantry.type === 'pantry' && mPantry.ingredients && mPantry.ingredients.length) {
+      editableIngredients = mPantry.ingredients.map(i => ({ ...i, qty: parseFloat(i.qty) || 0 }));
+      ingTbody.innerHTML = editableIngredients.map((ing, idx) => {
+        const p = state.products.find(x => x.id === ing.productId);
+        const pg = productPerGram(p);
+        const q = parseFloat(ing.qty) || 0;
+        const unitLabel = ing.unit === 'serves' ? 'srv' : 'g';
+        const mult = ing.unit === 'serves' ? (p && p.serve ? p.serve : 1) : 1;
+        return `<tr>
+          <td style="padding:.2rem .3rem;">${ing.name}</td>
+          <td style="padding:.2rem .3rem;"><input type="number" min="0" step="any" value="${q}" data-ing-qty="${idx}" style="width:58px; padding:.15rem .25rem; border:1px solid var(--border); border-radius:4px; font-size:.78rem;"></td>
+          <td style="padding:.2rem .3rem; color:var(--muted);">${unitLabel}</td>
+          <td style="padding:.2rem .3rem; text-align:right;" data-ing-kcal="${idx}">${Math.round(pg.kcal * q * mult)}</td>
+        </tr>`;
+      }).join('');
+      if (ingSection) ingSection.style.display = '';
+      if (ingToggleBtn) ingToggleBtn.textContent = `✏️ Edit ingredients (${editableIngredients.length})`;
+      ingTbody.addEventListener('input', e => {
+        if (!e.target.dataset.ingQty) return;
+        const idx = parseInt(e.target.dataset.ingQty);
+        editableIngredients[idx].qty = parseFloat(e.target.value) || 0;
+        recalcFromIngredients();
+      });
+    }
+  }
+
   _qtyResolve = (confirmed) => {
     overlay.style.display = 'none';
     input.oninput = null;
@@ -5927,7 +6008,9 @@ function openQtyModal(type, id) {
     if (type === 'meal') {
       const m = state.meals.find(x => x.id === id);
       if (m && m.type === 'pantry' && m.ingredients) {
-        ingredients = m.ingredients.map(i => ({ ...i, qty: parseFloat(i.qty) || 0 }));
+        ingredients = editableIngredients
+          ? editableIngredients.map(i => ({ ...i }))
+          : m.ingredients.map(i => ({ ...i, qty: parseFloat(i.qty) || 0 }));
       }
     }
     addToPlate(type, id, name, rawQty, displayUnit, kcal, prot, carb, fat, ingredients, selectedSlot);
@@ -6005,7 +6088,7 @@ window.removeFromPlate = (itemId, dateKey) => {
 };
 
 // --- Change meal slot of a plate item ---
-const ALL_MEAL_SLOTS = ['Breakfast', 'Morning Snack', 'Pre-Run', 'Lunch', 'Afternoon Snack', 'Dinner', 'Evening Snack'];
+const ALL_MEAL_SLOTS = ['Pre-Run', 'Breakfast', 'Morning Snack', 'Lunch', 'Afternoon Snack', 'Dinner', 'Evening Snack'];
 window.changeMealSlot = (itemId, dateKey) => {
   const key = dateKey || _plateTargetDate();
   const ap = activeProfile();

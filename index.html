@@ -633,7 +633,6 @@
     <section id="tab-plate" class="section">
       <div class="card">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-          <span>🍽️ Plate — Detailed Breakdown</span>
           <div style="display:flex; align-items:center; gap:.4rem;">
             <button class="btn btn-secondary btn-sm" id="btn-plate-prev" style="padding:.2rem .5rem;">◀</button>
             <span id="plate-nav-label" style="font-size:.8rem; min-width:5rem; text-align:center;">Today</span>
@@ -4868,10 +4867,15 @@ function renderCalorieChart() {
       const totalC = cArr.reduce((a,v) => a+v, 0);
       const totalU = uArr.reduce((a,v) => a+v, 0);
       const diff = totalC - totalU;
-      const label = diff > 0 ? `Surplus: +${diff.toLocaleString()} kcal` : `Deficit: ${diff.toLocaleString()} kcal`;
+      const days = cArr.length || 1;
+      const perDay = Math.round(Math.abs(diff) / days);
       const periodNames = { 7: 'this week', 30: 'this month', 90: 'last 3 months', 180: 'last 6 months', 365: 'this year' };
-      deficitEl.textContent = `${label} (${periodNames[chartPeriodDays] || chartPeriodDays + 'd'})`;
-      deficitEl.style.color = diff > 0 ? 'var(--danger)' : 'var(--accent)';
+      const periodLabel = periodNames[chartPeriodDays] || chartPeriodDays + 'd';
+      if (diff > 0) {
+        deficitEl.innerHTML = `<span style="color:var(--danger);">Surplus: ${diff.toLocaleString()} kcal (${periodLabel})</span><br><span style="font-size:.76rem; color:var(--muted);">~${perDay.toLocaleString()} kcal/day surplus</span>`;
+      } else {
+        deficitEl.innerHTML = `<span style="color:var(--accent);">Deficit: ${Math.abs(diff).toLocaleString()} kcal (${periodLabel})</span><br><span style="font-size:.76rem; color:var(--muted);">~${perDay.toLocaleString()} kcal/day deficit</span>`;
+      }
     } else {
       deficitEl.textContent = '';
     }

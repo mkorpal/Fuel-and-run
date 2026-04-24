@@ -664,14 +664,15 @@
           document.getElementById('add-to-plate-modal').style.display = '';
           const cats = mode === 'product'
             ? ['Dairy','Protein','Carbs','Fruit & Veg','Snack','Drink','Supplement','Other']
-            : ['Breakfast','Lunch','Dinner','Snack','Other'];
+            : ['Breakfast','Pre-Run','Lunch','Dinner','Snack','Other'];
           const catDiv = document.getElementById('add-to-plate-categories');
           catDiv.innerHTML = cats.map(cat =>
             `<button class="btn btn-secondary btn-sm" style="font-size:.82rem;" onclick="filterAddToPlateByCategory('${cat.replace(/'/g, "\\'")}')">${cat}</button>`
           ).join('');
           document.getElementById('add-to-plate-search').value = '';
           document.getElementById('add-to-plate-search').oninput = renderAddToPlateList;
-          renderAddToPlateList();
+          // Defer list render so modal overlay paints first (instant visual response)
+          requestAnimationFrame(() => renderAddToPlateList());
         }
         function filterAddToPlateByCategory(cat) {
           _addToPlateCat = _addToPlateCat === cat ? null : cat;
@@ -682,13 +683,22 @@
           });
           renderAddToPlateList();
         }
+        // Map display category name → mealCat value used by meals
+        const _mealCatMap = { 'Breakfast':'breakfast', 'Pre-Run':'prerun', 'Lunch':'lunch', 'Dinner':'lunch', 'Snack':'snack' };
         function renderAddToPlateList() {
           const listDiv = document.getElementById('add-to-plate-list');
           const q = document.getElementById('add-to-plate-search').value.trim().toLowerCase();
           let items = _addToPlateMode === 'product'
             ? (state.products || []).filter(p => !p.deletedAt)
             : (state.meals   || []).filter(m => !m.deletedAt);
-          if (_addToPlateCat) items = items.filter(i => (i.cat || 'Other') === _addToPlateCat);
+          if (_addToPlateCat) {
+            if (_addToPlateMode === 'product') {
+              items = items.filter(i => (i.cat || 'Other') === _addToPlateCat);
+            } else {
+              const mcat = _mealCatMap[_addToPlateCat] || _addToPlateCat.toLowerCase();
+              items = items.filter(i => (i.mealCat || 'lunch') === mcat);
+            }
+          }
           if (q) items = items.filter(i => (i.name || '').toLowerCase().includes(q));
           if (!items.length) {
             listDiv.innerHTML = '<div style="color:var(--muted);font-size:.9rem;text-align:center;padding:.5rem;">No items found.</div>';
@@ -714,13 +724,24 @@
           const consumed = logEntry ? (logEntry.consumed || 0) : 0;
           const todayIdx = (new Date().getDay() + 6) % 7;
           const t = dailyTargets(todayIdx);
-          const deficit = consumed - t.kcal;
           const el = document.getElementById('plate-deficit');
           if (!el) return;
-          if (consumed === 0) el.innerHTML = '<span style="color:var(--muted);">No intake logged yet</span>';
-          else if (deficit < 0) el.innerHTML = `<span style="color:var(--accent);">Deficit: <b>${Math.abs(deficit)}</b> kcal</span>`;
-          else if (deficit > 0) el.innerHTML = `<span style="color:var(--warn);">Surplus: <b>${deficit}</b> kcal</span>`;
-          else el.innerHTML = '<span style="color:var(--accent);">✅ On target!</span>';
+          if (consumed === 0) {
+            el.innerHTML = `<span style="color:var(--muted);">No intake logged yet · target ${t.kcal.toLocaleString()} kcal</span>`;
+            return;
+          }
+          // Energy balance vs TDEE — same basis as week view and dashboard chart
+          const balance = consumed - t.tdee;
+          const balColor = balance <= 0 ? 'var(--accent)' : 'var(--warn)';
+          const balLabel = balance <= 0
+            ? `Deficit: <b>${Math.abs(balance).toLocaleString()} kcal</b>`
+            : `Surplus: <b>+${balance.toLocaleString()} kcal</b>`;
+          // Secondary: progress vs intake target (TDEE minus strategic deficit)
+          const remaining = t.kcal - consumed;
+          const targetNote = remaining >= 0
+            ? `${remaining.toLocaleString()} kcal below intake target (${t.kcal.toLocaleString()})`
+            : `${Math.abs(remaining).toLocaleString()} kcal over intake target (${t.kcal.toLocaleString()})`;
+          el.innerHTML = `<span style="color:${balColor};">${balLabel}</span><span style="font-size:.79rem; color:var(--muted);"> · ${targetNote}</span>`;
         }
         </script>
         <div id="plate-tab-totals" style="margin-top:1rem;"></div>
@@ -932,6 +953,7 @@
           <div style="display:flex; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm meal-filter-btn active" data-filter="all">All meals</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="breakfast">🌅 Breakfast</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="prerun">🏃 Pre-Run</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="lunch">🍽️ Lunch / Dinner</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="snack">🥜 Snack</button>
           </div>
@@ -1131,6 +1153,7 @@
       </div>
       <div style="display:flex; gap:0; border:1.5px solid var(--border); border-top:none; border-radius:0 0 6px 6px; overflow:hidden; font-size:.82rem;">
         <button class="qty-slot-btn" data-slot="Morning Snack" style="flex:1; padding:.35rem .2rem; border:none; cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🥐 AM Snack</button>
+        <button class="qty-slot-btn" data-slot="Pre-Run" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🏃 Pre-Run</button>
         <button class="qty-slot-btn" data-slot="Afternoon Snack" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🍎 PM Snack</button>
         <button class="qty-slot-btn" data-slot="Evening Snack" style="flex:1; padding:.35rem .2rem; border:none; border-left:1.5px solid var(--border); cursor:pointer; font-weight:600; background:var(--surface); color:var(--text); font-size:.78rem;">🌙 Eve Snack</button>
       </div>
@@ -1173,6 +1196,7 @@
       <label>Meal Category</label>
       <select id="meal-cat" style="width:100%;">
         <option value="breakfast">🌅 Breakfast</option>
+        <option value="prerun">🏃 Pre-Run</option>
         <option value="lunch" selected>🍽️ Lunch / Dinner</option>
         <option value="snack">🥜 Snack</option>
       </select>
@@ -4513,8 +4537,8 @@ function renderMeals() {
   none.style.display = 'none';
 
   // Group by meal category
-  const catLabels = { breakfast: '🌅 Breakfast', lunch: '🍽️ Lunch / Dinner', snack: '🥜 Snack' };
-  const catOrder = ['breakfast', 'lunch', 'snack'];
+  const catLabels = { breakfast: '🌅 Breakfast', prerun: '🏃 Pre-Run', lunch: '🍽️ Lunch / Dinner', snack: '🥜 Snack' };
+  const catOrder = ['breakfast', 'prerun', 'lunch', 'snack'];
   const groups = {};
   filtered.forEach(m => {
     const cat = m.mealCat || 'lunch';
@@ -5910,7 +5934,7 @@ function guessDefaultMealSlot() {
   if (h < 11) return 'Morning Snack';
   if (h < 14) return 'Lunch';
   if (h < 17) return 'Afternoon Snack';
-  if (h < 19) return 'Dinner';
+  if (h < 20) return 'Dinner';
   return 'Evening Snack';
 }
 
@@ -5960,7 +5984,7 @@ window.removeFromPlate = (itemId) => {
 };
 
 // --- Change meal slot of a plate item ---
-const ALL_MEAL_SLOTS = ['Breakfast', 'Morning Snack', 'Lunch', 'Afternoon Snack', 'Dinner', 'Evening Snack'];
+const ALL_MEAL_SLOTS = ['Breakfast', 'Morning Snack', 'Pre-Run', 'Lunch', 'Afternoon Snack', 'Dinner', 'Evening Snack'];
 window.changeMealSlot = (itemId) => {
   const today = dateStr(new Date());
   const ap = activeProfile();
@@ -6242,7 +6266,7 @@ function renderPlateTab() {
     grouped[s].push(item);
   }
 
-  const slotEmoji = { 'Breakfast': '🌅', 'Morning Snack': '🥐', 'Lunch': '☀️', 'Afternoon Snack': '🍎', 'Dinner': '🌙', 'Evening Snack': '🫖', 'Other': '🍽' };
+  const slotEmoji = { 'Breakfast': '🌅', 'Morning Snack': '🥐', 'Pre-Run': '🏃', 'Lunch': '☀️', 'Afternoon Snack': '🍎', 'Dinner': '🌙', 'Evening Snack': '🫖', 'Other': '🍽' };
   let sections = '';
   for (const slot of [...slotOrder, 'Other']) {
     const group = grouped[slot];

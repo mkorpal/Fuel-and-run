@@ -293,7 +293,7 @@
   }
   .plog-btn:hover { opacity: .85; }
 
-  /* ---- Today's Plate ---- */
+  /* ---- My Plate ---- */
   .plate-panel { min-width: 220px; width: 240px; flex-shrink: 0; }
   @media (min-width: 640px) {
     .plate-panel { position: sticky; top: 1rem; }
@@ -545,7 +545,7 @@
   <nav id="main-nav">
     <button class="active" data-tab="dashboard">Dashboard</button>
     <button data-tab="training">My Week</button>
-    <button data-tab="plate">Today's Plate</button>
+    <button data-tab="plate">My Plate</button>
     <button data-tab="products">My Products</button>
     <button data-tab="meals">My Meals</button>
     <button data-tab="recommendations">AU Food Ideas</button>
@@ -629,7 +629,7 @@
 
     </section>
 
-    <!-- TODAY'S PLATE -->
+    <!-- MY PLATE -->
     <section id="tab-plate" class="section">
       <div class="card">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
@@ -648,7 +648,7 @@
         <div id="add-to-plate-modal" style="display:none; position:fixed; inset:0; z-index:800; background:rgba(0,0,0,.45); justify-content:center; align-items:flex-start; overflow-y:auto; padding:2rem .5rem;">
           <div style="background:var(--surface); border-radius:var(--radius); padding:1.25rem; width:min(96vw,420px); position:relative; margin:auto;">
             <button onclick="closeAddToPlateModal()" style="position:absolute; top:.7rem; right:.9rem; background:none; border:none; font-size:1.6rem; cursor:pointer; color:var(--muted); padding:.3rem;">✕</button>
-            <h3 style="margin-bottom:.7rem;">Add to Today's Plate</h3>
+            <h3 style="margin-bottom:.7rem;">Add to My Plate</h3>
             <input id="add-to-plate-search" type="text" placeholder="Search by name..." style="width:100%; margin-bottom:.7rem; padding:.4rem; border-radius:6px; border:1px solid var(--border); font-size:.95rem;" />
             <div id="add-to-plate-categories" style="display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:1rem;"></div>
             <div id="add-to-plate-list" style="max-height:320px; overflow-y:auto;"></div>
@@ -954,7 +954,7 @@
             <span>🍽️ My Meals</span>
             <button class="btn btn-primary btn-sm" id="btn-new-meal">+ Create Meal</button>
           </div>
-          <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">Build meals from your pantry products or save recipes. <strong>Drag</strong> a meal card (or tap <strong>＋</strong>) to log it to today's plate.</p>
+          <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">Build meals from your pantry products or save recipes. <strong>Drag</strong> a meal card (or tap <strong>＋</strong>) to log it to my plate.</p>
           <div style="display:flex; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm meal-filter-btn active" data-filter="all">All meals</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="breakfast">🌅 Breakfast</button>
@@ -1136,7 +1136,7 @@
 <!-- Quantity Modal -->
 <div class="qty-overlay" id="qty-overlay" style="display:none;">
   <div class="qty-modal">
-    <h3 id="qty-modal-title">Add to Today's Plate</h3>
+    <h3 id="qty-modal-title">Add to My Plate</h3>
     <div class="qty-preview" id="qty-preview"></div>
     <div id="qty-unit-toggle" style="display:none; margin-bottom:.5rem;">
       <div style="display:flex; gap:0; border:1.5px solid var(--border); border-radius:6px; overflow:hidden; font-size:.82rem;">
@@ -5725,7 +5725,7 @@ document.getElementById('scanner-modal').addEventListener('click', e => {
 });
 
 // ============================================================
-// TODAY'S PLATE — DRAG & DROP + QUANTITY MODAL
+// MY PLATE — DRAG & DROP + QUANTITY MODAL
 // ============================================================
 let _dragType = null, _dragId = null;
 
@@ -5863,7 +5863,7 @@ function openQtyModal(type, id) {
     }
   }
 
-  titleEl.textContent = 'Add to Today\'s Plate: ' + name;
+  titleEl.textContent = 'Add to My Plate: ' + name;
 
   // Unit toggle for eligible products
   if (eachInfo) {

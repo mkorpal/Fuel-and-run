@@ -598,6 +598,7 @@
         <div style="position:relative; height:200px;">
           <canvas id="protein-chart"></canvas>
         </div>
+        <div id="protein-avg-text" style="font-size:.78rem; color:var(--muted); text-align:center; margin-top:.35rem;"></div>
       </div>
 
       <!-- Carbs per kg Chart -->
@@ -615,6 +616,7 @@
         <div style="position:relative; height:200px;">
           <canvas id="carbs-chart"></canvas>
         </div>
+        <div id="carbs-avg-text" style="font-size:.78rem; color:var(--muted); text-align:center; margin-top:.35rem;"></div>
       </div>
 
       <div class="card">
@@ -4964,10 +4966,15 @@ function renderMacroCharts() {
 
   // Protein chart
   const pCanvas = document.getElementById('protein-chart');
+  const pAvgEl = document.getElementById('protein-avg-text');
   if (pCanvas) {
     if (proteinChart) { proteinChart.destroy(); proteinChart = null; }
     const hasP = protkg.some(v => v != null);
     if (hasP) {
+      const pVals = protkg.filter(v => v != null);
+      const avgPkg = pVals.reduce((a,v) => a+v, 0) / pVals.length;
+      const avgPg = Math.round(avgPkg * (ap.weight || 72));
+      if (pAvgEl) pAvgEl.textContent = `Avg: ${avgPkg.toFixed(2)} g/kg · ${avgPg} g/day`;
       proteinChart = new Chart(pCanvas, {
         type: 'line',
         data: { labels, datasets: [{
@@ -4986,10 +4993,15 @@ function renderMacroCharts() {
 
   // Carbs chart
   const cCanvas = document.getElementById('carbs-chart');
+  const cAvgEl = document.getElementById('carbs-avg-text');
   if (cCanvas) {
     if (carbsChart) { carbsChart.destroy(); carbsChart = null; }
     const hasC = carbkg.some(v => v != null);
     if (hasC) {
+      const cVals = carbkg.filter(v => v != null);
+      const avgCkg = cVals.reduce((a,v) => a+v, 0) / cVals.length;
+      const avgCg = Math.round(avgCkg * (ap.weight || 72));
+      if (cAvgEl) cAvgEl.textContent = `Avg: ${avgCkg.toFixed(2)} g/kg · ${avgCg} g/day`;
       carbsChart = new Chart(cCanvas, {
         type: 'line',
         data: { labels, datasets: [{

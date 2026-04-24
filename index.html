@@ -3153,12 +3153,28 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
   const goal = ap.trainingGoal || '';
   const goalLabels = { marathon: 'Marathon', half: 'Half Marathon', '10k': '10 km', '5k': '5 km', ultra: 'Ultra / Trail', base: 'General fitness' };
 
-  let html = `<h3>🏃 ${DAYS[dayIdx]} ${dateLabel} — ${s.title || s.type}</h3>`;
+  let html = `<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:.3rem;">
+    <h3 style="margin:0;">🏃 ${DAYS[dayIdx]} ${dateLabel} — ${s.title || s.type}</h3>
+    <button onclick="closeWorkoutDetail()" style="background:none; border:none; cursor:pointer; font-size:1.2rem; color:var(--muted); line-height:1; padding:0 0 0 .5rem;">×</button>
+  </div>`;
 
   // Classification badge + purpose
   html += `<span class="wo-class-badge wo-class-${cls.type}">${cls.label}</span>`;
   if (goal) html += `<span style="font-size:.72rem; color:var(--muted); margin-left:.5rem;">🎯 ${goalLabels[goal] || goal}</span>`;
   html += `<div class="wo-purpose">${cls.purpose}</div>`;
+
+  // Energy level (Strava-synced sessions only) — shown right after insight
+  if (s.stravaId) {
+    const el = s.energyLevel || 0;
+    const levelLabels = ['', '😴 Drained', '😓 Tired', '😐 Neutral', '😊 Good', '💪 Peak'];
+    html += `<div style="margin-top:.5rem; margin-bottom:.5rem; padding:.5rem .6rem; border:1px solid var(--border); border-radius:8px;">
+      <div style="font-size:.72rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:.4rem;">⚡ Energy Level${el ? ` — ${levelLabels[el]}` : ''}</div>
+      <div style="display:flex; gap:.3rem;">
+        ${[1,2,3,4,5].map(n => `<button onclick="window.saveEnergyLevel('${s.stravaId}',${dayIdx},${n})" style="flex:1; padding:.35rem; border:1.5px solid ${el===n ? 'var(--accent)' : 'var(--border)'}; border-radius:6px; background:${el===n ? 'var(--accent)' : 'var(--surface)'}; color:${el===n ? '#fff' : 'var(--muted)'}; cursor:pointer; font-size:.88rem; font-weight:700;">${n}</button>`).join('')}
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:.68rem; color:var(--muted); margin-top:.25rem;"><span>Lowest</span><span>Highest</span></div>
+    </div>`;
+  }
 
   // Summary stats
   html += `<div class="wo-summary">`;
@@ -3278,19 +3294,6 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
     html += `</tbody></table>`;
   } else if (s.type !== 'rest') {
     html += `<p style="font-size:.82rem; color:var(--muted); margin-top:.6rem;">No split data available. Import a Garmin .fit file to see detailed splits.</p>`;
-  }
-
-  // Energy level (Strava-synced sessions only)
-  if (s.stravaId) {
-    const el = s.energyLevel || 0;
-    const levelLabels = ['', '😴 Drained', '😓 Tired', '😐 Neutral', '😊 Good', '💪 Peak'];
-    html += `<div style="margin-top:.8rem; padding:.5rem .6rem; border:1px solid var(--border); border-radius:8px;">
-      <div style="font-size:.72rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:.4rem;">⚡ Energy Level${el ? ` — ${levelLabels[el]}` : ''}</div>
-      <div style="display:flex; gap:.3rem;">
-        ${[1,2,3,4,5].map(n => `<button onclick="window.saveEnergyLevel('${s.stravaId}',${dayIdx},${n})" style="flex:1; padding:.35rem; border:1.5px solid ${el===n ? 'var(--accent)' : 'var(--border)'}; border-radius:6px; background:${el===n ? 'var(--accent)' : 'var(--surface)'}; color:${el===n ? '#fff' : 'var(--muted)'}; cursor:pointer; font-size:.88rem; font-weight:700;">${n}</button>`).join('')}
-      </div>
-      <div style="display:flex; justify-content:space-between; font-size:.68rem; color:var(--muted); margin-top:.25rem;"><span>Lowest</span><span>Highest</span></div>
-    </div>`;
   }
 
   return html;

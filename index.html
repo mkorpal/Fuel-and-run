@@ -671,8 +671,8 @@
           ).join('');
           document.getElementById('add-to-plate-search').value = '';
           document.getElementById('add-to-plate-search').oninput = renderAddToPlateList;
-          // Defer list render so modal overlay paints first (instant visual response)
-          requestAnimationFrame(() => renderAddToPlateList());
+          // Double-RAF: ensures overlay paints before list renders (instant visual response)
+          requestAnimationFrame(() => requestAnimationFrame(renderAddToPlateList));
         }
         function filterAddToPlateByCategory(cat) {
           _addToPlateCat = _addToPlateCat === cat ? null : cat;
@@ -6497,10 +6497,10 @@ function renderPlateTab() {
       <tr style="border-top:2px solid var(--accent);">
         <td style="padding:.5rem .4rem;">TOTAL</td>
         <td style="padding:.5rem .4rem;"></td>
-        <td style="padding:.5rem .4rem; text-align:right; color:var(--accent);">${totalKcal.toLocaleString()}</td>
-        <td style="padding:.5rem .4rem; text-align:right;">${totalCarb.toFixed(1)}</td>
-        <td style="padding:.5rem .4rem; text-align:right;">${totalProt.toFixed(1)}</td>
-        <td style="padding:.5rem .4rem; text-align:right;">${totalFat.toFixed(1)}</td>
+        <td style="padding:.5rem .4rem; text-align:right; color:var(--accent);">${totalKcal.toLocaleString()} <span style="font-size:.72rem; font-weight:400;">kcal</span></td>
+        <td style="padding:.5rem .4rem; text-align:right;">${totalProt.toFixed(1)} <span style="font-size:.72rem; font-weight:400; color:var(--muted);">P</span></td>
+        <td style="padding:.5rem .4rem; text-align:right;">${totalCarb.toFixed(1)} <span style="font-size:.72rem; font-weight:400; color:var(--muted);">C</span></td>
+        <td style="padding:.5rem .4rem; text-align:right;">${totalFat.toFixed(1)} <span style="font-size:.72rem; font-weight:400; color:var(--muted);">F</span></td>
         <td style="padding:.5rem .2rem;"></td>
       </tr>
     </table>`;

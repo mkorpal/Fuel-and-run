@@ -4977,6 +4977,29 @@ function renderDashboard() {
   const fatPerDay = daysElapsed > 0 ? Math.round(totalFat / daysElapsed) : '—';
   const weekLabel = isPast ? 'that week' : isFuture ? 'upcoming' : 'this week';
 
+  // Build recent-days Garmin row (last 3 complete days, always visible on dashboard)
+  const recentGarminRows = [];
+  for (let i = 1; i <= 3; i++) {
+    const rd = new Date(); rd.setDate(rd.getDate() - i);
+    const rds = dateStr(rd);
+    const gd = window.garminDailyCache && window.garminDailyCache[rds];
+    if (!gd) continue;
+    const proj = garminProjectedKcal(rds);
+    if (proj === null) continue;
+    const label = i === 1 ? 'Yesterday' : i === 2 ? '2 days ago' : '3 days ago';
+    const logEntry = log.find(l => l.date === rds);
+    const consumed = logEntry ? (logEntry.consumed || 0) : 0;
+    const balance = consumed > 0 ? consumed - proj : null;
+    const balStr = balance !== null ? (balance <= 0 ? ` · <span style="color:var(--accent);">${balance.toLocaleString()} deficit</span>` : ` · <span style="color:var(--warn);">+${balance.toLocaleString()} surplus</span>`) : '';
+    recentGarminRows.push(`<div style="display:flex; justify-content:space-between; align-items:center; padding:.3rem 0; border-bottom:1px solid var(--border); font-size:.82rem;">
+      <span style="color:var(--muted); min-width:80px;">${label}</span>
+      <span>💤 ${(gd.resting_kcal||0).toLocaleString()} + ⚡ ${(gd.active_kcal||0).toLocaleString()} = <strong>${proj.toLocaleString()} kcal burned</strong>${balStr}</span>
+    </div>`);
+  }
+  const recentGarminHtml = recentGarminRows.length
+    ? `<div style="margin-top:.5rem; margin-bottom:.25rem; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#007ac1;">⌚ Recent Garmin Days</div>${recentGarminRows.join('')}`
+    : '';
+
   summary.innerHTML = `
     <div class="dash-section-label">🏃 Activity</div>
     <div class="targets-grid">
@@ -4996,6 +5019,7 @@ function renderDashboard() {
       <div class="target-card"><div class="target-val">${carbPerKgDay} g/kg</div><div class="target-label">carbs/day</div></div>
       <div class="target-card"><div class="target-val">${fatPerDay}g</div><div class="target-label">fat/day</div></div>
     </div>
+    ${recentGarminHtml}
   `;
 
   // Weekly guide text
@@ -5016,20 +5040,25 @@ function renderDashboard() {
     recentDays.forEach(d => { (d.entry.items || []).forEach(i => { tProt += i.prot || 0; tCarb += i.carb || 0; tFat += i.fat || 0; }); });
     const avgProt = tProt / n, avgCarb = tCarb / n;
     const protPerKg = (avgProt / w).toFixed(1), carbPerKg = (avgCarb / w).toFixed(1);
-    // Burned per day (RMR + exercise) over the same recent days
+    // Burned per day — prefer Garmin data, fall back to RMR + exercise
     const isFemale2 = ap.sex === 'female';
     const h2 = ap.height || 175, age2 = ap.age || 35;
     const dayRmr = ap.rmr ? ap.rmr : (isFemale2 ? Math.round(10*w + 6.25*h2 - 5*age2 - 161) : Math.round(10*w + 6.25*h2 - 5*age2 + 5));
-    let totalBurnEx = 0;
+    let totalBurned = 0;
     recentDays.forEach(d => {
-      const dt2 = new Date(d.date + 'T12:00:00');
-      const dayMon0r = (dt2.getDay() + 6) % 7;
-      const mon2 = new Date(dt2); mon2.setDate(dt2.getDate() - dayMon0r); mon2.setHours(0,0,0,0);
-      const wk2 = isoWeekKey(mon2);
-      const daySess = ((ap.weekSessions && ap.weekSessions[wk2]) || []).filter(s => s.day === dayMon0r);
-      totalBurnEx += daySess.reduce((sum, s) => sum + estimateBurn(s), 0);
+      const garminBurn = garminProjectedKcal(d.date);
+      if (garminBurn !== null) {
+        totalBurned += garminBurn;
+      } else {
+        const dt2 = new Date(d.date + 'T12:00:00');
+        const dayMon0r = (dt2.getDay() + 6) % 7;
+        const mon2 = new Date(dt2); mon2.setDate(dt2.getDate() - dayMon0r); mon2.setHours(0,0,0,0);
+        const wk2 = isoWeekKey(mon2);
+        const daySess = ((ap.weekSessions && ap.weekSessions[wk2]) || []).filter(s => s.day === dayMon0r);
+        totalBurned += dayRmr + daySess.reduce((sum, s) => sum + estimateBurn(s), 0);
+      }
     });
-    const avgBurned = Math.round(dayRmr + totalBurnEx / n);
+    const avgBurned = Math.round(totalBurned / n);
     const avgDeficit = avgConsumed - avgBurned;
     const defLabel = avgDeficit > 0 ? '+' + avgDeficit : String(avgDeficit);
     // Insights

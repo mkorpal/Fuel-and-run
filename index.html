@@ -1146,17 +1146,34 @@
           Checking…
         </div>
         <p style="font-size:.78rem; color:var(--muted); margin-bottom:.5rem; line-height:1.5;">
-          Syncs steps, projected calories (resting + active), and workouts with HR &amp; pace per split directly from Garmin Connect.
-          Run once to set up, then run again whenever you want to refresh.
+          Syncs steps, projected calories (resting + active), and workouts with HR &amp; pace per split.
+          The sync runs via GitHub Actions — works from any device, no Python needed.
         </p>
-        <div style="background:var(--surface2); border-radius:6px; padding:.5rem .7rem; font-size:.76rem; color:var(--muted); margin-bottom:.6rem;">
-          <strong>One-time setup:</strong><br>
-          1. Run <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">pip install garth supabase python-dotenv</code><br>
-          2. Copy <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">.env.example</code> → <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">.env</code> in the scripts folder and fill in credentials<br>
-          3. In Supabase SQL Editor, run <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">setup_garmin_tables.sql</code><br>
-          4. Run <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">python sync_garmin_to_supabase.py 14</code> (syncs last 14 days)
+
+        <!-- GitHub token setup -->
+        <div id="garmin-gh-setup" style="margin-bottom:.75rem;">
+          <div style="background:var(--surface2); border-radius:6px; padding:.5rem .7rem; font-size:.76rem; color:var(--muted); margin-bottom:.6rem;">
+            <strong>One-time setup (5 min):</strong><br>
+            1. Go to <a href="https://github.com/mkorpal/Fuel-and-run/settings/secrets/actions" target="_blank" style="color:var(--accent);">GitHub → Secrets → Actions</a> and add 4 secrets:<br>
+            &nbsp;&nbsp;<code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">GARMIN_EMAIL</code> &nbsp;
+            <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">GARMIN_PASSWORD</code> &nbsp;
+            <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">SUPABASE_URL</code> &nbsp;
+            <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">SUPABASE_SERVICE_KEY</code><br>
+            2. Create a <a href="https://github.com/settings/tokens/new?scopes=workflow&description=FuelAndRun" target="_blank" style="color:var(--accent);">GitHub Personal Access Token</a> with <strong>workflow</strong> scope, paste it below.
+          </div>
+          <div style="display:flex; gap:.4rem; align-items:center; flex-wrap:wrap;">
+            <input type="password" id="garmin-gh-token" placeholder="GitHub token (ghp_…)" autocomplete="off"
+              style="flex:1; min-width:180px; padding:.35rem .6rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.82rem; background:var(--surface);" />
+            <button class="btn btn-primary btn-sm" id="btn-garmin-save-token" style="background:#007ac1; border-color:#007ac1; white-space:nowrap;">Save token</button>
+          </div>
+          <div id="garmin-token-status" style="font-size:.75rem; color:var(--muted); margin-top:.3rem;"></div>
         </div>
-        <button class="btn btn-secondary btn-sm" id="btn-garmin-refresh">🔄 Refresh from Supabase</button>
+
+        <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" id="btn-garmin-full-sync" style="background:#007ac1; color:#fff; border-color:#007ac1; display:none;">🔄 Sync from Garmin</button>
+          <button class="btn btn-secondary btn-sm" id="btn-garmin-refresh">↓ Refresh from Supabase</button>
+        </div>
+        <div id="garmin-sync-progress" style="font-size:.78rem; color:var(--muted); margin-top:.4rem; display:none;"></div>
       </div>
 
     </section>
@@ -2415,13 +2432,112 @@ document.getElementById('btn-garmin-week-sync').addEventListener('click', async 
 });
 
 // Garmin refresh button
+// ── Garmin GitHub token storage ──────────────────────────────────────────────
+const GARMIN_GH_TOKEN_KEY = 'garmin_gh_token';
+
+function getGarminGhToken() { return localStorage.getItem(GARMIN_GH_TOKEN_KEY) || ''; }
+function setGarminGhToken(t) { if (t) localStorage.setItem(GARMIN_GH_TOKEN_KEY, t); else localStorage.removeItem(GARMIN_GH_TOKEN_KEY); }
+
+function initGarminSettings() {
+  const token = getGarminGhToken();
+  const inputEl = document.getElementById('garmin-gh-token');
+  const fullSyncBtn = document.getElementById('btn-garmin-full-sync');
+  const statusEl = document.getElementById('garmin-token-status');
+  if (token) {
+    inputEl.value = token;
+    if (fullSyncBtn) fullSyncBtn.style.display = '';
+    if (statusEl) statusEl.textContent = '✅ Token saved — sync button enabled';
+  }
+}
+
+document.getElementById('btn-garmin-save-token').addEventListener('click', () => {
+  const token = document.getElementById('garmin-gh-token').value.trim();
+  if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+    toast('⚠️ Token should start with ghp_ or github_pat_');
+    return;
+  }
+  setGarminGhToken(token);
+  document.getElementById('garmin-token-status').textContent = '✅ Token saved — sync button enabled';
+  document.getElementById('btn-garmin-full-sync').style.display = '';
+  toast('✅ GitHub token saved');
+});
+
+async function triggerGarminSync(daysBack = 7) {
+  const token = getGarminGhToken();
+  if (!token) { toast('⚠️ Add your GitHub token in Settings → Garmin Connect first'); return false; }
+  const resp = await fetch('https://api.github.com/repos/mkorpal/Fuel-and-run/actions/workflows/garmin-sync.yml/dispatches', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref: 'main', inputs: { days_back: String(daysBack) } })
+  });
+  return resp.status === 204; // GitHub returns 204 No Content on success
+}
+
+async function waitAndRefreshGarmin(progressEl, doneCallback) {
+  // Poll every 10s for up to 3 minutes
+  const steps = ['Queued…', 'Starting…', 'Syncing wellness data…', 'Syncing activities…', 'Finishing up…'];
+  let stepIdx = 0;
+  let elapsed = 0;
+  const interval = setInterval(async () => {
+    elapsed += 10;
+    if (stepIdx < steps.length - 1 && elapsed % 20 === 0) stepIdx++;
+    if (progressEl) progressEl.textContent = `⏳ ${steps[stepIdx]} (${elapsed}s)`;
+    if (elapsed >= 100) {
+      clearInterval(interval);
+      if (progressEl) progressEl.textContent = '↓ Almost done — loading data…';
+      await loadGarminData();
+      if (doneCallback) doneCallback();
+    }
+  }, 10000);
+  // Also do a quick refresh at 90s in case it finishes early
+  setTimeout(async () => { await loadGarminData(); }, 90000);
+}
+
+document.getElementById('btn-garmin-full-sync').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-garmin-full-sync');
+  const progress = document.getElementById('garmin-sync-progress');
+  btn.disabled = true; btn.textContent = '⏳ Triggering…';
+  if (progress) { progress.style.display = ''; progress.textContent = 'Sending request to GitHub…'; }
+  const ok = await triggerGarminSync(7);
+  if (!ok) {
+    toast('❌ Could not trigger sync — check your GitHub token and that Secrets are set');
+    btn.disabled = false; btn.textContent = '🔄 Sync from Garmin';
+    if (progress) progress.style.display = 'none';
+    return;
+  }
+  toast('✅ Garmin sync triggered — takes ~90 seconds');
+  waitAndRefreshGarmin(progress, () => {
+    btn.disabled = false; btn.textContent = '🔄 Sync from Garmin';
+    if (progress) { progress.style.display = 'none'; progress.textContent = ''; }
+    toast('✅ Garmin data updated!');
+  });
+});
+
+// Garmin refresh button (in My Week header) — triggers full sync if token available, else just pulls from Supabase
+document.getElementById('btn-garmin-week-sync').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-garmin-week-sync');
+  const token = getGarminGhToken();
+  if (token) {
+    btn.disabled = true; btn.textContent = '⏳ Syncing…';
+    const ok = await triggerGarminSync(7);
+    if (ok) {
+      toast('✅ Garmin sync triggered (~90s) — loading when ready');
+      setTimeout(async () => { await loadGarminData(); btn.disabled = false; btn.textContent = '🔄 Garmin'; }, 100000);
+      return;
+    }
+  }
+  btn.disabled = true; btn.textContent = '⏳ Loading…';
+  await loadGarminData();
+  btn.disabled = false; btn.textContent = '🔄 Garmin';
+});
+
 document.getElementById('btn-garmin-refresh').addEventListener('click', async () => {
   const btn = document.getElementById('btn-garmin-refresh');
   btn.disabled = true;
   btn.textContent = '⏳ Loading…';
   await loadGarminData();
   btn.disabled = false;
-  btn.textContent = '🔄 Refresh from Supabase';
+  btn.textContent = '↓ Refresh from Supabase';
   toast('Garmin data refreshed');
 });
 
@@ -6889,6 +7005,7 @@ function initApp() {
   renderStravaUI();
   handleStravaOAuthRedirect();
   loadGarminData();
+  initGarminSettings();
 }
 
 function doLogout() {

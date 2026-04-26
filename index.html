@@ -769,7 +769,7 @@
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem;">
           <span>📅 My Week</span>
           <div style="display:flex; gap:.4rem; align-items:center;">
-            <button class="btn btn-secondary btn-sm" id="btn-strava-sync" style="font-size:.68rem; display:none;">🔄 Sync Strava</button>
+            <button class="btn btn-secondary btn-sm" id="btn-garmin-week-sync" style="font-size:.68rem; background:#007ac1; color:#fff; border-color:#007ac1;">🔄 Garmin</button>
             <button class="btn btn-secondary btn-sm" id="btn-import-fit" onclick="document.getElementById('fit-input').click()" style="font-size:.68rem;">⌚ Import .fit</button>
             <input type="file" id="fit-input" accept=".fit" multiple style="display:none" />
           </div>
@@ -2331,7 +2331,8 @@ function renderStravaUI() {
   const connected = !!cfg.access_token;
   document.getElementById('strava-disconnected').style.display = connected ? 'none' : '';
   document.getElementById('strava-connected').style.display = connected ? '' : 'none';
-  document.getElementById('btn-strava-sync').style.display = connected ? '' : 'none';
+  const _syncBtn = document.getElementById('btn-strava-sync');
+  if (_syncBtn) _syncBtn.style.display = connected ? '' : 'none';
   if (connected) {
     document.getElementById('strava-athlete-name').textContent = cfg.athlete_name || 'Strava athlete';
     const statusEl = document.getElementById('strava-sync-status');
@@ -2405,9 +2406,12 @@ document.getElementById('btn-strava-disconnect').addEventListener('click', () =>
   toast('Strava disconnected');
 });
 
-// Sync button (in My Week header)
-document.getElementById('btn-strava-sync').addEventListener('click', () => {
-  stravaSyncActivities();
+// Garmin refresh button (in My Week header)
+document.getElementById('btn-garmin-week-sync').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-garmin-week-sync');
+  btn.disabled = true; btn.textContent = '⏳ Loading…';
+  await loadGarminData();
+  btn.disabled = false; btn.textContent = '🔄 Garmin';
 });
 
 // Garmin refresh button
@@ -2673,7 +2677,7 @@ function renderWeekGrid() {
         const s = daySessions[si];
         const tagClass = `tag-${s.type}`;
         const tagLabel = s.type.charAt(0).toUpperCase() + s.type.slice(1);
-        const burnKcal = estimateBurn(s);
+        const burnKcal = s.garminId ? estimateBurn(s) : 0;
         const burnLabel = burnKcal > 0 ? `<span style="font-size:.7rem; color:var(--accent); font-weight:600;">🔥 ${burnKcal.toLocaleString()}</span>` : '';
         sessionsHtml += `<div style="display:flex; align-items:center; gap:.35rem; ${daySessions.length > 1 ? 'border-bottom:1px solid var(--border); padding-bottom:.25rem; margin-bottom:.25rem;' : ''} cursor:pointer;" onclick="event.stopPropagation(); openWorkoutDetail('${weekKey}',${d},'${dateLabel}',${si})">
           <span class="workout-tag ${tagClass}">${tagLabel}</span>
@@ -2682,7 +2686,7 @@ function renderWeekGrid() {
       }
     }
 
-    const dayExBurn = daySessions.reduce((sum, s) => sum + estimateBurn(s), 0);
+    const dayExBurn = daySessions.filter(s => s.garminId).reduce((sum, s) => sum + estimateBurn(s), 0);
     cell.innerHTML = `
       <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
       <div class="day-date">${dateLabel}</div>
@@ -3229,7 +3233,7 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
   if (s.avgHr) html += `<div class="wo-stat"><span class="wo-stat-label">Avg HR</span><span class="wo-stat-val">${s.avgHr} bpm</span></div>`;
   if (s.maxHr) html += `<div class="wo-stat"><span class="wo-stat-label">Max HR</span><span class="wo-stat-val">${s.maxHr} bpm</span></div>`;
   if (s.calories) html += `<div class="wo-stat"><span class="wo-stat-label">Calories</span><span class="wo-stat-val">${s.calories} kcal</span></div>`;
-  html += `<div class="wo-stat"><span class="wo-stat-label">Burned</span><span class="wo-stat-val">${estimateBurn(s)} kcal <button style="background:none;border:none;cursor:pointer;font-size:.8rem;color:var(--accent);padding:0 .2rem;" onclick="promptOverrideCal('${s.updatedAt || ''}',${dayIdx})" title="Override calories">✏️</button></span></div>`;
+  if (s.garminId) html += `<div class="wo-stat"><span class="wo-stat-label">Burned</span><span class="wo-stat-val">${estimateBurn(s)} kcal</span></div>`;
   if (s.avgCadence) html += `<div class="wo-stat"><span class="wo-stat-label">Cadence</span><span class="wo-stat-val">${s.avgCadence * 2} spm</span></div>`;
   if (s.totalAscent) html += `<div class="wo-stat"><span class="wo-stat-label">Elevation</span><span class="wo-stat-val">↑${s.totalAscent}m ↓${s.totalDescent || 0}m</span></div>`;
   html += `</div>`;

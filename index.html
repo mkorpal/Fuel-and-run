@@ -2651,7 +2651,8 @@ function dailyTargets(dayIdx) {
   const ap = activeProfile();
   const w = ap.weight || 72;
   const daySess = sessionsForDay(dayIdx);
-  const burn = daySess.reduce((sum, s) => sum + estimateBurn(s), 0);
+  // Only count Garmin-sourced sessions for exercise burn; non-Garmin sessions have no reliable calorie data
+  const burn = daySess.filter(s => s.garminId).reduce((sum, s) => sum + estimateBurn(s), 0);
   const s = daySess.length ? daySess.reduce((hardest, x) => {
     const order = { race: 4, hard: 3, moderate: 2, easy: 1 };
     return (order[x.intensity] || 0) > (order[hardest.intensity] || 0) ? x : hardest;
@@ -2803,12 +2804,15 @@ function renderWeekGrid() {
     }
 
     const dayExBurn = daySessions.filter(s => s.garminId).reduce((sum, s) => sum + estimateBurn(s), 0);
+    const cellDateStr = dateStr(cellDate);
+    const garminDay = window.garminDailyCache && window.garminDailyCache[cellDateStr];
+    const displayTdee = (garminDay && garminDay.projected_kcal > 0) ? garminDay.projected_kcal : t.tdee;
     cell.innerHTML = `
       <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
       <div class="day-date">${dateLabel}</div>
       ${sessionsHtml}
       ${dayExBurn > 0 ? `<div style="margin-top:.3rem; font-size:.72rem; color:var(--accent); font-weight:600;">⚡ ${dayExBurn.toLocaleString()} active kcal</div>` : ''}
-      <div style="margin-top:.2rem; font-size:.72rem; color:var(--muted);">🔥 ${t.tdee.toLocaleString()} kcal burned</div>
+      <div style="margin-top:.2rem; font-size:.72rem; color:var(--muted);">🔥 ${displayTdee.toLocaleString()} kcal burned</div>
     `;
     if (daySessions.length) {
       cell.style.cursor = 'pointer';
@@ -3348,7 +3352,7 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
   if (s.pace) html += `<div class="wo-stat"><span class="wo-stat-label">Avg Pace</span><span class="wo-stat-val">${s.pace}/km</span></div>`;
   if (s.avgHr) html += `<div class="wo-stat"><span class="wo-stat-label">Avg HR</span><span class="wo-stat-val">${s.avgHr} bpm</span></div>`;
   if (s.maxHr) html += `<div class="wo-stat"><span class="wo-stat-label">Max HR</span><span class="wo-stat-val">${s.maxHr} bpm</span></div>`;
-  if (s.calories) html += `<div class="wo-stat"><span class="wo-stat-label">Calories</span><span class="wo-stat-val">${s.calories} kcal</span></div>`;
+  if (s.calories && s.garminId) html += `<div class="wo-stat"><span class="wo-stat-label">Calories</span><span class="wo-stat-val">${s.calories} kcal</span></div>`;
   if (s.garminId) html += `<div class="wo-stat"><span class="wo-stat-label">Burned</span><span class="wo-stat-val">${estimateBurn(s)} kcal</span></div>`;
   if (s.avgCadence) html += `<div class="wo-stat"><span class="wo-stat-label">Cadence</span><span class="wo-stat-val">${s.avgCadence * 2} spm</span></div>`;
   if (s.totalAscent) html += `<div class="wo-stat"><span class="wo-stat-label">Elevation</span><span class="wo-stat-val">↑${s.totalAscent}m ↓${s.totalDescent || 0}m</span></div>`;
@@ -3537,10 +3541,11 @@ function renderMealGrid() {
     const carbKg = w > 0 ? (dayCarb / w).toFixed(1) : '—';
     const fatKg  = w > 0 ? (dayFat  / w).toFixed(1) : '—';
 
-    // Actual burned for this day (RMR + exercise)
+    // Actual burned for this day — prefer Garmin projected kcal, fall back to Garmin sessions only
     const daySessions = (weekSess || []).filter(s => s.day === d);
-    const dayExBurn = daySessions.reduce((sum, s) => sum + estimateBurn(s), 0);
-    const dayBurned = dayRmr + dayExBurn;
+    const dayExBurn = daySessions.filter(s => s.garminId).reduce((sum, s) => sum + estimateBurn(s), 0);
+    const garminDayMeal = window.garminDailyCache && window.garminDailyCache[dateKey];
+    const dayBurned = (garminDayMeal && garminDayMeal.projected_kcal > 0) ? garminDayMeal.projected_kcal : dayRmr + dayExBurn;
     const pct = dayBurned > 0 ? Math.min((consumed / dayBurned) * 100, 120) : 0;
     const isOver = consumed > dayBurned && dayBurned > 0;
     const dayDeficit = consumed > 0 ? consumed - dayBurned : 0;

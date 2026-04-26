@@ -1485,6 +1485,10 @@ function applyParsed(parsed) {
       if (!p.weekMeals) p.weekMeals = {};
       // Clear legacy sessions fallback (old ICS/plan data) — only weekSessions is used now
       if (p.sessions) p.sessions = [];
+      // Purge legacy Strava sessions — Garmin-only going forward
+      Object.keys(p.weekSessions).forEach(wk => {
+        p.weekSessions[wk] = (p.weekSessions[wk] || []).filter(s => !s.stravaId);
+      });
     });
   }
   // Clean up: per-100g products should not have a serve value
@@ -1603,6 +1607,7 @@ function mergeStates(local, remote) {
         Object.entries(obj).forEach(([wk, arr]) => {
           if (!ws[wk]) ws[wk] = {};
           (arr || []).forEach(s => {
+            if (s.stravaId) return; // skip legacy Strava sessions
             const key = s.garminId ? 'garmin_' + s.garminId : s.day + '_' + s.type + '_manual';
             const ex = ws[wk][key];
             if (!ex || (s.updatedAt || '') > (ex.updatedAt || '')) ws[wk][key] = s;
@@ -4393,7 +4398,9 @@ function aggregateCalorieData(log, days) {
     const h = ap.height || 175;
     const age = ap.age || 35;
     const rmr = ap.rmr ? ap.rmr : (isFemale ? Math.round(10*w + 6.25*h - 5*age - 161) : Math.round(10*w + 6.25*h - 5*age + 5));
-    const dayBurned = rmr + exBurn;
+    // Prefer Garmin projected kcal (full-day total) over RMR+exercise estimate
+    const gdChart = window.garminDailyCache && window.garminDailyCache[ds];
+    const dayBurned = (gdChart && gdChart.projected_kcal > 0) ? gdChart.projected_kcal : (rmr + exBurn);
     return { consumed: e ? e.consumed : null, used: dayBurned, protkg: e ? +(prot / w).toFixed(2) : null, carbkg: e ? +(carb / w).toFixed(2) : null };
   }
 

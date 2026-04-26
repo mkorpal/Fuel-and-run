@@ -733,14 +733,16 @@
           const rmr = ap.rmr ? ap.rmr : (isFemale ? Math.round(10*w+6.25*h-5*age-161) : Math.round(10*w+6.25*h-5*age+5));
           const { estimateBurn: _eb } = window;
           const exBurn = wSess.filter(s => s.day === dayIdx).reduce((sum, s) => sum + estimateBurn(s), 0);
-          // Prefer Garmin projected kcal (actual Garmin full-day total) over estimated RMR+exercise
+          // Prefer Garmin data when available.
+          // resting_kcal = bmrKilocalories (full-day BMR projection, always the full 24h estimate)
+          // active_kcal  = active calories burned so far today
+          // Together they match exactly what the Garmin watch/app projects for the whole day.
+          // projected_kcal = totalKilocalories which is only the accumulated total so far, not a projection.
           const gd = window.garminDailyCache && window.garminDailyCache[viewedDate];
-          const tdee = (gd && gd.projected_kcal > 0) ? gd.projected_kcal
-                     : (gd && gd.resting_kcal > 0) ? (gd.resting_kcal + (gd.active_kcal || 0))
-                     : (rmr + exBurn);
           const restingKcal = (gd && gd.resting_kcal > 0) ? gd.resting_kcal : rmr;
           const activeKcal  = (gd && gd.active_kcal  > 0) ? gd.active_kcal  : exBurn;
-          const hasGarmin = !!(gd && (gd.projected_kcal > 0 || gd.resting_kcal > 0));
+          const hasGarmin = !!(gd && gd.resting_kcal > 0);
+          const tdee = hasGarmin ? (restingKcal + activeKcal) : (rmr + exBurn);
           const splitLine = hasGarmin
             ? `<div style="font-size:.74rem; color:var(--muted); margin-top:.15rem;">💤 ${restingKcal.toLocaleString()} rest + ⚡ ${activeKcal.toLocaleString()} active = ${tdee.toLocaleString()} total kcal</div>`
             : '';
@@ -2291,7 +2293,9 @@ function renderWeekGrid() {
     const dayExBurn = daySessions.filter(s => s.garminId).reduce((sum, s) => sum + estimateBurn(s), 0);
     const cellDateStr = dateStr(cellDate);
     const garminDay = window.garminDailyCache && window.garminDailyCache[cellDateStr];
-    const displayTdee = (garminDay && garminDay.projected_kcal > 0) ? garminDay.projected_kcal : t.tdee;
+    const displayTdee = (garminDay && garminDay.resting_kcal > 0)
+      ? (garminDay.resting_kcal + (garminDay.active_kcal || 0))
+      : t.tdee;
     cell.innerHTML = `
       <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
       <div class="day-date">${dateLabel}</div>
@@ -2969,8 +2973,10 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
 
 window.saveEnergyLevel = function(garminId, dayIdx, level) {
   const ap = activeProfile();
+  // garminId from button is a string; stored value may be a number — compare as strings
+  const gid = String(garminId);
   for (const sessions of Object.values(ap.weekSessions || {})) {
-    const s = sessions.find(s => s.garminId === garminId);
+    const s = sessions.find(s => String(s.garminId) === gid);
     if (s) {
       s.energyLevel = level;
       save();
@@ -3044,9 +3050,10 @@ function renderMealGrid() {
     const daySessions = (weekSess || []).filter(s => s.day === d);
     const dayExBurn = daySessions.filter(s => s.garminId).reduce((sum, s) => sum + estimateBurn(s), 0);
     const garminDayMeal = window.garminDailyCache && window.garminDailyCache[dateKey];
-    const dayBurned = (garminDayMeal && garminDayMeal.projected_kcal > 0) ? garminDayMeal.projected_kcal
-                    : (garminDayMeal && garminDayMeal.resting_kcal > 0) ? (garminDayMeal.resting_kcal + (garminDayMeal.active_kcal || 0))
-                    : dayRmr + dayExBurn;
+    const _gdResting = garminDayMeal && garminDayMeal.resting_kcal > 0;
+    const dayBurned = _gdResting
+      ? (garminDayMeal.resting_kcal + (garminDayMeal.active_kcal || 0))
+      : dayRmr + dayExBurn;
     const pct = dayBurned > 0 ? Math.min((consumed / dayBurned) * 100, 120) : 0;
     const isOver = consumed > dayBurned && dayBurned > 0;
     const dayDeficit = consumed > 0 ? consumed - dayBurned : 0;
@@ -4442,9 +4449,11 @@ function aggregateCalorieData(log, days) {
     const h = ap.height || 175;
     const age = ap.age || 35;
     const rmr = ap.rmr ? ap.rmr : (isFemale ? Math.round(10*w + 6.25*h - 5*age - 161) : Math.round(10*w + 6.25*h - 5*age + 5));
-    // Prefer Garmin projected kcal (full-day total) over RMR+exercise estimate
+    // Prefer Garmin resting+active (matches Garmin watch projected total)
     const gdChart = window.garminDailyCache && window.garminDailyCache[ds];
-    const dayBurned = (gdChart && gdChart.projected_kcal > 0) ? gdChart.projected_kcal : (rmr + exBurn);
+    const dayBurned = (gdChart && gdChart.resting_kcal > 0)
+      ? (gdChart.resting_kcal + (gdChart.active_kcal || 0))
+      : (rmr + exBurn);
     return { consumed: e ? e.consumed : null, used: dayBurned, protkg: e ? +(prot / w).toFixed(2) : null, carbkg: e ? +(carb / w).toFixed(2) : null };
   }
 
@@ -4760,8 +4769,8 @@ function renderDashboard() {
   for (let _d = 0; _d < daysElapsed; _d++) {
     const _dt = new Date(monday); _dt.setDate(monday.getDate() + _d);
     const _gd = window.garminDailyCache && window.garminDailyCache[dateStr(_dt)];
-    if (_gd && _gd.projected_kcal > 0) {
-      kcalBurned += _gd.projected_kcal;
+    if (_gd && _gd.resting_kcal > 0) {
+      kcalBurned += _gd.resting_kcal + (_gd.active_kcal || 0);
     } else {
       const _daySess = weekSessions.filter(s => s.day === _d);
       kcalBurned += rmr + _daySess.reduce((a, s) => a + estimateBurn(s), 0);
@@ -6503,7 +6512,8 @@ function renderGarminStatus() {
   const latest = dates[0];
   const gd = cache[latest];
   const stepsStr = gd.steps ? gd.steps.toLocaleString() + ' steps' : '';
-  const kcalStr  = gd.projected_kcal ? gd.projected_kcal.toLocaleString() + ' kcal' : '';
+  const totalKcal = gd.resting_kcal > 0 ? gd.resting_kcal + (gd.active_kcal || 0) : (gd.projected_kcal || 0);
+  const kcalStr  = totalKcal ? totalKcal.toLocaleString() + ' kcal' : '';
   el.innerHTML = `✅ Garmin synced — latest: <strong>${latest}</strong>${stepsStr ? ' · ' + stepsStr : ''}${kcalStr ? ' · ' + kcalStr + ' projected' : ''}`;
 }
 

@@ -2045,10 +2045,12 @@ document.getElementById('btn-garmin-week-sync').addEventListener('click', async 
   btn.disabled = false; btn.textContent = '🔄 Garmin';
   const token = getGarminGhToken();
   if (token) {
-    // Trigger full sync in the background — don't block the button
+    // Trigger full sync in the background — poll at 30s, 60s, 95s so fresh data appears ASAP
     triggerGarminSync(7).then(ok => {
       if (ok) {
-        toast('✅ Garmin sync running in background (~90s)');
+        toast('✅ Garmin sync running — refreshing data in ~30s');
+        setTimeout(() => loadGarminData(), 30000);
+        setTimeout(() => loadGarminData(), 60000);
         setTimeout(() => loadGarminData(), 95000);
       } else {
         toast('⚠️ Could not trigger Garmin sync — check GitHub token');
@@ -2334,11 +2336,16 @@ function renderWeekGrid() {
     const garminDay = window.garminDailyCache && window.garminDailyCache[cellDateStr];
     const _garminWeekTotal = garminProjectedKcal(cellDateStr);
     const displayTdee = _garminWeekTotal !== null ? _garminWeekTotal : t.tdee;
+    const garminActiveKcal = garminDay && garminDay.active_kcal > 0 ? garminDay.active_kcal : 0;
+    // Show Garmin active kcal line when the daily cache has it (covers NEAT + exercise from watch)
+    const garminActiveLine = garminActiveKcal > 0
+      ? `<div style="margin-top:.3rem; font-size:.72rem; color:#007ac1; font-weight:600;">⌚ ${garminActiveKcal.toLocaleString()} active kcal</div>`
+      : (dayExBurn > 0 ? `<div style="margin-top:.3rem; font-size:.72rem; color:var(--accent); font-weight:600;">⚡ ${dayExBurn.toLocaleString()} active kcal</div>` : '');
     cell.innerHTML = `
       <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
       <div class="day-date">${dateLabel}</div>
       ${sessionsHtml}
-      ${dayExBurn > 0 ? `<div style="margin-top:.3rem; font-size:.72rem; color:var(--accent); font-weight:600;">⚡ ${dayExBurn.toLocaleString()} active kcal</div>` : ''}
+      ${garminActiveLine}
       <div style="margin-top:.2rem; font-size:.72rem; color:var(--muted);">🔥 ${displayTdee.toLocaleString()} kcal burned</div>
     `;
     if (daySessions.length) {

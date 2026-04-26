@@ -1145,7 +1145,9 @@
         <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
           <button class="btn btn-secondary btn-sm" id="btn-garmin-full-sync" style="background:#007ac1; color:#fff; border-color:#007ac1; display:none;">🔄 Sync from Garmin</button>
           <button class="btn btn-secondary btn-sm" id="btn-garmin-refresh">↓ Refresh from Supabase</button>
+          <button class="btn btn-secondary btn-sm" id="btn-garmin-raw-debug" style="font-size:.7rem;">🔍 Show raw DB values</button>
         </div>
+        <div id="garmin-raw-debug-out" style="font-size:.75rem; font-family:monospace; margin-top:.5rem; display:none; background:var(--surface2); border-radius:6px; padding:.5rem .7rem; line-height:1.8;"></div>
         <div id="garmin-sync-progress" style="font-size:.78rem; color:var(--muted); margin-top:.4rem; display:none;"></div>
       </div>
 
@@ -2069,9 +2071,29 @@ document.getElementById('btn-garmin-refresh').addEventListener('click', async ()
   toast('Garmin data refreshed');
 });
 
-// ============================================================
-// MANUAL SESSION
-// ============================================================
+document.getElementById('btn-garmin-raw-debug').addEventListener('click', async () => {
+  const out = document.getElementById('garmin-raw-debug-out');
+  out.style.display = '';
+  out.innerHTML = '⏳ Querying Supabase directly…';
+  try {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 5);
+    const res = await sb.from('garmin_daily').select('date,resting_kcal,active_kcal,projected_kcal,steps').gte('date', cutoff.toISOString().slice(0,10)).order('date', { ascending: false });
+    if (!res.data || !res.data.length) { out.innerHTML = '⚠️ No rows returned from Supabase'; return; }
+    const todayStr = dateStr(new Date());
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    const ygd = res.data.find(r => r.date === dateStr(yesterday));
+    out.innerHTML = res.data.map(r => {
+      let rest = r.resting_kcal || 0;
+      if (r.date === todayStr && ygd) rest = ygd.resting_kcal || rest;
+      const total = rest + (r.active_kcal || 0);
+      return `<div><strong>${r.date}</strong>: 💤 resting=${r.resting_kcal} + ⚡ active=${r.active_kcal} → <strong>app shows ${total}</strong> kcal &nbsp;<span style="opacity:.5;">(projected_kcal in DB=${r.projected_kcal})</span></div>`;
+    }).join('');
+  } catch(e) {
+    out.innerHTML = '❌ ' + e.message;
+  }
+});
+
+
 // Set default date on manual activity form to today
 (function setManDateDefault() {
   const el = document.getElementById('man-date');

@@ -733,16 +733,21 @@
           const rmr = ap.rmr ? ap.rmr : (isFemale ? Math.round(10*w+6.25*h-5*age-161) : Math.round(10*w+6.25*h-5*age+5));
           const { estimateBurn: _eb } = window;
           const exBurn = wSess.filter(s => s.day === dayIdx).reduce((sum, s) => sum + estimateBurn(s), 0);
-          // Prefer Garmin data when available.
-          // resting_kcal = bmrKilocalories (full-day BMR projection, always the full 24h estimate)
-          // active_kcal  = active calories burned so far today
-          // Together they match exactly what the Garmin watch/app projects for the whole day.
-          // projected_kcal = totalKilocalories which is only the accumulated total so far, not a projection.
+          // Prefer Garmin: yesterday's completed resting_kcal + today's active_kcal for today;
+          // for past days use that day's own resting_kcal + active_kcal (complete day).
           const gd = window.garminDailyCache && window.garminDailyCache[viewedDate];
-          const restingKcal = (gd && gd.resting_kcal > 0) ? gd.resting_kcal : rmr;
+          const garminTotal = garminProjectedKcal(viewedDate);
+          const hasGarmin = garminTotal !== null;
+          const tdee = hasGarmin ? garminTotal : (rmr + exBurn);
+          const restingKcal = (() => {
+            if (viewedDate === dateStr(new Date())) {
+              const yd = new Date(); yd.setDate(yd.getDate() - 1);
+              const ygd = window.garminDailyCache && window.garminDailyCache[dateStr(yd)];
+              return (ygd && ygd.resting_kcal > 0) ? ygd.resting_kcal : (gd && gd.resting_kcal) || rmr;
+            }
+            return (gd && gd.resting_kcal > 0) ? gd.resting_kcal : rmr;
+          })();
           const activeKcal  = (gd && gd.active_kcal  > 0) ? gd.active_kcal  : exBurn;
-          const hasGarmin = !!(gd && gd.resting_kcal > 0);
-          const tdee = hasGarmin ? (restingKcal + activeKcal) : (rmr + exBurn);
           const splitLine = hasGarmin
             ? `<div style="font-size:.74rem; color:var(--muted); margin-top:.15rem;">💤 ${restingKcal.toLocaleString()} rest + ⚡ ${activeKcal.toLocaleString()} active = ${tdee.toLocaleString()} total kcal</div>`
             : '';
@@ -1363,6 +1368,31 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 // Garmin data cache — populated by loadGarminData() on startup
 window.garminDailyCache = {};      // date (YYYY-MM-DD) → {steps, resting_kcal, active_kcal, projected_kcal, resting_hr}
 window.garminActivitiesCache = []; // raw DB rows, imported into weekSessions
+
+// Returns a projected total kcal for a given date using Garmin cache.
+// Logic: resting_kcal (bmrKilocalories) from Garmin is only accumulated so far today,
+//        but yesterday's complete resting_kcal is a reliable full-day BMR estimate.
+//        So for today use: yesterday's resting_kcal + today's active_kcal.
+//        For past days the day is complete, so use: that day's resting_kcal + active_kcal.
+//        Returns null when no Garmin data is available.
+function garminProjectedKcal(ds) {
+  const cache = window.garminDailyCache;
+  if (!cache) return null;
+  const gd = cache[ds];
+  if (!gd) return null;
+  const todayStr = dateStr(new Date());
+  let restingKcal;
+  if (ds === todayStr) {
+    // Use yesterday's completed resting_kcal as the full-day BMR estimate for today
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    const ygd = cache[dateStr(yesterday)];
+    restingKcal = (ygd && ygd.resting_kcal > 0) ? ygd.resting_kcal : (gd.resting_kcal || 0);
+  } else {
+    restingKcal = gd.resting_kcal || 0;
+  }
+  if (restingKcal <= 0) return null;
+  return restingKcal + (gd.active_kcal || 0);
+}
 
 // Passphrase-based sync key: user sets a memorable word/phrase, same on all devices
 function normalisePassphrase(raw) {
@@ -2293,9 +2323,8 @@ function renderWeekGrid() {
     const dayExBurn = daySessions.filter(s => s.garminId).reduce((sum, s) => sum + estimateBurn(s), 0);
     const cellDateStr = dateStr(cellDate);
     const garminDay = window.garminDailyCache && window.garminDailyCache[cellDateStr];
-    const displayTdee = (garminDay && garminDay.resting_kcal > 0)
-      ? (garminDay.resting_kcal + (garminDay.active_kcal || 0))
-      : t.tdee;
+    const _garminWeekTotal = garminProjectedKcal(cellDateStr);
+    const displayTdee = _garminWeekTotal !== null ? _garminWeekTotal : t.tdee;
     cell.innerHTML = `
       <div class="day-name">${ABBR[d]}${isToday ? ' ●' : ''}</div>
       <div class="day-date">${dateLabel}</div>
@@ -3050,10 +3079,8 @@ function renderMealGrid() {
     const daySessions = (weekSess || []).filter(s => s.day === d);
     const dayExBurn = daySessions.filter(s => s.garminId).reduce((sum, s) => sum + estimateBurn(s), 0);
     const garminDayMeal = window.garminDailyCache && window.garminDailyCache[dateKey];
-    const _gdResting = garminDayMeal && garminDayMeal.resting_kcal > 0;
-    const dayBurned = _gdResting
-      ? (garminDayMeal.resting_kcal + (garminDayMeal.active_kcal || 0))
-      : dayRmr + dayExBurn;
+    const _garminMealTotal = garminProjectedKcal(dateKey);
+    const dayBurned = _garminMealTotal !== null ? _garminMealTotal : dayRmr + dayExBurn;
     const pct = dayBurned > 0 ? Math.min((consumed / dayBurned) * 100, 120) : 0;
     const isOver = consumed > dayBurned && dayBurned > 0;
     const dayDeficit = consumed > 0 ? consumed - dayBurned : 0;
@@ -4449,11 +4476,10 @@ function aggregateCalorieData(log, days) {
     const h = ap.height || 175;
     const age = ap.age || 35;
     const rmr = ap.rmr ? ap.rmr : (isFemale ? Math.round(10*w + 6.25*h - 5*age - 161) : Math.round(10*w + 6.25*h - 5*age + 5));
-    // Prefer Garmin resting+active (matches Garmin watch projected total)
+    // Prefer Garmin: yesterday's resting + today's active (matches Garmin watch projection)
     const gdChart = window.garminDailyCache && window.garminDailyCache[ds];
-    const dayBurned = (gdChart && gdChart.resting_kcal > 0)
-      ? (gdChart.resting_kcal + (gdChart.active_kcal || 0))
-      : (rmr + exBurn);
+    const _chartTotal = garminProjectedKcal(ds);
+    const dayBurned = _chartTotal !== null ? _chartTotal : (rmr + exBurn);
     return { consumed: e ? e.consumed : null, used: dayBurned, protkg: e ? +(prot / w).toFixed(2) : null, carbkg: e ? +(carb / w).toFixed(2) : null };
   }
 
@@ -4768,9 +4794,9 @@ function renderDashboard() {
   let kcalBurned = 0;
   for (let _d = 0; _d < daysElapsed; _d++) {
     const _dt = new Date(monday); _dt.setDate(monday.getDate() + _d);
-    const _gd = window.garminDailyCache && window.garminDailyCache[dateStr(_dt)];
-    if (_gd && _gd.resting_kcal > 0) {
-      kcalBurned += _gd.resting_kcal + (_gd.active_kcal || 0);
+    const _proj = garminProjectedKcal(dateStr(_dt));
+    if (_proj !== null) {
+      kcalBurned += _proj;
     } else {
       const _daySess = weekSessions.filter(s => s.day === _d);
       kcalBurned += rmr + _daySess.reduce((a, s) => a + estimateBurn(s), 0);
@@ -6512,7 +6538,7 @@ function renderGarminStatus() {
   const latest = dates[0];
   const gd = cache[latest];
   const stepsStr = gd.steps ? gd.steps.toLocaleString() + ' steps' : '';
-  const totalKcal = gd.resting_kcal > 0 ? gd.resting_kcal + (gd.active_kcal || 0) : (gd.projected_kcal || 0);
+  const totalKcal = garminProjectedKcal(latest) || (gd.projected_kcal || 0);
   const kcalStr  = totalKcal ? totalKcal.toLocaleString() + ' kcal' : '';
   el.innerHTML = `✅ Garmin synced — latest: <strong>${latest}</strong>${stepsStr ? ' · ' + stepsStr : ''}${kcalStr ? ' · ' + kcalStr + ' projected' : ''}`;
 }

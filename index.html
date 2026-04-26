@@ -2037,23 +2037,25 @@ document.getElementById('btn-garmin-full-sync').addEventListener('click', async 
 });
 
 // Garmin refresh button (in My Week header) — always pulls from Supabase immediately,
-// then triggers a full Garmin sync if a GitHub token is available.
+// then triggers a full Garmin sync in the background if a GitHub token is available.
 document.getElementById('btn-garmin-week-sync').addEventListener('click', async () => {
   const btn = document.getElementById('btn-garmin-week-sync');
   btn.disabled = true; btn.textContent = '⏳ Loading…';
   // Always refresh from Supabase first so already-synced data appears immediately
   await loadGarminData();
+  btn.disabled = false; btn.textContent = '🔄 Garmin';
   const token = getGarminGhToken();
   if (token) {
-    btn.textContent = '⏳ Syncing…';
-    const ok = await triggerGarminSync(7);
-    if (ok) {
-      toast('✅ Garmin sync triggered (~90s) — data already refreshed from last sync');
-      setTimeout(async () => { await loadGarminData(); btn.disabled = false; btn.textContent = '🔄 Garmin'; }, 100000);
-      return;
-    }
+    // Trigger full sync in the background — don't block the button
+    triggerGarminSync(7).then(ok => {
+      if (ok) {
+        toast('✅ Garmin sync running in background (~90s)');
+        setTimeout(() => loadGarminData(), 95000);
+      } else {
+        toast('⚠️ Could not trigger Garmin sync — check GitHub token');
+      }
+    }).catch(() => toast('⚠️ Garmin sync request failed'));
   }
-  btn.disabled = false; btn.textContent = '🔄 Garmin';
 });
 
 document.getElementById('btn-garmin-refresh').addEventListener('click', async () => {
@@ -6575,9 +6577,13 @@ async function loadGarminData() {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 30);
     const cutoffStr = dateStr(cutoff);
-    const [dailyRes, activitiesRes] = await Promise.all([
-      sb.from('garmin_daily').select('*').gte('date', cutoffStr).order('date', { ascending: false }),
-      sb.from('garmin_activities').select('*').gte('date', cutoffStr).order('date', { ascending: false }),
+    const timeout = ms => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
+    const [dailyRes, activitiesRes] = await Promise.race([
+      Promise.all([
+        sb.from('garmin_daily').select('*').gte('date', cutoffStr).order('date', { ascending: false }),
+        sb.from('garmin_activities').select('*').gte('date', cutoffStr).order('date', { ascending: false }),
+      ]),
+      timeout(12000).then(() => { throw new Error('Supabase query timed out'); })
     ]);
     if (dailyRes.data && dailyRes.data.length) {
       window.garminDailyCache = {};
@@ -6594,7 +6600,8 @@ async function loadGarminData() {
     }
     renderGarminStatus();
   } catch(e) {
-    console.warn('Garmin data load skipped (tables may not exist yet):', e.message);
+    console.warn('Garmin data load skipped:', e.message);
+    renderGarminStatus();
   }
 }
 

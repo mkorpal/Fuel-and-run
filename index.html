@@ -3491,23 +3491,70 @@ async function searchFoodDB(query) {
   return results;
 }
 
+// Strip leading quantity/unit from an ingredient line, returning just the food name
+function parseIngredientName(line) {
+  return line
+    .replace(/^\d+\.?\d*\s*(g|kg|ml|l|tbsp?|tsp?|cups?|pcs?|pieces?|slices?|x|×|oz|lb|units?|servings?)\b\.?\s*/i, '')
+    .replace(/^(a|an|some|few)\s+/i, '')
+    .trim();
+}
+
+// Look up each ingredient in Open Food Facts; returns [{query, matched, kcal, prot, carb, fat}]
+async function lookupIngredientsFromOFF(text) {
+  const lines = text.split(/[\n,;]+/).map(l => l.trim()).filter(Boolean);
+  const found = [];
+  await Promise.all(lines.slice(0, 10).map(async line => {
+    const name = parseIngredientName(line);
+    if (!name || name.length < 2) return;
+    try {
+      const res = await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(name) + '&search_simple=1&action=process&json=1&page_size=1&fields=product_name,nutriments');
+      const data = await res.json();
+      const p = (data.products || [])[0];
+      if (!p || !p.product_name) return;
+      const n = p.nutriments || {};
+      const kcal = Math.round(n['energy-kcal_100g'] || 0);
+      if (!kcal) return;
+      found.push({
+        query: name,
+        matched: p.product_name,
+        kcal,
+        prot: +(n.proteins_100g || 0).toFixed(1),
+        carb: +(n.carbohydrates_100g || 0).toFixed(1),
+        fat:  +(n.fat_100g  || 0).toFixed(1),
+      });
+    } catch(e) { /* network error — silently skip */ }
+  }));
+  return found;
+}
+
 function renderFoodSearchResults(results) {
   const el = document.getElementById('food-search-results');
   if (!results.length) {
     el.innerHTML = '<p style="font-size:.8rem; color:var(--muted);">No results found. Try a different search term.</p>';
     return;
   }
-  el.innerHTML = results.map((r, i) => `
+  const renderRow = (r, globalIdx) => `
     <div style="display:flex; align-items:center; gap:.6rem; padding:.5rem; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:.3rem; cursor:pointer; background:var(--surface);"
-         onclick="fillProductFromSearch(${i})" class="food-result-row">
+         onclick="fillProductFromSearch(${globalIdx})" class="food-result-row">
       ${r.img ? `<img src="${r.img}" style="width:36px; height:36px; border-radius:4px; object-fit:cover;" alt="" />` : '<div style="width:36px;height:36px;border-radius:4px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🥑</div>'}
       <div style="flex:1; min-width:0;">
         <div style="font-weight:600; font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}</div>
         <div style="font-size:.72rem; color:var(--muted);">${r.brand ? r.brand + ' · ' : ''}${r.kcal} kcal · ${r.prot}g P · ${r.carb}g C · ${r.fat}g F <span style="opacity:.5;">per ${r.nutrPer === 'serving' ? r.serve+'g serving' : '100g'}</span></div>
       </div>
       <span style="font-size:.65rem; color:var(--muted); background:var(--bg); padding:.1rem .35rem; border-radius:4px;">${r.source}</span>
-    </div>
-  `).join('');
+    </div>`;
+  const offResults  = results.filter(r => r.source === 'OFF');
+  const usdaResults = results.filter(r => r.source !== 'OFF');
+  let html = '';
+  if (offResults.length) {
+    html += `<div style="font-size:.71rem; font-weight:700; color:#e67e00; margin:.3rem 0 .25rem; text-transform:uppercase; letter-spacing:.04em;">🌍 Open Food Facts</div>`;
+    html += offResults.map(r => renderRow(r, results.indexOf(r))).join('');
+  }
+  if (usdaResults.length) {
+    html += `<div style="font-size:.71rem; font-weight:700; color:var(--muted); margin:.5rem 0 .25rem; text-transform:uppercase; letter-spacing:.04em;">🇺🇸 USDA</div>`;
+    html += usdaResults.map(r => renderRow(r, results.indexOf(r))).join('');
+  }
+  el.innerHTML = html;
 }
 
 window._foodSearchResults = [];
@@ -3646,14 +3693,88 @@ window.fillProductFromSuper = idx => {
   document.getElementById('p-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
 };
 
+window._offInSuperResults = [];
+
+window.fillProductFromOffSuper = idx => {
+  const r = window._offInSuperResults[idx];
+  if (!r) return;
+  const choice = prompt(
+    `Save "${r.name}" with nutritional values expressed:\n\nType "100g" for per-100g\nType "each" for per-single-item/serving`,
+    '100g'
+  );
+  if (choice === null) return;
+  const isEach = choice.toLowerCase().includes('each') || choice.toLowerCase().includes('serv');
+  document.getElementById('p-name').value = r.name;
+  document.getElementById('p-brand').value = r.brand || '';
+  if (isEach) {
+    document.getElementById('p-serve').value = r.serve || '';
+    document.getElementById('p-nutr-per').value = 'serving';
+  } else {
+    document.getElementById('p-serve').value = '';
+    document.getElementById('p-nutr-per').value = '100g';
+  }
+  updateNutrLabels();
+  document.getElementById('p-kcal').value = r.kcal;
+  document.getElementById('p-prot').value = r.prot;
+  document.getElementById('p-carb').value = r.carb;
+  document.getElementById('p-fat').value = r.fat;
+  document.getElementById('p-cat').value = guessCategory(r.name, r.cats || '');
+  document.getElementById('super-search-results').innerHTML = `<p style="font-size:.8rem; color:var(--accent);">✔ Open Food Facts data filled (${isEach ? 'per serving' : 'per 100g'}) — edit if needed, then save.</p>`;
+  document.getElementById('product-modal-section-add').style.display = 'block';
+  document.getElementById('p-name').scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
 document.getElementById('btn-super-search').addEventListener('click', async () => {
   const q = document.getElementById('super-search-input').value.trim();
   if (!q) return;
   const el = document.getElementById('super-search-results');
-  el.innerHTML = '<p style="font-size:.8rem; color:var(--muted);">⏳ Searching Woolworths &amp; Coles…</p>';
-  const results = await searchSupermarkets(q);
-  window._superSearchResults = results;
-  renderSuperSearchResults(results);
+  el.innerHTML = '<p style="font-size:.8rem; color:var(--muted);">⏳ Searching Open Food Facts &amp; stores…</p>';
+  const [allOffResults, superResults] = await Promise.all([
+    searchFoodDB(q),
+    searchSupermarkets(q)
+  ]);
+  const offResults = allOffResults.filter(r => r.source === 'OFF');
+  window._offInSuperResults = offResults;
+  window._superSearchResults = superResults;
+  let html = '';
+  if (offResults.length) {
+    html += `<div style="font-size:.71rem; font-weight:700; color:#e67e00; margin:.3rem 0 .25rem; text-transform:uppercase; letter-spacing:.04em;">🌍 Open Food Facts</div>`;
+    html += offResults.map((r, i) => `
+    <div style="display:flex; align-items:center; gap:.6rem; padding:.5rem; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:.3rem; cursor:pointer; background:var(--surface);"
+         onclick="fillProductFromOffSuper(${i})" class="food-result-row">
+      ${r.img ? `<img src="${r.img}" style="width:36px; height:36px; border-radius:4px; object-fit:cover;" alt="" onerror="this.style.display='none'" />` : '<div style="width:36px;height:36px;border-radius:4px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🌍</div>'}
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}${r.brand ? ' · ' + r.brand : ''}</div>
+        <div style="font-size:.72rem; color:var(--muted);">${r.kcal} kcal · ${r.prot}g P · ${r.carb}g C · ${r.fat}g F per 100g</div>
+      </div>
+      <span style="font-size:.65rem; color:#fff; background:#e67e00; padding:.1rem .35rem; border-radius:4px;">OFF</span>
+    </div>`).join('');
+  }
+  if (superResults.length) {
+    const storeColors = { Woolworths: '#1a8a3f', Coles: '#e01a22' };
+    html += `<div style="font-size:.71rem; font-weight:700; color:#1a8a3f; margin:.5rem 0 .25rem; text-transform:uppercase; letter-spacing:.04em;">🛒 Woolworths &amp; Coles</div>`;
+    html += superResults.map((r, i) => {
+      const hasNutrition = r.kcal > 0;
+      const nutritionLine = hasNutrition
+        ? `${r.kcal} kcal · ${r.prot}g P · ${r.carb}g C · ${r.fat}g F <span style="opacity:.5;">per ${r.serve}g</span>`
+        : '<span style="color:var(--accent2);">Nutrition not available — you can edit after adding</span>';
+      return `
+    <div style="display:flex; align-items:center; gap:.6rem; padding:.5rem; border:1px solid var(--border); border-radius:var(--radius); margin-bottom:.3rem; cursor:pointer; background:var(--surface);"
+         onclick="fillProductFromSuper(${i})" class="food-result-row">
+      ${r.img ? `<img src="${r.img}" style="width:36px; height:36px; border-radius:4px; object-fit:cover;" alt="" onerror="this.style.display='none'" />` : '<div style="width:36px;height:36px;border-radius:4px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:1.2rem;">🛒</div>'}
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:600; font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.name}</div>
+        <div style="font-size:.72rem; color:var(--muted);">${r.brand ? r.brand + ' · ' : ''}${nutritionLine}</div>
+      </div>
+      <span style="font-size:.65rem; color:#fff; background:${storeColors[r.store] || 'var(--muted)'}; padding:.1rem .35rem; border-radius:4px; white-space:nowrap;">${r.store}</span>
+    </div>`;
+    }).join('');
+  }
+  if (!html) {
+    el.innerHTML = '<p style="font-size:.8rem; color:var(--muted);">No results found. Try a different search term.</p>';
+    return;
+  }
+  el.innerHTML = html;
 });
 
 document.getElementById('super-search-input').addEventListener('keydown', e => {
@@ -5223,15 +5344,23 @@ document.getElementById('btn-ai-analyse-ingredients').addEventListener('click', 
   const statusEl = document.getElementById('ai-ingredients-status');
   const previewEl = document.getElementById('ai-ingredients-preview');
   if (!ingredients) { statusEl.textContent = '⚠️ Please describe your ingredients first.'; return; }
-  statusEl.textContent = '⏳ Analysing with AI…';
+  statusEl.textContent = '⏳ Looking up ingredients in Open Food Facts…';
   previewEl.style.display = 'none';
   try {
-    const prompt = `You are a sports dietitian assistant. Estimate the nutritional content of a meal with these ingredients:\n\n${ingredients}\n\nTotal finished meal weight: ${servingW ? servingW + 'g' : 'estimate based on ingredients'}.\n\nRespond ONLY with a single JSON object (no extra text) with these keys:\n{"serving_g": <number>, "kcal": <number>, "protein_g": <number>, "carbs_g": <number>, "fat_g": <number>, "notes": "<brief notes>"}\n\nAll numbers are for the WHOLE meal (the given serving weight). Be accurate for a sports nutrition context.`;
+    const offData = await lookupIngredientsFromOFF(ingredients);
+    const offContext = offData.length
+      ? '\n\nOpen Food Facts reference data (per 100g — use as primary source for these ingredients):\n' +
+        offData.map(d => `- "${d.query}" → ${d.matched}: ${d.kcal} kcal, ${d.prot}g protein, ${d.carb}g carbs, ${d.fat}g fat`).join('\n')
+      : '';
+    statusEl.textContent = '⏳ Analysing with AI…';
+    const prompt = `You are a sports dietitian assistant. Estimate the nutritional content of a meal with these ingredients:\n\n${ingredients}${offContext}\n\nTotal finished meal weight: ${servingW ? servingW + 'g' : 'estimate based on ingredients'}.\n\nRespond ONLY with a single JSON object (no extra text) with these keys:\n{"serving_g": <number>, "kcal": <number>, "protein_g": <number>, "carbs_g": <number>, "fat_g": <number>, "notes": "<brief notes>"}\n\nAll numbers are for the WHOLE meal (the given serving weight). Where Open Food Facts data is provided above, use it as your primary nutrition reference.`;
     const text = await callClaude(prompt);
     const result = parseAiNutritionJson(text);
     applyAiNutritionToManual(result);
     renderAiPreview('ai-ingredients-preview', result);
-    statusEl.textContent = '✅ Done! Values filled in — click "Edit & Save" to review.';
+    statusEl.textContent = offData.length
+      ? `✅ Done! Used Open Food Facts data for ${offData.length} ingredient(s). Click "Edit & Save" to review.`
+      : '✅ Done! Values filled in — click "Edit & Save" to review.';
   } catch (e) {
     statusEl.textContent = '❌ ' + e.message;
   }

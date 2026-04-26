@@ -9,9 +9,9 @@ on:
         required: false
         default: '7'
 
-  # Also runs automatically every day at 06:00 UTC
+  # Runs every 3 hours to keep today's active_kcal current
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '0 */3 * * *'
 
 jobs:
   sync:
@@ -36,5 +36,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: |
-          DAYS="${{ github.event.inputs.days_back || '7' }}"
+          # Scheduled runs: sync only today (keeps data fresh, avoids unnecessary API calls)
+          # Manual dispatch: use the specified days_back (default 7 for historical sync)
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            DAYS=2
+          else
+            DAYS="${{ github.event.inputs.days_back || '7' }}"
+          fi
           python scripts/sync_garmin_to_supabase.py $DAYS

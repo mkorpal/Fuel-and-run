@@ -735,10 +735,12 @@
           const exBurn = wSess.filter(s => s.day === dayIdx).reduce((sum, s) => sum + estimateBurn(s), 0);
           // Prefer Garmin projected kcal (actual Garmin full-day total) over estimated RMR+exercise
           const gd = window.garminDailyCache && window.garminDailyCache[viewedDate];
-          const tdee = (gd && gd.projected_kcal > 0) ? gd.projected_kcal : (rmr + exBurn);
+          const tdee = (gd && gd.projected_kcal > 0) ? gd.projected_kcal
+                     : (gd && gd.resting_kcal > 0) ? (gd.resting_kcal + (gd.active_kcal || 0))
+                     : (rmr + exBurn);
           const restingKcal = (gd && gd.resting_kcal > 0) ? gd.resting_kcal : rmr;
           const activeKcal  = (gd && gd.active_kcal  > 0) ? gd.active_kcal  : exBurn;
-          const hasGarmin = !!(gd && gd.projected_kcal > 0);
+          const hasGarmin = !!(gd && (gd.projected_kcal > 0 || gd.resting_kcal > 0));
           const splitLine = hasGarmin
             ? `<div style="font-size:.74rem; color:var(--muted); margin-top:.15rem;">💤 ${restingKcal.toLocaleString()} rest + ⚡ ${activeKcal.toLocaleString()} active = ${tdee.toLocaleString()} total kcal</div>`
             : '';
@@ -2800,6 +2802,22 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
 
   const ap = activeProfile();
   const cls = classifyWorkout(s);
+
+  // Polish running term detection — enrich insight with coach methodology context
+  {
+    const tu = (s.title || '').toUpperCase();
+    const polishTerms = [
+      { re: /\bBC1\b/, note: 'This workout is labelled **BC1** (Bieg Ciągły 1 — Easy Continuous Run), a Polish coaching term for Zone 1–2 aerobic base work. BC1 should feel fully conversational. If HR or pace was higher than easy zone today, aim to slow down next time.' },
+      { re: /\bBC2\b/, note: 'Labelled **BC2** (Bieg Ciągły 2 — Steady Continuous Run): upper Zone 2 to Zone 3 aerobic effort, comfortably sustainable but not easy. Good for building general aerobic fitness above base pace.' },
+      { re: /\bWT\b/,  note: 'Labelled **WT** (Wytrzymałość Tempowa — Tempo Endurance): sustained running at or near lactate threshold, analogous to Daniels\' T-pace. Target HR 80–88% max. Validates if avg pace aligns with your half-marathon race pace.' },
+      { re: /\bWS\b/,  note: 'Labelled **WS** (Wytrzymałość Szybkościowa — Speed Endurance): fast sustained effort at or above 10k race pace, targeting upper aerobic / VO₂max zone. Target HR 88–95% max — a high-quality session requiring 48 h recovery.' },
+      { re: /\bBPG\b/, note: 'Labelled **BPG** (Bieg Pod Górę — Uphill/Hill Running): strength-focused hill work. Pace per km will be slower than flat runs but HR and muscular load are significantly higher — do not compare pace to flat-run benchmarks. Builds leg strength, running economy, and is excellent for marathon/trail preparation.' },
+      { re: /\bRTM\b/, note: 'Labelled **RTM** (Rytm Tempowy Maratonu — Marathon Tempo Rhythm): controlled running at marathon race pace, targeting ~75–83% max HR. Trains lactate clearance at goal pace and is a cornerstone of marathon-specific preparation.' },
+    ];
+    for (const { re, note } of polishTerms) {
+      if (re.test(tu)) { cls.purpose += ' ' + note; break; }
+    }
+  }
   const laps = s.laps || [];
   const hrMax = ap.age ? Math.round(220 - ap.age) : 190;
   const goal = ap.trainingGoal || '';
@@ -2815,7 +2833,18 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
   if (goal) html += `<span style="font-size:.72rem; color:var(--muted); margin-left:.5rem;">🎯 ${goalLabels[goal] || goal}</span>`;
   html += `<div class="wo-purpose">${cls.purpose}</div>`;
 
-  // Summary stats
+  // Energy level selector (Garmin activities only)
+  if (s.garminId) {
+    const el = s.energyLevel || 0;
+    const levelLabels = ['', '😴 Drained', '😓 Tired', '😐 Neutral', '😊 Good', '💪 Peak'];
+    html += `<div style="margin:.35rem 0 .5rem; padding:.45rem .6rem; border:1px solid var(--border); border-radius:8px;">
+      <div style="font-size:.7rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:.35rem;">⚡ Energy Level${el ? ` &mdash; ${levelLabels[el]}` : ''}</div>
+      <div style="display:flex; gap:.3rem;">
+        ${[1,2,3,4,5].map(n => `<button onclick="window.saveEnergyLevel('${s.garminId}',${dayIdx},${n})" style="flex:1; padding:.3rem; border:1.5px solid ${el===n ? 'var(--accent)' : 'var(--border)'}; border-radius:6px; background:${el===n ? 'var(--accent)' : 'var(--surface)'}; color:${el===n ? '#fff' : 'var(--muted)'}; cursor:pointer; font-size:.85rem; font-weight:700;">${n}</button>`).join('')}
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:.66rem; color:var(--muted); margin-top:.2rem;"><span>Lowest</span><span>Highest</span></div>
+    </div>`;
+  }
   html += `<div class="wo-summary">`;
   if (s.dist) html += `<div class="wo-stat"><span class="wo-stat-label">Distance</span><span class="wo-stat-val">${s.dist} km</span></div>`;
   if (s.dur) html += `<div class="wo-stat"><span class="wo-stat-label">Duration</span><span class="wo-stat-val">${s.dur} min</span></div>`;
@@ -2897,7 +2926,7 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
 
     html += `<div style="margin-top:.8rem; font-size:.75rem; font-weight:700; text-transform:uppercase; color:var(--muted);">Splits (${laps.length} laps)</div>`;
     html += `<table class="splits-table"><thead><tr>
-      <th>#</th><th>Dist</th><th>Time</th><th>Pace</th><th></th><th>HR</th>${laps.some(l => l.avgCadence) ? '<th>Cad</th>' : ''}${laps.some(l => l.ascent) ? '<th>↑m</th>' : ''}
+      <th>#</th><th>Dist</th><th>Time</th><th>Pace</th><th></th><th>HR</th>${laps.some(l => l.ascent) ? '<th>↑m</th>' : ''}
     </tr></thead><tbody>`;
 
     for (const l of laps) {
@@ -2926,7 +2955,6 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
         <td class="${paceClass}">${l.pace || '—'}</td>
         <td style="min-width:45px;">${paceBar}</td>
         <td>${l.avgHr || '—'}</td>
-        ${laps.some(la => la.avgCadence) ? `<td>${l.avgCadence ? l.avgCadence * 2 : '—'}</td>` : ''}
         ${laps.some(la => la.ascent) ? `<td>${l.ascent || '—'}</td>` : ''}
       </tr>`;
     }
@@ -2938,6 +2966,20 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
   return html;
 }
 
+
+window.saveEnergyLevel = function(garminId, dayIdx, level) {
+  const ap = activeProfile();
+  for (const sessions of Object.values(ap.weekSessions || {})) {
+    const s = sessions.find(s => s.garminId === garminId);
+    if (s) {
+      s.energyLevel = level;
+      save();
+      openWorkoutDetail(_wdCtx.weekKey, _wdCtx.dayIdx, _wdCtx.dateLabel, _wdCtx.sessionIdx);
+      return;
+    }
+  }
+  toast('Session not found');
+};
 
 function closeWorkoutDetail() {
   document.getElementById('workout-detail-overlay').classList.remove('open');
@@ -3002,7 +3044,9 @@ function renderMealGrid() {
     const daySessions = (weekSess || []).filter(s => s.day === d);
     const dayExBurn = daySessions.filter(s => s.garminId).reduce((sum, s) => sum + estimateBurn(s), 0);
     const garminDayMeal = window.garminDailyCache && window.garminDailyCache[dateKey];
-    const dayBurned = (garminDayMeal && garminDayMeal.projected_kcal > 0) ? garminDayMeal.projected_kcal : dayRmr + dayExBurn;
+    const dayBurned = (garminDayMeal && garminDayMeal.projected_kcal > 0) ? garminDayMeal.projected_kcal
+                    : (garminDayMeal && garminDayMeal.resting_kcal > 0) ? (garminDayMeal.resting_kcal + (garminDayMeal.active_kcal || 0))
+                    : dayRmr + dayExBurn;
     const pct = dayBurned > 0 ? Math.min((consumed / dayBurned) * 100, 120) : 0;
     const isOver = consumed > dayBurned && dayBurned > 0;
     const dayDeficit = consumed > 0 ? consumed - dayBurned : 0;

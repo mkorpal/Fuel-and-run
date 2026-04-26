@@ -1381,23 +1381,22 @@ function garminProjectedKcal(ds) {
   const gd = cache[ds];
   if (!gd) return null;
   const todayStr = dateStr(new Date());
+  // Always use resting_kcal + active_kcal.
+  // For today: resting_kcal (bmrKilocalories) is only partial — use yesterday's completed
+  // resting_kcal as the full-day BMR proxy + today's active_kcal.
+  // For past days: use that day's own resting_kcal + active_kcal.
+  // NOTE: projected_kcal (totalKilocalories) is NOT used — it differs from the Garmin watch display.
+  let restingKcal;
   if (ds === todayStr) {
-    // For today: bmrKilocalories (resting_kcal) is only accumulated so far —
-    // use yesterday's completed resting_kcal as full-day BMR estimate + today's active_kcal.
     const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
     const ygd = cache[dateStr(yesterday)];
-    const restingKcal = (ygd && ygd.resting_kcal > 0) ? ygd.resting_kcal : (gd.resting_kcal || 0);
-    if (restingKcal <= 0 && !(gd.active_kcal > 0)) return null;
-    return (restingKcal || 0) + (gd.active_kcal || 0);
+    restingKcal = (ygd && ygd.resting_kcal > 0) ? ygd.resting_kcal : (gd.resting_kcal || 0);
   } else {
-    // For a completed past day: prefer projected_kcal (totalKilocalories — the definitive Garmin total),
-    // fall back to resting + active if projected is missing.
-    if (gd.projected_kcal > 0) return gd.projected_kcal;
-    const resting = gd.resting_kcal || 0;
-    const active  = gd.active_kcal  || 0;
-    if (resting <= 0 && active <= 0) return null;
-    return resting + active;
+    restingKcal = gd.resting_kcal || 0;
   }
+  const activeKcal = gd.active_kcal || 0;
+  if (restingKcal <= 0 && activeKcal <= 0) return null;
+  return restingKcal + activeKcal;
 }
 
 // Passphrase-based sync key: user sets a memorable word/phrase, same on all devices

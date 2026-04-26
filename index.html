@@ -723,8 +723,6 @@
           const ap = activeProfile();
           const logEntry = (ap.dailyLog || []).find(l => l.date === viewedDate);
           const consumed = logEntry ? (logEntry.consumed || 0) : 0;
-          // Use weekOffset=0 snapshot for dailyTargets (it reads weekOffset internally via sessionsForDay)
-          // We temporarily swap weekOffset to match the viewed week if needed — simpler: compute inline
           const dd = new Date(viewedDate + 'T12:00:00');
           const mon = new Date(dd); mon.setDate(dd.getDate() - dayIdx); mon.setHours(0,0,0,0);
           const wk = isoWeekKey(mon);
@@ -733,13 +731,21 @@
           const isFemale = ap.sex === 'female';
           const h = ap.height || 175; const age = ap.age || 35;
           const rmr = ap.rmr ? ap.rmr : (isFemale ? Math.round(10*w+6.25*h-5*age-161) : Math.round(10*w+6.25*h-5*age+5));
-          const { estimateBurn: _eb } = window; // use global if available, else inline
+          const { estimateBurn: _eb } = window;
           const exBurn = wSess.filter(s => s.day === dayIdx).reduce((sum, s) => sum + estimateBurn(s), 0);
-          const tdee = rmr + exBurn;
+          // Prefer Garmin projected kcal (actual Garmin full-day total) over estimated RMR+exercise
+          const gd = window.garminDailyCache && window.garminDailyCache[viewedDate];
+          const tdee = (gd && gd.projected_kcal > 0) ? gd.projected_kcal : (rmr + exBurn);
+          const restingKcal = (gd && gd.resting_kcal > 0) ? gd.resting_kcal : rmr;
+          const activeKcal  = (gd && gd.active_kcal  > 0) ? gd.active_kcal  : exBurn;
+          const hasGarmin = !!(gd && gd.projected_kcal > 0);
+          const splitLine = hasGarmin
+            ? `<div style="font-size:.74rem; color:var(--muted); margin-top:.15rem;">💤 ${restingKcal.toLocaleString()} rest + ⚡ ${activeKcal.toLocaleString()} active = ${tdee.toLocaleString()} total kcal</div>`
+            : '';
           const el = document.getElementById('plate-deficit');
           if (!el) return;
           if (consumed === 0) {
-            el.innerHTML = `<span style="color:var(--muted);">No intake logged yet · TDEE ${tdee.toLocaleString()} kcal</span>`;
+            el.innerHTML = `<span style="color:var(--muted);">No intake logged yet · TDEE ${tdee.toLocaleString()} kcal</span>${splitLine}`;
             return;
           }
           const balance = consumed - tdee;
@@ -747,7 +753,7 @@
           const balLabel = balance <= 0
             ? `Deficit: <b>${Math.abs(balance).toLocaleString()} kcal</b>`
             : `Surplus: <b>+${balance.toLocaleString()} kcal</b>`;
-          el.innerHTML = `<span style="color:${balColor};">${balLabel}</span><span style="font-size:.79rem; color:var(--muted);"> · ${consumed.toLocaleString()} / ${tdee.toLocaleString()} kcal burned</span>`;
+          el.innerHTML = `<span style="color:${balColor};">${balLabel}</span><span style="font-size:.79rem; color:var(--muted);"> · ${consumed.toLocaleString()} / ${tdee.toLocaleString()} kcal burned</span>${splitLine}`;
         }
         </script>
         <div id="plate-tab-totals" style="margin-top:1rem;"></div>
@@ -1130,6 +1136,29 @@
         </div>
       </div>
 
+      <!-- ── Garmin Connect ──────────────────────── -->
+      <div class="card" style="border-left: 4px solid #007ac1;">
+        <div class="card-title" style="display:flex; align-items:center; gap:.5rem;">
+          <span style="font-size:1.15rem;">⌚</span>
+          Garmin Connect
+        </div>
+        <div id="garmin-status" style="font-size:.82rem; color:var(--muted); margin-bottom:.6rem;">
+          Checking…
+        </div>
+        <p style="font-size:.78rem; color:var(--muted); margin-bottom:.5rem; line-height:1.5;">
+          Syncs steps, projected calories (resting + active), and workouts with HR &amp; pace per split directly from Garmin Connect.
+          Run once to set up, then run again whenever you want to refresh.
+        </p>
+        <div style="background:var(--surface2); border-radius:6px; padding:.5rem .7rem; font-size:.76rem; color:var(--muted); margin-bottom:.6rem;">
+          <strong>One-time setup:</strong><br>
+          1. Run <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">pip install garth supabase python-dotenv</code><br>
+          2. Copy <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">.env.example</code> → <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">.env</code> in the scripts folder and fill in credentials<br>
+          3. In Supabase SQL Editor, run <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">setup_garmin_tables.sql</code><br>
+          4. Run <code style="background:rgba(255,255,255,.08); padding:.1rem .3rem; border-radius:3px;">python sync_garmin_to_supabase.py 14</code> (syncs last 14 days)
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btn-garmin-refresh">🔄 Refresh from Supabase</button>
+      </div>
+
     </section>
   <footer>Fuel &amp; Run — personalised nutrition for active lifestyles · Data stored locally in your browser only</footer>
 </div>
@@ -1345,6 +1374,10 @@ function activeProfile() {
 const SUPABASE_URL  = 'https://etoyshpywiidfrejvggg.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0b3lzaHB5d2lpZGZyZWp2Z2dnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzNzg0OTQsImV4cCI6MjA5MDk1NDQ5NH0.AA_H2rtrCo68ZZiaAFSn-pg2gV2ZmhLk8AMt8SGTzeE';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Garmin data cache — populated by loadGarminData() on startup
+window.garminDailyCache = {};      // date (YYYY-MM-DD) → {steps, resting_kcal, active_kcal, projected_kcal, resting_hr}
+window.garminActivitiesCache = []; // raw DB rows, imported into weekSessions
 
 // Passphrase-based sync key: user sets a memorable word/phrase, same on all devices
 function normalisePassphrase(raw) {
@@ -2375,6 +2408,17 @@ document.getElementById('btn-strava-disconnect').addEventListener('click', () =>
 // Sync button (in My Week header)
 document.getElementById('btn-strava-sync').addEventListener('click', () => {
   stravaSyncActivities();
+});
+
+// Garmin refresh button
+document.getElementById('btn-garmin-refresh').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-garmin-refresh');
+  btn.disabled = true;
+  btn.textContent = '⏳ Loading…';
+  await loadGarminData();
+  btn.disabled = false;
+  btn.textContent = '🔄 Refresh from Supabase';
+  toast('Garmin data refreshed');
 });
 
 // ============================================================
@@ -5083,13 +5127,34 @@ function renderDashboard() {
   const rmr = ap.rmr ? ap.rmr : (isFemale
     ? Math.round(10*w + 6.25*h - 5*age - 161)
     : Math.round(10*w + 6.25*h - 5*age + 5));
-  const kcalBurned = rmr * daysElapsed + exerciseBurn;
+  // kcalBurned: use Garmin projected kcal per day where available, fall back to RMR+exercise
+  let kcalBurned = 0;
+  for (let _d = 0; _d < daysElapsed; _d++) {
+    const _dt = new Date(monday); _dt.setDate(monday.getDate() + _d);
+    const _gd = window.garminDailyCache && window.garminDailyCache[dateStr(_dt)];
+    if (_gd && _gd.projected_kcal > 0) {
+      kcalBurned += _gd.projected_kcal;
+    } else {
+      const _daySess = weekSessions.filter(s => s.day === _d);
+      kcalBurned += rmr + _daySess.reduce((a, s) => a + estimateBurn(s), 0);
+    }
+  }
+
   const runKm = sessionsThisWeek.filter(s => s.type === 'run').reduce((a, s) => a + (s.dist || 0), 0);
   const strengthMins = sessionsThisWeek.filter(s => s.type === 'strength').reduce((a, s) => a + (s.dur || 0), 0);
   const pushups = sessionsThisWeek.filter(s => s.type === 'pushups').reduce((a, s) => a + (s.reps || 0), 0);
   const breathworkMins = sessionsThisWeek.filter(s => s.type === 'breathwork').reduce((a, s) => a + (s.dur || 0), 0);
   const meditationMins = sessionsThisWeek.filter(s => s.type === 'meditation').reduce((a, s) => a + (s.dur || 0), 0);
-  const walkKm = sessionsThisWeek.filter(s => s.type === 'walk').reduce((a, s) => a + (s.dist || 0), 0);
+
+  // Average steps/day from Garmin (this week)
+  let totalStepsWeek = 0, stepsCount = 0;
+  for (let _d = 0; _d < daysElapsed; _d++) {
+    const _dt = new Date(monday); _dt.setDate(monday.getDate() + _d);
+    const _gd = window.garminDailyCache && window.garminDailyCache[dateStr(_dt)];
+    if (_gd && _gd.steps > 0) { totalStepsWeek += _gd.steps; stepsCount++; }
+  }
+  const avgStepsDay = stepsCount > 0 ? Math.round(totalStepsWeek / stepsCount) : null;
+  const stepsLabel = avgStepsDay !== null ? avgStepsDay.toLocaleString() : '—';
 
   // Consumed + macros from dailyLog this week
   const log = ap.dailyLog || [];
@@ -5123,7 +5188,7 @@ function renderDashboard() {
     <div class="dash-section-label">🏃 Activity</div>
     <div class="targets-grid">
       <div class="target-card"><div class="target-val">${runKm.toFixed(1)} km</div><div class="target-label">run</div></div>
-      <div class="target-card"><div class="target-val">${walkKm.toFixed(1)} km</div><div class="target-label">walk</div></div>
+      <div class="target-card"><div class="target-val">${stepsLabel}</div><div class="target-label">avg steps/day</div></div>
       <div class="target-card"><div class="target-val">${strengthMins} min</div><div class="target-label">strength</div></div>
       <div class="target-card"><div class="target-val">${pushups}</div><div class="target-label">push-ups</div></div>
       <div class="target-card"><div class="target-val">${breathworkMins} min</div><div class="target-label">breathwork</div></div>
@@ -6701,11 +6766,125 @@ document.getElementById('btn-toggle-pass').addEventListener('click', () => {
   else { inp.type = 'password'; btn.textContent = '👁️'; btn.title = 'Show password'; }
 });
 
+// ============================================================
+// GARMIN DATA LOADING
+// ============================================================
+
+async function loadGarminData() {
+  try {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    const cutoffStr = dateStr(cutoff);
+    const [dailyRes, activitiesRes] = await Promise.all([
+      sb.from('garmin_daily').select('*').gte('date', cutoffStr).order('date', { ascending: false }),
+      sb.from('garmin_activities').select('*').gte('date', cutoffStr).order('date', { ascending: false }),
+    ]);
+    if (dailyRes.data && dailyRes.data.length) {
+      window.garminDailyCache = {};
+      dailyRes.data.forEach(d => { window.garminDailyCache[d.date] = d; });
+      renderDashboard();
+      renderPlateTab();
+    }
+    if (activitiesRes.data && activitiesRes.data.length) {
+      window.garminActivitiesCache = activitiesRes.data;
+      importGarminActivities(activitiesRes.data);
+    }
+    renderGarminStatus();
+  } catch(e) {
+    console.warn('Garmin data load skipped (tables may not exist yet):', e.message);
+  }
+}
+
+function importGarminActivities(activities) {
+  const ap = activeProfile();
+  if (!ap.weekSessions) ap.weekSessions = {};
+  let imported = 0;
+
+  for (const act of activities) {
+    if (!act.date || !act.activity_id) continue;
+
+    // Parse start time — use start_time_local for accurate day assignment, strip trailing Z
+    let startLocal = new Date(act.date + 'T12:00:00');
+    if (act.start_time_local) {
+      const parsed = new Date(act.start_time_local.replace(/Z$/i, ''));
+      if (!isNaN(parsed.getTime())) startLocal = parsed;
+    }
+    const dayMon0 = (startLocal.getDay() + 6) % 7;
+    const monday = new Date(startLocal);
+    monday.setDate(startLocal.getDate() - dayMon0);
+    monday.setHours(0, 0, 0, 0);
+    const weekKey = isoWeekKey(monday);
+
+    if (!ap.weekSessions[weekKey]) ap.weekSessions[weekKey] = [];
+
+    // Skip if already imported and up to date
+    const existing = ap.weekSessions[weekKey].find(x => x.garminId && x.garminId === act.activity_id);
+    if (existing && existing.updatedAt && existing.updatedAt >= (act.updated_at || '')) continue;
+
+    // Remove stale entry for this activity from all weeks
+    for (const wk of Object.keys(ap.weekSessions)) {
+      ap.weekSessions[wk] = ap.weekSessions[wk].filter(x => !(x.garminId && x.garminId === act.activity_id));
+    }
+    if (!ap.weekSessions[weekKey]) ap.weekSessions[weekKey] = [];
+
+    let laps = [];
+    try { laps = typeof act.laps === 'string' ? JSON.parse(act.laps) : (act.laps || []); } catch(_e) {}
+
+    const distKm = act.distance_m ? +(act.distance_m / 1000).toFixed(2) : 0;
+    const durMin  = act.duration_s ? Math.round(act.duration_s / 60) : 0;
+    const avgHr   = act.avg_hr || null;
+    const maxHrV  = act.max_hr || null;
+
+    ap.weekSessions[weekKey].push({
+      day:          dayMon0,
+      type:         act.type || 'cross',
+      dist:         distKm,
+      dur:          durMin,
+      intensity:    fitIntensity(avgHr, maxHrV),
+      title:        act.name || act.type || 'Activity',
+      calories:     act.calories || null,
+      avgHr,
+      maxHr:        maxHrV,
+      pace:         formatPace(act.avg_speed_ms),
+      avgCadence:   act.avg_cadence ? Math.round(act.avg_cadence) : null,
+      totalAscent:  act.total_ascent || null,
+      totalDescent: act.total_descent || null,
+      laps,
+      garminId:     act.activity_id,
+      startDate:    act.start_time_local || act.date,
+      updatedAt:    act.updated_at || new Date().toISOString(),
+    });
+    imported++;
+  }
+
+  if (imported > 0) {
+    save();
+    renderAll();
+  }
+}
+
+function renderGarminStatus() {
+  const el = document.getElementById('garmin-status');
+  if (!el) return;
+  const cache = window.garminDailyCache || {};
+  const dates = Object.keys(cache).sort().reverse();
+  if (!dates.length) {
+    el.innerHTML = '⚠️ No Garmin data found. Run the Python sync script, then click Refresh.';
+    return;
+  }
+  const latest = dates[0];
+  const gd = cache[latest];
+  const stepsStr = gd.steps ? gd.steps.toLocaleString() + ' steps' : '';
+  const kcalStr  = gd.projected_kcal ? gd.projected_kcal.toLocaleString() + ' kcal' : '';
+  el.innerHTML = `✅ Garmin synced — latest: <strong>${latest}</strong>${stepsStr ? ' · ' + stepsStr : ''}${kcalStr ? ' · ' + kcalStr + ' projected' : ''}`;
+}
+
 function initApp() {
   load();
   renderAll();
   renderStravaUI();
   handleStravaOAuthRedirect();
+  loadGarminData();
 }
 
 function doLogout() {

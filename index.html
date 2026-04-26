@@ -1381,17 +1381,23 @@ function garminProjectedKcal(ds) {
   const gd = cache[ds];
   if (!gd) return null;
   const todayStr = dateStr(new Date());
-  let restingKcal;
   if (ds === todayStr) {
-    // Use yesterday's completed resting_kcal as the full-day BMR estimate for today
+    // For today: bmrKilocalories (resting_kcal) is only accumulated so far —
+    // use yesterday's completed resting_kcal as full-day BMR estimate + today's active_kcal.
     const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
     const ygd = cache[dateStr(yesterday)];
-    restingKcal = (ygd && ygd.resting_kcal > 0) ? ygd.resting_kcal : (gd.resting_kcal || 0);
+    const restingKcal = (ygd && ygd.resting_kcal > 0) ? ygd.resting_kcal : (gd.resting_kcal || 0);
+    if (restingKcal <= 0 && !(gd.active_kcal > 0)) return null;
+    return (restingKcal || 0) + (gd.active_kcal || 0);
   } else {
-    restingKcal = gd.resting_kcal || 0;
+    // For a completed past day: prefer projected_kcal (totalKilocalories — the definitive Garmin total),
+    // fall back to resting + active if projected is missing.
+    if (gd.projected_kcal > 0) return gd.projected_kcal;
+    const resting = gd.resting_kcal || 0;
+    const active  = gd.active_kcal  || 0;
+    if (resting <= 0 && active <= 0) return null;
+    return resting + active;
   }
-  if (restingKcal <= 0) return null;
-  return restingKcal + (gd.active_kcal || 0);
 }
 
 // Passphrase-based sync key: user sets a memorable word/phrase, same on all devices
@@ -2030,21 +2036,23 @@ document.getElementById('btn-garmin-full-sync').addEventListener('click', async 
   });
 });
 
-// Garmin refresh button (in My Week header) — triggers full sync if token available, else just pulls from Supabase
+// Garmin refresh button (in My Week header) — always pulls from Supabase immediately,
+// then triggers a full Garmin sync if a GitHub token is available.
 document.getElementById('btn-garmin-week-sync').addEventListener('click', async () => {
   const btn = document.getElementById('btn-garmin-week-sync');
+  btn.disabled = true; btn.textContent = '⏳ Loading…';
+  // Always refresh from Supabase first so already-synced data appears immediately
+  await loadGarminData();
   const token = getGarminGhToken();
   if (token) {
-    btn.disabled = true; btn.textContent = '⏳ Syncing…';
+    btn.textContent = '⏳ Syncing…';
     const ok = await triggerGarminSync(7);
     if (ok) {
-      toast('✅ Garmin sync triggered (~90s) — loading when ready');
+      toast('✅ Garmin sync triggered (~90s) — data already refreshed from last sync');
       setTimeout(async () => { await loadGarminData(); btn.disabled = false; btn.textContent = '🔄 Garmin'; }, 100000);
       return;
     }
   }
-  btn.disabled = true; btn.textContent = '⏳ Loading…';
-  await loadGarminData();
   btn.disabled = false; btn.textContent = '🔄 Garmin';
 });
 
@@ -6576,6 +6584,9 @@ async function loadGarminData() {
       dailyRes.data.forEach(d => { window.garminDailyCache[d.date] = d; });
       renderDashboard();
       renderPlateTab();
+      renderWeekGrid();
+      renderCalorieChart();
+      renderGarminStatus();
     }
     if (activitiesRes.data && activitiesRes.data.length) {
       window.garminActivitiesCache = activitiesRes.data;

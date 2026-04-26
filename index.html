@@ -770,8 +770,6 @@
           <span>📅 My Week</span>
           <div style="display:flex; gap:.4rem; align-items:center;">
             <button class="btn btn-secondary btn-sm" id="btn-garmin-week-sync" style="font-size:.68rem; background:#007ac1; color:#fff; border-color:#007ac1;">🔄 Garmin</button>
-            <button class="btn btn-secondary btn-sm" id="btn-import-fit" onclick="document.getElementById('fit-input').click()" style="font-size:.68rem;">⌚ Import .fit</button>
-            <input type="file" id="fit-input" accept=".fit" multiple style="display:none" />
           </div>
         </div>
         <div class="week-nav">
@@ -1101,40 +1099,6 @@
         </div>
       </div>
 
-      <!-- ── Strava Integration ──────────────────────── -->
-      <div class="card" style="border-left: 4px solid #fc4c02;">
-        <div class="card-title" style="display:flex; align-items:center; gap:.5rem;">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="#fc4c02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066l-2.084 4.116zM7.474 13.828L12 3l4.525 10.828h-9.05z"/></svg>
-          Strava
-        </div>
-        <!-- Not connected -->
-        <div id="strava-disconnected">
-          <p style="font-size:.82rem; color:var(--muted); margin-bottom:.6rem;">
-            Connect to auto-import workouts from Strava (synced from your Garmin).
-          </p>
-          <div id="strava-setup-fields">
-            <p style="font-size:.78rem; color:var(--muted); margin-bottom:.5rem;">
-              One-time setup: create a free Strava API app at
-              <a href="https://www.strava.com/settings/api" target="_blank" style="color:var(--accent);">strava.com/settings/api</a>
-              then paste your Client ID and Secret below.
-            </p>
-            <div style="display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.5rem;">
-              <input type="text" id="strava-client-id" placeholder="Client ID" style="flex:1; min-width:80px; padding:.35rem .6rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.82rem;" />
-              <input type="password" id="strava-client-secret" placeholder="Client Secret" style="flex:2; min-width:140px; padding:.35rem .6rem; border:1px solid var(--border); border-radius:var(--radius); font-size:.82rem;" />
-            </div>
-            <button class="btn btn-primary btn-sm" id="btn-strava-connect" style="background:#fc4c02; border-color:#fc4c02;">Connect Strava</button>
-          </div>
-        </div>
-        <!-- Connected -->
-        <div id="strava-connected" style="display:none;">
-          <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; margin-bottom:.4rem;">
-            <span style="font-size:1rem;">✅</span>
-            <span style="font-size:.85rem;">Connected as <strong id="strava-athlete-name">—</strong></span>
-            <button class="btn btn-secondary btn-sm" id="btn-strava-disconnect" style="font-size:.72rem; padding:.15rem .45rem;">Disconnect</button>
-          </div>
-          <span id="strava-sync-status" style="font-size:.78rem; color:var(--muted);"></span>
-        </div>
-      </div>
 
       <!-- ── Garmin Connect ──────────────────────── -->
       <div class="card" style="border-left: 4px solid #007ac1;">
@@ -1580,42 +1544,6 @@ function applyParsed(parsed) {
     state.profiles.forEach(prof => {
       if (!prof.weekSessions) return;
 
-      // Deduplicate Strava activities across weeks — keep only the entry in the correct week
-      const seenStrava = new Map(); // stravaId → { weekKey, startDate }
-      for (const wk of Object.keys(prof.weekSessions)) {
-        for (const s of (prof.weekSessions[wk] || [])) {
-          if (!s.stravaId) continue;
-          const prev = seenStrava.get(s.stravaId);
-          if (!prev) {
-            seenStrava.set(s.stravaId, { wk, startDate: s.startDate || '' });
-          } else {
-            // Keep the one with startDate, or the one whose week matches the actual date
-            let correctWk = wk;
-            if (s.startDate) {
-              const d = new Date(s.startDate);
-              if (!isNaN(d.getTime())) {
-                const dm = (d.getDay() + 6) % 7;
-                const mon = new Date(d); mon.setDate(d.getDate() - dm); mon.setHours(0,0,0,0);
-                correctWk = isoWeekKey(mon);
-              }
-            } else if (prev.startDate) {
-              const d = new Date(prev.startDate);
-              if (!isNaN(d.getTime())) {
-                const dm = (d.getDay() + 6) % 7;
-                const mon = new Date(d); mon.setDate(d.getDate() - dm); mon.setHours(0,0,0,0);
-                correctWk = isoWeekKey(mon);
-              }
-            }
-            // Remove the duplicate from the wrong week
-            const wrongWk = correctWk === wk ? prev.wk : wk;
-            if (prof.weekSessions[wrongWk]) {
-              prof.weekSessions[wrongWk] = prof.weekSessions[wrongWk].filter(x => x.stravaId !== s.stravaId);
-            }
-            seenStrava.set(s.stravaId, { wk: correctWk, startDate: s.startDate || prev.startDate });
-          }
-        }
-      }
-
       // Remove future weeks and future days in current week
       for (const wk of Object.keys(prof.weekSessions)) {
         if (wk > curWeekKey) {
@@ -1675,7 +1603,7 @@ function mergeStates(local, remote) {
         Object.entries(obj).forEach(([wk, arr]) => {
           if (!ws[wk]) ws[wk] = {};
           (arr || []).forEach(s => {
-            const key = s.stravaId ? 'strava_' + s.stravaId : s.day + '_' + s.type + '_manual';
+            const key = s.garminId ? 'garmin_' + s.garminId : s.day + '_' + s.type + '_manual';
             const ex = ws[wk][key];
             if (!ex || (s.updatedAt || '') > (ex.updatedAt || '')) ws[wk][key] = s;
           });
@@ -1707,9 +1635,6 @@ function mergeStates(local, remote) {
     profiles: Object.values(profMap),
     products: Object.values(prodMap),
     meals: Object.values(mealMap),
-    _strava: (local._strava && local._strava.access_token) ? local._strava
-           : (remote._strava && remote._strava.access_token) ? remote._strava
-           : local._strava || remote._strava || {}
   };
 }
 
@@ -1945,22 +1870,6 @@ if (btnClearTraining) btnClearTraining.addEventListener('click', () => {
   toast('Schedule cleared');
 });
 
-// ============================================================
-// GARMIN .FIT FILE IMPORT
-// ============================================================
-let _fitParserModule = null;
-async function loadFitParser() {
-  if (_fitParserModule) return _fitParserModule;
-  _fitParserModule = (await import('https://esm.sh/fit-file-parser@2.3.3')).default;
-  return _fitParserModule;
-}
-
-function fitSportToType(sport) {
-  const map = { running: 'run', cycling: 'bike', swimming: 'swim',
-    training: 'strength', fitness_equipment: 'strength',
-    walking: 'run', hiking: 'run', trail_running: 'run' };
-  return map[sport] || 'cross';
-}
 
 function fitIntensity(avgHr, maxHr, userMaxHr) {
   if (!avgHr) return 'moderate';
@@ -2002,438 +1911,7 @@ function formatPace(speedMps) {
   return m + ':' + String(s).padStart(2, '0');
 }
 
-document.getElementById('fit-input').addEventListener('change', async (e) => {
-  const files = Array.from(e.target.files);
-  if (!files.length) return;
-  toast('Parsing ' + files.length + ' .fit file(s)…');
-  try {
-    const FitParser = await loadFitParser();
-    const ap = activeProfile();
-    if (!ap.weekSessions) ap.weekSessions = {};
-    let imported = 0;
-    const importedWeekKeys = new Set();
-
-    for (const file of files) {
-      const arrayBuf = await file.arrayBuffer();
-      const parser = new FitParser({ force: true, speedUnit: 'm/s', lengthUnit: 'm', mode: 'list' });
-      const data = await new Promise((resolve, reject) => {
-        parser.parse(arrayBuf, (err, d) => err ? reject(err) : resolve(d));
-      });
-
-      // Extract Garmin device timezone offset from activity record
-      let garminOffsetMs = null;
-      if (data.activities && data.activities.length > 0) {
-        const act = data.activities[0];
-        if (act.local_timestamp && act.timestamp) {
-          garminOffsetMs = new Date(act.local_timestamp).getTime() - new Date(act.timestamp).getTime();
-        }
-      }
-
-      const sessions = data.sessions || [];
-      const allLaps = data.laps || [];
-
-      for (const s of sessions) {
-        const startUtc = new Date(s.start_time || s.timestamp);
-        if (isNaN(startUtc.getTime())) continue;
-
-        // Determine local date using Garmin device timezone, fallback to browser TZ
-        let localYear, localMonth, localDay;
-        if (garminOffsetMs !== null) {
-          const garminLocal = new Date(startUtc.getTime() + garminOffsetMs);
-          localYear = garminLocal.getUTCFullYear();
-          localMonth = garminLocal.getUTCMonth();
-          localDay = garminLocal.getUTCDate();
-        } else {
-          localYear = startUtc.getFullYear();
-          localMonth = startUtc.getMonth();
-          localDay = startUtc.getDate();
-        }
-        const localDate = new Date(localYear, localMonth, localDay);
-        const dayMon0 = (localDate.getDay() + 6) % 7; // 0=Mon
-        const monday = new Date(localDate);
-        monday.setDate(localDate.getDate() - dayMon0);
-        monday.setHours(0, 0, 0, 0);
-        const weekKey = isoWeekKey(monday);
-
-        const distKm = s.total_distance ? +(s.total_distance / 1000).toFixed(2) : 0;
-        const durMin = s.total_elapsed_time ? Math.round(s.total_elapsed_time / 60) : 0;
-        const durSec = s.total_elapsed_time || 0;
-        const sport = fitSportToType(s.sport || 'running');
-        const avgHr = s.avg_heart_rate || s.average_heart_rate || null;
-        const maxHrVal = s.max_heart_rate || null;
-        const calories = s.total_calories || null;
-        const speedMps = s.enhanced_avg_speed || s.avg_speed || null;
-        const avgCadence = s.avg_cadence || null;
-        const totalAscent = s.total_ascent || null;
-        const totalDescent = s.total_descent || null;
-
-        // Extract laps belonging to this session (by time window)
-        const sessionEnd = new Date(startUtc.getTime() + (durSec * 1000) + 60000);
-        const laps = allLaps
-          .filter(l => {
-            const lt = new Date(l.start_time || l.timestamp);
-            return lt >= startUtc && lt <= sessionEnd;
-          })
-          .map((l, i) => ({
-            num: i + 1,
-            dist: l.total_distance ? +(l.total_distance / 1000).toFixed(3) : 0,
-            time: l.total_elapsed_time || 0,
-            avgHr: l.avg_heart_rate || null,
-            maxHr: l.max_heart_rate || null,
-            pace: formatPace(l.enhanced_avg_speed || l.avg_speed || null),
-            avgCadence: l.avg_cadence || null,
-            calories: l.total_calories || null,
-            elevation: (l.total_ascent || 0) - (l.total_descent || 0),
-            ascent: l.total_ascent || 0,
-          }));
-
-        const fitStartTime = startUtc.toISOString();
-        const session = {
-          day: dayMon0,
-          type: sport,
-          dist: distKm,
-          dur: durMin,
-          intensity: fitIntensity(avgHr, maxHrVal, 190),
-          title: (s.sport || 'Activity').charAt(0).toUpperCase() + (s.sport || 'activity').slice(1),
-          calories,
-          avgHr,
-          maxHr: maxHrVal,
-          pace: formatPace(speedMps),
-          avgCadence,
-          totalAscent,
-          totalDescent,
-          laps,
-          startTime: fitStartTime,
-          updatedAt: new Date().toISOString()
-        };
-
-        if (!ap.weekSessions[weekKey]) ap.weekSessions[weekKey] = [];
-        // Remove duplicates: same startTime (re-import) or same day+type+dist (legacy)
-        ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(x =>
-          !(x.startTime && x.startTime === fitStartTime) &&
-          !(x.day === dayMon0 && x.type === sport && x.dist === distKm && !x.stravaId && !x.startTime)
-        );
-        ap.weekSessions[weekKey].push(session);
-        importedWeekKeys.add(weekKey);
-        imported++;
-      }
-    }
-
-    // Navigate to the week of the last imported session
-    if (imported > 0 && importedWeekKeys.size > 0) {
-      const sortedImported = [...importedWeekKeys].sort();
-      const thisMonday = mondayOfOffset(0);
-      const thisWeekKey = isoWeekKey(thisMonday);
-      const targetKey = sortedImported[sortedImported.length - 1];
-      if (targetKey < thisWeekKey) {
-        const diff = Math.round((thisMonday - mondayFromWeekKey(targetKey)) / (7 * 86400000));
-        weekOffset = -diff;
-      } else if (targetKey > thisWeekKey) {
-        const diff = Math.round((mondayFromWeekKey(targetKey) - thisMonday) / (7 * 86400000));
-        weekOffset = diff;
-      } else {
-        weekOffset = 0;
-      }
-    }
-
-    // Keep legacy sessions in sync for current week
-    const curWk = isoWeekKey(mondayOfOffset(0));
-    if (ap.weekSessions[curWk]) ap.sessions = ap.weekSessions[curWk];
-
-    save(); renderAll();
-    const weekLabel = imported > 0 ? ' → ' + weekRangeLabel(mondayOfOffset(weekOffset)) : '';
-    toast('✅ Imported ' + imported + ' Garmin session(s)' + weekLabel);
-  } catch (err) {
-    console.error('FIT parse error:', err);
-    toast('❌ Failed to parse .fit file — check console');
-  }
-  e.target.value = ''; // reset so same file can be re-imported
-});
-
-// ============================================================
-// STRAVA INTEGRATION
-// ============================================================
-const STRAVA_EDGE_FN = SUPABASE_URL + '/functions/v1/strava';
-const STRAVA_REDIRECT = location.origin + location.pathname;
-
-function getStravaConfig() {
-  return state._strava || {};
-}
-function setStravaConfig(cfg) {
-  state._strava = cfg;
-  save();
-}
-
-// Strava sport type → our type
-function stravaSportToType(sportType) {
-  const map = {
-    Run: 'run', TrailRun: 'run', VirtualRun: 'run', Walk: 'run', Hike: 'run',
-    Ride: 'bike', MountainBikeRide: 'bike', VirtualRide: 'bike', EBikeRide: 'bike',
-    Swim: 'swim',
-    WeightTraining: 'strength', Workout: 'strength', Crossfit: 'strength',
-  };
-  return map[sportType] || 'cross';
-}
-
-async function stravaCall(body) {
-  const res = await fetch(STRAVA_EDGE_FN, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + SUPABASE_ANON,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error('Strava API error: ' + txt);
-  }
-  return res.json();
-}
-
-async function stravaEnsureToken() {
-  const cfg = getStravaConfig();
-  if (!cfg.access_token) throw new Error('Not connected to Strava');
-  // Refresh if token expires within 5 minutes
-  if (cfg.expires_at && cfg.expires_at < Math.floor(Date.now() / 1000) + 300) {
-    const data = await stravaCall({
-      action: 'refresh',
-      client_id: cfg.client_id,
-      client_secret: cfg.client_secret,
-      refresh_token: cfg.refresh_token,
-    });
-    if (data.errors || data.message) throw new Error(data.message || 'Refresh failed');
-    cfg.access_token = data.access_token;
-    cfg.refresh_token = data.refresh_token;
-    cfg.expires_at = data.expires_at;
-    setStravaConfig(cfg);
-  }
-  return cfg.access_token;
-}
-
-async function stravaSyncActivities() {
-  const cfg = getStravaConfig();
-  if (!cfg.access_token) return;
-  const statusEl = document.getElementById('strava-sync-status');
-  statusEl.textContent = 'Syncing…';
-
-  try {
-    const token = await stravaEnsureToken();
-    // Fetch activities from the last 8 weeks
-    const after = Math.floor(Date.now() / 1000) - (8 * 7 * 86400);
-    const activities = await stravaCall({ action: 'activities', access_token: token, after });
-
-    if (!Array.isArray(activities)) {
-      throw new Error(activities.message || 'Unexpected response');
-    }
-
-    const ap = activeProfile();
-    if (!ap.weekSessions) ap.weekSessions = {};
-    let imported = 0;
-    const importedWeekKeys = new Set();
-
-    for (const act of activities) {
-      // Strip trailing Z to prevent unwanted UTC→local timezone shift
-      // Strava's start_date_local is already in athlete's timezone but has a Z suffix
-      const startLocal = new Date((act.start_date_local || '').replace(/Z$/i, ''));
-      if (isNaN(startLocal.getTime())) continue;
-
-      const dayMon0 = (startLocal.getDay() + 6) % 7;
-      const monday = new Date(startLocal);
-      monday.setDate(startLocal.getDate() - dayMon0);
-      monday.setHours(0, 0, 0, 0);
-      const weekKey = isoWeekKey(monday);
-
-      // Check if already correctly placed in this week and up-to-date
-      if (!ap.weekSessions[weekKey]) ap.weekSessions[weekKey] = [];
-      const existing = ap.weekSessions[weekKey].find(x => x.stravaId && x.stravaId === act.id);
-      if (existing && existing.day === dayMon0 && existing.updatedAt && existing.updatedAt >= new Date(act.start_date).toISOString()) continue;
-
-      // Remove stale entries for this activity from ALL weeks (fixes prior TZ misassignment)
-      for (const wk of Object.keys(ap.weekSessions)) {
-        ap.weekSessions[wk] = ap.weekSessions[wk].filter(x => !(x.stravaId && x.stravaId === act.id));
-      }
-      if (!ap.weekSessions[weekKey]) ap.weekSessions[weekKey] = [];
-
-      const distKm = act.distance ? +(act.distance / 1000).toFixed(2) : 0;
-      const durMin = act.moving_time ? Math.round(act.moving_time / 60) : 0;
-      const sport = stravaSportToType(act.sport_type || act.type);
-      const avgHr = act.average_heartrate || null;
-      const maxHrVal = act.max_heartrate || null;
-      const speedMps = act.average_speed || null;
-
-      // Fetch laps for runs with HR data
-      let laps = [];
-      if (sport === 'run' && distKm >= 1) {
-        try {
-          const lapData = await stravaCall({ action: 'laps', activity_id: act.id, access_token: token });
-          if (Array.isArray(lapData)) {
-            laps = lapData.map((l, i) => ({
-              num: i + 1,
-              dist: l.distance ? +(l.distance / 1000).toFixed(3) : 0,
-              time: l.elapsed_time || 0,
-              avgHr: l.average_heartrate || null,
-              maxHr: l.max_heartrate || null,
-              pace: formatPace(l.average_speed || null),
-              avgCadence: l.average_cadence ? Math.round(l.average_cadence * 2) : null, // Strava reports half-cadence
-              calories: null, // Not in Strava laps
-              elevation: (l.total_elevation_gain || 0),
-              ascent: l.total_elevation_gain || 0,
-            }));
-          }
-        } catch(e) { console.warn('Lap fetch failed for', act.id, e); }
-      }
-
-      const session = {
-        day: dayMon0,
-        type: sport,
-        dist: distKm,
-        dur: durMin,
-        intensity: fitIntensity(avgHr, maxHrVal, 190),
-        title: act.name || act.sport_type || 'Activity',
-        calories: act.calories || null,
-        avgHr,
-        maxHr: maxHrVal,
-        pace: formatPace(speedMps),
-        avgCadence: act.average_cadence ? Math.round(act.average_cadence * 2) : null,
-        totalAscent: act.total_elevation_gain || null,
-        totalDescent: null,
-        laps,
-        stravaId: act.id,
-        startDate: (act.start_date_local || '').replace(/Z$/i, ''),
-        updatedAt: new Date().toISOString()
-      };
-
-      ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(x => !(x.stravaId && x.stravaId === act.id));
-      ap.weekSessions[weekKey].push(session);
-      importedWeekKeys.add(weekKey);
-      imported++;
-    }
-
-    // Navigate to most recent imported week
-    if (imported > 0 && importedWeekKeys.size > 0) {
-      const sortedImported = [...importedWeekKeys].sort();
-      const thisMonday = mondayOfOffset(0);
-      const thisWeekKey = isoWeekKey(thisMonday);
-      const targetKey = sortedImported[sortedImported.length - 1];
-      if (targetKey < thisWeekKey) {
-        const diff = Math.round((thisMonday - mondayFromWeekKey(targetKey)) / (7 * 86400000));
-        weekOffset = -diff;
-      } else if (targetKey > thisWeekKey) {
-        const diff = Math.round((mondayFromWeekKey(targetKey) - thisMonday) / (7 * 86400000));
-        weekOffset = diff;
-      } else {
-        weekOffset = 0;
-      }
-    }
-
-    const curWk = isoWeekKey(mondayOfOffset(0));
-    if (ap.weekSessions[curWk]) ap.sessions = ap.weekSessions[curWk];
-
-    cfg.lastSync = new Date().toISOString();
-    setStravaConfig(cfg);
-    save(); renderAll();
-    statusEl.textContent = 'Last sync: just now · ' + imported + ' workout(s) imported';
-    if (imported > 0) toast('✅ Synced ' + imported + ' workout(s) from Strava');
-    else toast('Strava up to date — no new workouts');
-  } catch(err) {
-    console.error('Strava sync error:', err);
-    statusEl.textContent = '⚠️ Sync failed: ' + err.message;
-    toast('❌ Strava sync failed');
-  }
-}
-
-function renderStravaUI() {
-  const cfg = getStravaConfig();
-  const connected = !!cfg.access_token;
-  document.getElementById('strava-disconnected').style.display = connected ? 'none' : '';
-  document.getElementById('strava-connected').style.display = connected ? '' : 'none';
-  const _syncBtn = document.getElementById('btn-strava-sync');
-  if (_syncBtn) _syncBtn.style.display = connected ? '' : 'none';
-  if (connected) {
-    document.getElementById('strava-athlete-name').textContent = cfg.athlete_name || 'Strava athlete';
-    const statusEl = document.getElementById('strava-sync-status');
-    if (cfg.lastSync) {
-      statusEl.textContent = 'Last sync: ' + new Date(cfg.lastSync).toLocaleString();
-    } else {
-      statusEl.textContent = 'Connected — tap Sync Strava to import workouts';
-    }
-  }
-}
-
-// Handle OAuth redirect
-function handleStravaOAuthRedirect() {
-  const params = new URLSearchParams(location.search);
-  const code = params.get('code');
-  const scope = params.get('scope');
-  if (!code) return;
-  // Clean URL
-  history.replaceState({}, '', location.pathname);
-  // Need client_id from stored config
-  const cfg = getStravaConfig();
-  if (!cfg.client_id) {
-    toast('Strava authorization received but no Client ID stored — please reconnect');
-    return;
-  }
-  toast('Completing Strava connection…');
-  stravaCall({ action: 'exchange', client_id: cfg.client_id, client_secret: cfg.client_secret, code })
-    .then(data => {
-      if (data.errors || !data.access_token) {
-        toast('❌ Strava auth failed: ' + (data.message || 'unknown error'));
-        return;
-      }
-      cfg.access_token = data.access_token;
-      cfg.refresh_token = data.refresh_token;
-      cfg.expires_at = data.expires_at;
-      cfg.athlete_name = data.athlete ? (data.athlete.firstname + ' ' + data.athlete.lastname) : 'Connected';
-      setStravaConfig(cfg);
-      renderStravaUI();
-      toast('✅ Strava connected! Tap "Sync Strava" to import workouts.');
-      // Auto-sync on first connect
-      stravaSyncActivities();
-    })
-    .catch(err => {
-      console.error('Strava exchange error:', err);
-      toast('❌ Strava connection failed — check console');
-    });
-}
-
-// Connect button
-document.getElementById('btn-strava-connect').addEventListener('click', () => {
-  const clientId = document.getElementById('strava-client-id').value.trim();
-  const clientSecret = document.getElementById('strava-client-secret').value.trim();
-  if (!clientId) { toast('Enter your Strava Client ID'); return; }
-  if (!clientSecret) { toast('Enter your Strava Client Secret'); return; }
-  // Store both — secret is needed for token exchange & refresh
-  setStravaConfig({ client_id: clientId, client_secret: clientSecret });
-  // Redirect to Strava OAuth
-  const scope = 'activity:read_all';
-  const url = 'https://www.strava.com/oauth/authorize?client_id=' + clientId
-    + '&redirect_uri=' + encodeURIComponent(STRAVA_REDIRECT)
-    + '&response_type=code&scope=' + scope
-    + '&approval_prompt=auto';
-  location.href = url;
-});
-
-// Disconnect button
-document.getElementById('btn-strava-disconnect').addEventListener('click', () => {
-  if (!confirm('Disconnect from Strava? Your imported workouts will remain.')) return;
-  setStravaConfig({});
-  renderStravaUI();
-  toast('Strava disconnected');
-});
-
-// Garmin refresh button (in My Week header)
-document.getElementById('btn-garmin-week-sync').addEventListener('click', async () => {
-  const btn = document.getElementById('btn-garmin-week-sync');
-  btn.disabled = true; btn.textContent = '⏳ Loading…';
-  await loadGarminData();
-  btn.disabled = false; btn.textContent = '🔄 Garmin';
-});
-
-// Garmin refresh button
 // ── Garmin GitHub token storage ──────────────────────────────────────────────
-const GARMIN_GH_TOKEN_KEY = 'garmin_gh_token';
 
 function getGarminGhToken() { return localStorage.getItem(GARMIN_GH_TOKEN_KEY) || ''; }
 function setGarminGhToken(t) { if (t) localStorage.setItem(GARMIN_GH_TOKEN_KEY, t); else localStorage.removeItem(GARMIN_GH_TOKEN_KEY); }
@@ -2591,7 +2069,7 @@ document.getElementById('btn-add-session').addEventListener('click', () => {
   if (!ap.weekSessions) ap.weekSessions = {};
   if (!ap.weekSessions[wk]) ap.weekSessions[wk] = [];
   // Allow multiple sessions per day — remove only if same day + same type (update)
-  ap.weekSessions[wk] = ap.weekSessions[wk].filter(s => !(s.day === dayIdx && s.type === type && !s.stravaId && !s.startTime));
+  ap.weekSessions[wk] = ap.weekSessions[wk].filter(s => !(s.day === dayIdx && s.type === type && !s.garminId));
   const titleMap = { pushups: 'Push-ups', breathwork: 'Breathwork', meditation: 'Meditation' };
   const session = { day: dayIdx, type, dist, dur, intensity, calories: cal, title: titleMap[type] || type.charAt(0).toUpperCase()+type.slice(1), updatedAt: new Date().toISOString() };
   if (type === 'pushups' && reps) session.reps = reps;
@@ -3259,8 +2737,8 @@ function openWorkoutDetail(weekKey, dayIdx, dateLabel, sessionIndex) {
   _wdCtx = { weekKey, dayIdx, dateLabel, sessionIdx: idx };
   const s = daySessions[idx];
   let fullHtml = renderSingleWorkoutDetail(s, dayIdx, dateLabel);
-  // Delete button for manual activities (no stravaId, no startTime)
-  if (!s.stravaId && !s.startTime) {
+  // Delete button for manually logged activities (not from Garmin)
+  if (!s.garminId) {
     fullHtml += `<div style="margin-top:.6rem; text-align:center;"><button class="btn btn-sm" style="background:var(--danger); color:#fff; font-size:.72rem;" onclick="deleteManualSession('${weekKey}',${dayIdx},'${s.updatedAt || ''}')">🗑 Delete Activity</button></div>`;
   }
   // Navigation if multiple sessions on this day
@@ -3282,7 +2760,7 @@ window.deleteManualSession = function(weekKey, dayIdx, updatedAt) {
   if (!confirm('Delete this manually added activity?')) return;
   const ap = activeProfile();
   if (!ap.weekSessions || !ap.weekSessions[weekKey]) return;
-  ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(s => !(s.day === dayIdx && s.updatedAt === updatedAt && !s.stravaId && !s.startTime));
+  ap.weekSessions[weekKey] = ap.weekSessions[weekKey].filter(s => !(s.day === dayIdx && s.updatedAt === updatedAt && !s.garminId));
   save(); renderAll();
   closeWorkoutDetail();
   toast('Activity deleted');
@@ -3331,19 +2809,6 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
   html += `<span class="wo-class-badge wo-class-${cls.type}">${cls.label}</span>`;
   if (goal) html += `<span style="font-size:.72rem; color:var(--muted); margin-left:.5rem;">🎯 ${goalLabels[goal] || goal}</span>`;
   html += `<div class="wo-purpose">${cls.purpose}</div>`;
-
-  // Energy level (Strava-synced sessions only) — shown right after insight
-  if (s.stravaId) {
-    const el = s.energyLevel || 0;
-    const levelLabels = ['', '😴 Drained', '😓 Tired', '😐 Neutral', '😊 Good', '💪 Peak'];
-    html += `<div style="margin-top:.5rem; margin-bottom:.5rem; padding:.5rem .6rem; border:1px solid var(--border); border-radius:8px;">
-      <div style="font-size:.72rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:.4rem;">⚡ Energy Level${el ? ` — ${levelLabels[el]}` : ''}</div>
-      <div style="display:flex; gap:.3rem;">
-        ${[1,2,3,4,5].map(n => `<button onclick="window.saveEnergyLevel('${s.stravaId}',${dayIdx},${n})" style="flex:1; padding:.35rem; border:1.5px solid ${el===n ? 'var(--accent)' : 'var(--border)'}; border-radius:6px; background:${el===n ? 'var(--accent)' : 'var(--surface)'}; color:${el===n ? '#fff' : 'var(--muted)'}; cursor:pointer; font-size:.88rem; font-weight:700;">${n}</button>`).join('')}
-      </div>
-      <div style="display:flex; justify-content:space-between; font-size:.68rem; color:var(--muted); margin-top:.25rem;"><span>Lowest</span><span>Highest</span></div>
-    </div>`;
-  }
 
   // Summary stats
   html += `<div class="wo-summary">`;
@@ -3468,19 +2933,6 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
   return html;
 }
 
-window.saveEnergyLevel = function(stravaId, dayIdx, level) {
-  const ap = activeProfile();
-  for (const sessions of Object.values(ap.weekSessions || {})) {
-    const s = sessions.find(s => s.stravaId === stravaId);
-    if (s) {
-      s.energyLevel = level;
-      save();
-      openWorkoutDetail(_wdCtx.weekKey, _wdCtx.dayIdx, _wdCtx.dateLabel, _wdCtx.sessionIdx);
-      return;
-    }
-  }
-  toast('Session not found');
-};
 
 function closeWorkoutDetail() {
   document.getElementById('workout-detail-overlay').classList.remove('open');
@@ -7007,8 +6459,6 @@ function renderGarminStatus() {
 function initApp() {
   load();
   renderAll();
-  renderStravaUI();
-  handleStravaOAuthRedirect();
   loadGarminData();
   initGarminSettings();
 }

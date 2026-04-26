@@ -36,10 +36,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: |
-          # Scheduled runs: sync only today (keeps data fresh, avoids unnecessary API calls)
-          # Manual dispatch: use the specified days_back (default 7 for historical sync)
+          # Scheduled runs: sync last 3 days (covers today, yesterday, and day-before-yesterday
+          # in case yesterday's watch data was still uploading when the previous cron ran)
+          # Manual dispatch: use the specified days_back (default 7)
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            DAYS=2
+            DAYS=3
           else
             DAYS="${{ github.event.inputs.days_back || '7' }}"
           fi

@@ -6682,12 +6682,18 @@ function renderGarminStatus() {
     el.innerHTML = '⚠️ No Garmin data found. Run the Python sync script, then click Refresh.';
     return;
   }
-  const latest = dates[0];
-  const gd = cache[latest];
-  const stepsStr = gd.steps ? gd.steps.toLocaleString() + ' steps' : '';
-  const totalKcal = garminProjectedKcal(latest) || (gd.projected_kcal || 0);
-  const kcalStr  = totalKcal ? totalKcal.toLocaleString() + ' kcal' : '';
-  el.innerHTML = `✅ Garmin synced — latest: <strong>${latest}</strong>${stepsStr ? ' · ' + stepsStr : ''}${kcalStr ? ' · ' + kcalStr + ' projected' : ''}`;
+  const todayStr = dateStr(new Date());
+  // Show last 3 days with raw resting / active / projected kcal so data staleness is visible
+  const rows = dates.slice(0, 3).map(dt => {
+    const gd = cache[dt];
+    const label = dt === todayStr ? '<strong>today</strong>' : dt;
+    const proj = garminProjectedKcal(dt);
+    const rest = gd.resting_kcal || 0;
+    const act  = gd.active_kcal  || 0;
+    const tot  = gd.projected_kcal || 0;
+    return `<span style="margin-right:.9rem; white-space:nowrap;">${label}: 💤${rest.toLocaleString()} + ⚡${act.toLocaleString()} = <strong>${(proj || tot || rest + act).toLocaleString()} kcal</strong></span>`;
+  }).join('');
+  el.innerHTML = `✅ Garmin synced<br><span style="font-size:.75rem; color:var(--muted);">${rows}</span>`;
 }
 
 function initApp() {

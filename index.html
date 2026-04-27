@@ -537,9 +537,9 @@
       <button class="btn btn-sm" onclick="doLogout()" style="font-size:.72rem; background:transparent; color:var(--muted); border:1px solid var(--border);">🚪</button>
       <div class="mobile-log-activity" style="margin-left:auto; display:flex; gap:.4rem; flex-wrap:wrap;">
         <button class="btn btn-sm" id="btn-garmin-week-sync" style="font-size:.68rem; padding:.25rem .5rem; background:#007ac1; color:#fff; border:1px solid #007ac1;">🔄 Garmin</button>
-        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:var(--accent); color:#fff; border:1px solid var(--accent);" onclick="openLogActivityModal()">🔥 Log Activity</button>
-        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:#1a8a3f; color:#fff; border:1px solid #1a8a3f;" onclick="openAddToPlateModal('product')">🛒 Log a Product</button>
-        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:#1a8a3f; color:#fff; border:1px solid #1a8a3f;" onclick="openAddToPlateModal('meal')">🍽️ Log a Meal</button>
+        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:var(--accent); color:#fff; border:1px solid var(--accent);" onclick="openLogActivityModal()">🔥 +Activity</button>
+        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:#1a8a3f; color:#fff; border:1px solid #1a8a3f;" onclick="openAddToPlateModal('product')">🛒 +Product</button>
+        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:#1a8a3f; color:#fff; border:1px solid #1a8a3f;" onclick="openAddToPlateModal('meal')">🍽️ +Meal</button>
       </div>
     </div>
   </header>
@@ -6227,6 +6227,88 @@ function savePlateIngredientEdits(itemId) {
   renderCalorieChart();
 }
 
+// --- Edit quantity of a simple plate item (product or plain meal without ingredient breakdown) ---
+function editPlateItemQty(itemId, dateKey) {
+  const key = dateKey || _plateTargetDate();
+  const ap = activeProfile();
+  const entry = (ap.dailyLog || []).find(l => l.date === key);
+  if (!entry) return;
+  const item = (entry.items || []).find(i => i.id === itemId);
+  if (!item) return;
+
+  const existing = document.getElementById('qty-editor-' + itemId);
+  if (existing) { existing.remove(); return; } // toggle off
+  document.querySelectorAll('[id^="qty-editor-"]').forEach(el => el.remove());
+  document.querySelectorAll('[id^="ing-editor-"]').forEach(el => el.remove());
+
+  const unitLabel = item.unit === 'eaches' ? 'each' : item.unit === 'servings' ? 'serving(s)' : 'g';
+  const originalQty = item.qty || 0;
+  const originalKcal = item.kcal || 0;
+
+  const editorHtml = `
+    <div id="qty-editor-${itemId}" style="background:var(--surface); border:1px solid var(--accent); border-radius:8px; padding:.65rem; margin:.4rem 0;">
+      <div style="font-size:.82rem; font-weight:600; margin-bottom:.5rem; color:var(--fg);">✏️ Edit — ${item.name}</div>
+      <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+        <label style="font-size:.8rem; color:var(--muted);">Quantity:</label>
+        <input id="qty-edit-input-${itemId}" type="number" min="0" step="any" value="${originalQty}"
+          style="width:80px; padding:.3rem .4rem; border:1px solid var(--border); border-radius:4px; font-size:.85rem; font-weight:600;">
+        <span style="font-size:.8rem; color:var(--muted);">${unitLabel}</span>
+        <span id="qty-edit-preview-${itemId}" style="font-size:.78rem; color:var(--accent); font-weight:600; margin-left:.4rem;">${originalKcal} kcal</span>
+      </div>
+      <div style="display:flex; gap:.5rem; justify-content:flex-end; margin-top:.55rem;">
+        <button onclick="document.getElementById('qty-editor-${itemId}').remove()"
+          style="padding:.3rem .8rem; font-size:.78rem; border:1px solid var(--border); border-radius:4px; background:var(--surface); cursor:pointer;">Cancel</button>
+        <button onclick="savePlateItemQty('${itemId}','${key}')"
+          style="padding:.3rem .8rem; font-size:.78rem; border:none; border-radius:4px; background:var(--accent); color:#fff; cursor:pointer; font-weight:600;">Save</button>
+      </div>
+    </div>`;
+
+  const contentEl = document.getElementById('plate-tab-content');
+  if (contentEl) contentEl.insertAdjacentHTML('afterend', editorHtml);
+
+  // Live preview kcal as user types
+  const input = document.getElementById('qty-edit-input-' + itemId);
+  const preview = document.getElementById('qty-edit-preview-' + itemId);
+  if (input && preview) {
+    input.focus(); input.select();
+    input.addEventListener('input', () => {
+      const newQty = parseFloat(input.value) || 0;
+      const scaled = originalQty > 0 ? Math.round(originalKcal * newQty / originalQty) : 0;
+      preview.textContent = scaled + ' kcal';
+    });
+  }
+}
+
+window.savePlateItemQty = (itemId, dateKey) => {
+  const key = dateKey || _plateTargetDate();
+  const ap = activeProfile();
+  const entry = (ap.dailyLog || []).find(l => l.date === key);
+  if (!entry) return;
+  const item = (entry.items || []).find(i => i.id === itemId);
+  if (!item) return;
+
+  const input = document.getElementById('qty-edit-input-' + itemId);
+  if (!input) return;
+  const newQty = parseFloat(input.value) || 0;
+  if (newQty <= 0) { removeFromPlate(itemId, key); return; }
+
+  const scale = item.qty > 0 ? newQty / item.qty : 1;
+  item.kcal = Math.round((item.kcal || 0) * scale);
+  item.prot = Math.round((item.prot || 0) * scale * 10) / 10;
+  item.carb = Math.round((item.carb || 0) * scale * 10) / 10;
+  item.fat  = Math.round((item.fat  || 0) * scale * 10) / 10;
+  item.qty  = newQty;
+
+  entry.consumed = entry.items.reduce((s, i) => s + (i.kcal || 0), 0);
+  entry.updatedAt = new Date().toISOString();
+  save();
+  document.getElementById('qty-editor-' + itemId)?.remove();
+  renderPlate();
+  renderPlateTab();
+  renderCalorieChart();
+  toast('✅ Updated');
+};
+
 function recalcPlateItemFromIngredients(item) {
   let kcal = 0, prot = 0, carb = 0, fat = 0;
   for (const ing of item.ingredients) {
@@ -6393,9 +6475,9 @@ function renderPlateTab() {
       const prot = (item.prot || 0).toFixed(1);
       const carb = (item.carb || 0).toFixed(1);
       const fat  = (item.fat  || 0).toFixed(1);
-      const editBtn = item.ingredients && item.ingredients.length
+      const editBtn = (item.ingredients && item.ingredients.length)
         ? `<button style="background:none; border:none; cursor:pointer; color:var(--accent); font-size:.82rem; margin-right:.2rem;" onclick="editPlateIngredients('${item.id}','${viewedDate}')" title="Edit ingredients">✏️</button>`
-        : '';
+        : `<button style="background:none; border:none; cursor:pointer; color:var(--accent); font-size:.82rem; margin-right:.2rem;" onclick="editPlateItemQty('${item.id}','${viewedDate}')" title="Edit quantity">✏️</button>`;
       const slotBtn = `<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.72rem; margin-right:.2rem;" onclick="changeMealSlot('${item.id}','${viewedDate}')" title="Change meal">🔀</button>`;
       const removeBtn = `<button style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:.82rem;" onclick="removeFromPlate('${item.id}','${viewedDate}')">✕</button>`;
       sections += `<tr>

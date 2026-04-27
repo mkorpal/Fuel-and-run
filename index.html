@@ -2062,10 +2062,9 @@ document.getElementById('btn-garmin-week-sync').addEventListener('click', () => 
   if (token) {
     triggerGarminSync(7).then(ok => {
       if (ok) {
-        // Poll for fresh data after GitHub Actions completes
-        setTimeout(() => loadGarminData(), 30000);
-        setTimeout(() => loadGarminData(), 60000);
-        setTimeout(() => loadGarminData(), 95000);
+        toast('🔄 Garmin sync running — data will update in 1–3 min');
+        // Poll aggressively — GH Actions takes ~90–150s with pip cache
+        [30, 60, 90, 120, 150, 180].forEach(s => setTimeout(() => loadGarminData(), s * 1000));
       }
     }).catch(() => {});
   }

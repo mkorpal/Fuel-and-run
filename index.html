@@ -1572,14 +1572,6 @@ function applyParsed(parsed) {
       });
     });
   }
-  // Clean up: per-100g products should not have a serve value
-  if (state.products) {
-    state.products.forEach(p => {
-      if ((p.nutrPer || '100g') === '100g') {
-        p.serve = null;
-      }
-    });
-  }
   // Migrate meal ingredient units to match product type
   if (state.meals && state.products) {
     state.meals.forEach(m => {
@@ -1638,6 +1630,30 @@ function applyParsed(parsed) {
         }
       }
     });
+  }
+  // Deduplicate profiles by name (keep the one with the most data).
+  // Runs on every applyParsed so cloud merges can't re-introduce duplicates.
+  if (state.profiles && state.profiles.length > 1) {
+    const nameGroups = {};
+    state.profiles.forEach(p => {
+      const key = (p.name || '').toLowerCase().trim();
+      if (!nameGroups[key]) nameGroups[key] = [];
+      nameGroups[key].push(p);
+    });
+    const toRemove = new Set();
+    Object.values(nameGroups).forEach(group => {
+      if (group.length <= 1) return;
+      group.sort((a, b) => {
+        const score = x => (x.sessions || []).length + (x.dailyLog || []).length +
+          Object.keys(x.weekSessions || {}).length + Object.keys(x.weekMeals || {}).length;
+        return score(b) - score(a);
+      });
+      group.slice(1).forEach(p => toRemove.add(p.id));
+    });
+    if (toRemove.size > 0) {
+      state.profiles = state.profiles.filter(p => !toRemove.has(p.id));
+      if (toRemove.has(state.activeProfileId)) state.activeProfileId = state.profiles[0].id;
+    }
   }
 }
 
@@ -7007,7 +7023,6 @@ function migrateProductCategories() {
 
 function initApp() {
   load();
-  removeDuplicateProfiles();
   migrateProductCategories();
   renderAll();
   loadGarminData();

@@ -9,9 +9,9 @@ on:
         required: false
         default: '7'
 
-  # Runs every 3 hours to keep today's active_kcal current
+  # Runs every 2 hours to keep today's active_kcal current
   schedule:
-    - cron: '0 */3 * * *'
+    - cron: '0 */2 * * *'
 
 jobs:
   sync:

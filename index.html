@@ -1782,10 +1782,10 @@ document.querySelectorAll('#main-nav button').forEach(btn => {
     // Reset plate to today whenever navigating away from or to the plate tab
     plateOffset = 0;
     renderAll();
-    // Auto-refresh Garmin in background when opening My Week (if data is >5 min old)
-    if (btn.dataset.tab === 'training' && !window.garminLoadInProgress) {
-      const staleMs = 5 * 60 * 1000;
-      if (!window.garminLastLoaded || Date.now() - window.garminLastLoaded > staleMs) {
+    // Auto-refresh Garmin in background when opening My Week (if data is >10 min old)
+    if (btn.dataset.tab === 'training') {
+      const staleMs = 10 * 60 * 1000;
+      if (!window.garminLoadInProgress && (!window.garminLastLoaded || Date.now() - window.garminLastLoaded > staleMs)) {
         loadGarminData();
       }
     }
@@ -2042,27 +2042,44 @@ document.getElementById('btn-garmin-full-sync').addEventListener('click', async 
 
 // Garmin refresh button (in My Week header) — always pulls from Supabase immediately,
 // then triggers a full Garmin sync in the background if a GitHub token is available.
-document.getElementById('btn-garmin-week-sync').addEventListener('click', () => {
+document.getElementById('btn-garmin-week-sync').addEventListener('click', async () => {
   const btn = document.getElementById('btn-garmin-week-sync');
-  // Non-blocking: refresh Supabase in background, UI stays responsive
-  if (!window.garminLoadInProgress) {
-    loadGarminData().then(() => {
-      btn.textContent = '✅ Garmin';
-      setTimeout(() => { btn.textContent = '🔄 Garmin'; }, 1500);
-    }).catch(() => {
-      btn.textContent = '🔄 Garmin';
-    });
+  btn.textContent = '⏳ Garmin';
+  btn.disabled = true;
+  // Always force a fresh Supabase read (cancel any in-progress load first)
+  window.garminLoadInProgress = false;
+  try {
+    await loadGarminData();
+    // Show today + yesterday values in toast
+    const cache = window.garminDailyCache || {};
+    const todayStr = dateStr(new Date());
+    const yd = new Date(); yd.setDate(yd.getDate() - 1);
+    const ydStr = dateStr(yd);
+    const todayKcal = garminProjectedKcal(todayStr);
+    const ydKcal = garminProjectedKcal(ydStr);
+    const parts = [];
+    if (todayKcal) parts.push('Today: ' + todayKcal.toLocaleString() + ' kcal');
+    if (ydKcal)    parts.push('Yesterday: ' + ydKcal.toLocaleString() + ' kcal');
+    toast('✅ ' + (parts.length ? parts.join(' · ') : 'Garmin data refreshed'));
+    btn.textContent = '✅ Garmin';
+  } catch(e) {
+    toast('⚠️ Could not load Garmin data: ' + e.message);
+    btn.textContent = '🔄 Garmin';
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = '🔄 Garmin'; }, 3000);
   }
-  // Trigger GitHub Actions sync if token available (always non-blocking)
+  // Trigger GitHub Actions live sync if token available (non-blocking)
   const token = getGarminGhToken();
   if (token) {
     triggerGarminSync(7).then(ok => {
       if (ok) {
-        toast('🔄 Garmin sync running — data will update in 1–3 min');
-        // Poll aggressively — GH Actions takes ~90–150s with pip cache
-        [30, 60, 90, 120, 150, 180].forEach(s => setTimeout(() => loadGarminData(), s * 1000));
+        toast('🔄 Live Garmin sync running — updating in ~2 min');
+        [60, 120, 150, 180].forEach(s => setTimeout(() => loadGarminData(), s * 1000));
+      } else {
+        toast('⚠️ GitHub sync trigger failed — check token in Settings');
       }
-    }).catch(() => {});
+    }).catch(() => toast('⚠️ GitHub sync request failed'));
   }
 });
 

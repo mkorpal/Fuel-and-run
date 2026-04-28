@@ -5122,29 +5122,6 @@ function renderDashboard() {
   const fatPerDay = daysElapsed > 0 ? Math.round(totalFat / daysElapsed) : '—';
   const weekLabel = isPast ? 'that week' : isFuture ? 'upcoming' : 'this week';
 
-  // Build recent-days Garmin row (last 3 complete days, always visible on dashboard)
-  const recentGarminRows = [];
-  for (let i = 1; i <= 3; i++) {
-    const rd = new Date(); rd.setDate(rd.getDate() - i);
-    const rds = dateStr(rd);
-    const gd = window.garminDailyCache && window.garminDailyCache[rds];
-    if (!gd) continue;
-    const proj = garminProjectedKcal(rds);
-    if (proj === null) continue;
-    const label = i === 1 ? 'Yesterday' : i === 2 ? '2 days ago' : '3 days ago';
-    const logEntry = log.find(l => l.date === rds);
-    const consumed = logEntry ? (logEntry.consumed || 0) : 0;
-    const balance = consumed > 0 ? consumed - proj : null;
-    const balStr = balance !== null ? (balance <= 0 ? ` · <span style="color:var(--accent);">${balance.toLocaleString()} deficit</span>` : ` · <span style="color:var(--warn);">+${balance.toLocaleString()} surplus</span>`) : '';
-    recentGarminRows.push(`<div style="display:flex; justify-content:space-between; align-items:center; padding:.3rem 0; border-bottom:1px solid var(--border); font-size:.82rem;">
-      <span style="color:var(--muted); min-width:80px;">${label}</span>
-      <span>💤 ${(gd.resting_kcal||0).toLocaleString()} + ⚡ ${(gd.active_kcal||0).toLocaleString()} = <strong>${proj.toLocaleString()} kcal burned</strong>${balStr}</span>
-    </div>`);
-  }
-  const recentGarminHtml = recentGarminRows.length
-    ? `<div style="margin-top:.5rem; margin-bottom:.25rem; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#007ac1;">⌚ Recent Garmin Days</div>${recentGarminRows.join('')}`
-    : '';
-
   summary.innerHTML = `
     <div class="dash-section-label">🏃 Activity</div>
     <div class="targets-grid">
@@ -5164,7 +5141,6 @@ function renderDashboard() {
       <div class="target-card"><div class="target-val">${carbPerKgDay} g/kg</div><div class="target-label">carbs/day</div></div>
       <div class="target-card"><div class="target-val">${fatPerDay}g</div><div class="target-label">fat/day</div></div>
     </div>
-    ${recentGarminHtml}
   `;
 
   // Weekly guide text

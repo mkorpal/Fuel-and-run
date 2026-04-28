@@ -31,6 +31,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/requirements.txt
 
+      # Cache the Garmin OAuth token so each run reuses it instead of doing a
+      # fresh password login (which triggers Garmin 429 rate-limits on shared IPs).
+      # key includes run_id so a freshly-acquired/refreshed token is always saved.
+      # restore-keys prefix finds the most recently saved token from any prior run.
+      - name: Restore Garmin auth token cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.garminconnect_token
+          key: garmin-token-${{ github.run_id }}
+          restore-keys: garmin-token-
+
       - name: Run Garmin sync
         env:
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}

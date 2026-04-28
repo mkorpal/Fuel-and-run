@@ -104,6 +104,15 @@ def garmin_login() -> Garmin:
     except GarminConnectAuthenticationError as e:
         print(f"Login failed: {e}")
         sys.exit(1)
+    except Exception as e:
+        msg = str(e)
+        if '429' in msg or 'rate' in msg.lower():
+            # Garmin is rate-limiting this IP (common on shared CI runners).
+            # Exit 0 so the workflow isn't marked as failed — data will be current
+            # from the previous successful run or the next window.
+            print(f"WARNING: Garmin rate-limited (429) — skipping this run. Will retry next cron cycle.")
+            sys.exit(0)
+        raise
 
     try:
         with open(TOKEN_FILE, 'wb') as f:

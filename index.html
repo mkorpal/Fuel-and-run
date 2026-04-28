@@ -256,6 +256,20 @@
     color: var(--muted); margin: 1rem 0 .4rem; padding-bottom: .25rem;
     border-bottom: 1px solid var(--border);
   }
+  .pantry-cat-tabs {
+    display: flex; gap: .3rem; overflow-x: auto; padding-bottom: .5rem;
+    margin-bottom: .75rem; scrollbar-width: none; flex-shrink: 0; width: 100%;
+  }
+  .pantry-cat-tabs::-webkit-scrollbar { display: none; }
+  .pantry-cat-tab {
+    flex-shrink: 0; border: 1px solid var(--border); background: var(--surface);
+    color: var(--muted); border-radius: 20px; padding: .28rem .7rem;
+    font-size: .78rem; cursor: pointer; white-space: nowrap;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .pantry-cat-tab:hover { border-color: var(--accent); color: var(--text); }
+  .pantry-cat-tab.active { border-color: var(--accent); color: var(--accent); background: rgba(110,198,160,.1); font-weight: 600; }
+  .pcat-count { font-size: .68rem; opacity: .65; margin-left: .2rem; }
   .product-list { display: flex; flex-wrap: wrap; gap: .3rem .5rem; }
   .product-chip {
     display: inline-flex; align-items: center; gap: .25rem;
@@ -912,9 +926,10 @@
               <div class="form-row" style="flex:1;">
                 <label>Category</label>
                 <select id="p-cat">
-                  <option>Dairy</option><option>Protein</option><option>Carbs</option>
-                  <option>Fruit &amp; Veg</option><option>Snack</option><option>Drink</option>
-                  <option>Supplement</option><option>Other</option>
+                  <option>🌾 Grains & Bread</option><option>🧀 Dairy & Eggs</option><option>🐟 Meat & Fish</option>
+                  <option>🌱 Protein & Legumes</option><option>🍎 Fruit</option><option>🥦 Veg</option>
+                  <option>🥜 Nuts & Spreads</option><option>🍫 Treats</option><option>🍺 Drinks</option>
+                  <option>⚡ Sports</option><option>💊 Supplements</option><option>Other</option>
                 </select>
               </div>
             </div>
@@ -3377,19 +3392,6 @@ function renderProducts() {
   }
   none.style.display = 'none';
 
-  // Group products by category
-  const groups = {};
-  activeProducts.forEach(p => {
-    const cat = p.cat || 'Other';
-    if (!groups[cat]) groups[cat] = [];
-    groups[cat].push(p);
-  });
-  const catOrder = ['Dairy','Protein','Carbs','Fruit & Veg','Snack','Drink','Supplement','Other'];
-  const sortedCats = Object.keys(groups).sort((a, b) => {
-    const ai = catOrder.indexOf(a), bi = catOrder.indexOf(b);
-    return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
-  });
-
   const productChip = p => `
     <div class="product-chip" id="pcard-${p.id}"
          onclick="toggleProductCard('${p.id}', event)"
@@ -3419,11 +3421,39 @@ function renderProducts() {
     </div>
   `;
 
-  list.innerHTML = sortedCats.map(cat => `
-    <div class="product-group-title">${cat} <span style="font-weight:400; font-size:.72rem;">(${groups[cat].length})</span></div>
-    ${groups[cat].map(productChip).join('')}
-  `).join('');
+  const CAT_TABS = [
+    {key:'All', label:'All'},
+    {key:'🌾 Grains & Bread', label:'🌾 Grains & Bread'},
+    {key:'🧀 Dairy & Eggs', label:'🧀 Dairy & Eggs'},
+    {key:'🐟 Meat & Fish', label:'🐟 Meat & Fish'},
+    {key:'🌱 Protein & Legumes', label:'🌱 Protein & Legumes'},
+    {key:'🍎 Fruit', label:'🍎 Fruit'},
+    {key:'🥦 Veg', label:'🥦 Veg'},
+    {key:'🥜 Nuts & Spreads', label:'🥜 Nuts & Spreads'},
+    {key:'🍫 Treats', label:'🍫 Treats'},
+    {key:'🍺 Drinks', label:'🍺 Drinks'},
+    {key:'⚡ Sports', label:'⚡ Sports'},
+    {key:'💊 Supplements', label:'💊 Supplements'},
+  ];
+
+  const activeCat = window.pantryCatFilter || 'All';
+  const filtered = activeCat === 'All' ? activeProducts : activeProducts.filter(p => p.cat === activeCat);
+
+  const tabStrip = `<div class="pantry-cat-tabs">${
+    CAT_TABS.map(t => {
+      const count = t.key === 'All' ? activeProducts.length : activeProducts.filter(p => p.cat === t.key).length;
+      if (t.key !== 'All' && count === 0) return '';
+      return `<button class="pantry-cat-tab${activeCat === t.key ? ' active' : ''}" onclick="setPantryCat('${t.key}')">${t.label}${t.key !== 'All' ? `<span class="pcat-count">${count}</span>` : ''}</button>`;
+    }).join('')
+  }</div>`;
+
+  list.innerHTML = tabStrip + filtered.map(productChip).join('');
 }
+
+window.setPantryCat = cat => {
+  window.pantryCatFilter = cat;
+  renderProducts();
+};
 
 window.toggleProductCard = (id, e) => {
   if (e && (e.target.classList.contains('pchip-del') || e.target.classList.contains('pchip-log'))) return;
@@ -6893,8 +6923,40 @@ function renderGarminStatus() {
   el.innerHTML = `✅ Garmin synced<br><span style="font-size:.75rem; color:var(--muted);">${rows}</span>`;
 }
 
+function migrateProductCategories() {
+  if (state.catsMigrated2026) return;
+  // Map specific product names to new categories (takes priority over old cat mapping)
+  const nameMap = {
+    'plant protein powder': '💊 Supplements', 'collagen powder': '💊 Supplements', 'collagen': '💊 Supplements',
+    'gentle fibre': '💊 Supplements', 'protein powder': '💊 Supplements',
+    'boiled egg': '🧀 Dairy & Eggs', 'egg': '🧀 Dairy & Eggs',
+    'maurten': '⚡ Sports',
+    'protein balls': '🌱 Protein & Legumes', 'chickpeas': '🌱 Protein & Legumes',
+    'peanut butter': '🥜 Nuts & Spreads', 'almond': '🥜 Nuts & Spreads', 'walnut': '🥜 Nuts & Spreads',
+    'vegemite': '🥜 Nuts & Spreads', 'jam': '🥜 Nuts & Spreads',
+    'lindt': '🍫 Treats', 'chocolate': '🍫 Treats',
+    'avocado': '🥦 Veg', 'tomato': '🥦 Veg', 'carrot': '🥦 Veg', 'radish': '🥦 Veg', 'sauerkraut': '🥦 Veg',
+    'banana': '🍎 Fruit', 'apple': '🍎 Fruit', 'berr': '🍎 Fruit',
+    'beef': '🐟 Meat & Fish', 'salmon': '🐟 Meat & Fish', 'tuna': '🐟 Meat & Fish', 'fish': '🐟 Meat & Fish',
+  };
+  const catMap = {
+    'Dairy': '🧀 Dairy & Eggs', 'Protein': '🌱 Protein & Legumes', 'Carbs': '🌾 Grains & Bread',
+    'Fruit & Veg': '🍎 Fruit', 'Snack': '🥜 Nuts & Spreads', 'Drink': '🍺 Drinks', 'Supplement': '💊 Supplements',
+  };
+  let changed = false;
+  (state.products || []).forEach(p => {
+    const n = ((p.name || '') + ' ' + (p.nickname || '')).toLowerCase();
+    const override = Object.entries(nameMap).find(([k]) => n.includes(k));
+    if (override) { p.cat = override[1]; changed = true; return; }
+    if (catMap[p.cat]) { p.cat = catMap[p.cat]; changed = true; }
+  });
+  state.catsMigrated2026 = true;
+  if (changed) save();
+}
+
 function initApp() {
   load();
+  migrateProductCategories();
   renderAll();
   loadGarminData();
   initGarminSettings();

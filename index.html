@@ -1462,9 +1462,17 @@ async function migrateOldSyncKey(oldKey, newKey) {
 async function pushToCloud() {
   if (!syncKey) return;
   try {
+    // Embed sensitive keys alongside state so they sync to all devices.
+    // They are stored under _keys and restored on pull, never mixed into state.
+    const payload = Object.assign({}, state, {
+      _keys: {
+        anthropic: loadAnthropicKey() || null,
+        ghToken:   getGarminGhToken() || null,
+      }
+    });
     const { error } = await sb.from('fuelrun_data').upsert({
       sync_key: syncKey,
-      data: state,
+      data: payload,
       updated_at: new Date().toISOString()
     }, { onConflict: 'sync_key' });
     if (error) {
@@ -1698,11 +1706,18 @@ function load() {
     );
     migrationDone.then(() => pullFromCloud(syncKey)).then(async remote => {
       if (remote) {
+        // Restore API keys synced from another device before merging state
+        if (remote._keys) {
+          if (remote._keys.anthropic && !loadAnthropicKey()) localStorage.setItem('fuelrun_anthropic_key', remote._keys.anthropic);
+          if (remote._keys.ghToken   && !getGarminGhToken()) localStorage.setItem(GARMIN_GH_TOKEN_KEY, remote._keys.ghToken);
+          delete remote._keys;
+        }
         const merged = mergeStates(state, remote);
         applyParsed(merged);
         localStorage.setItem('fuelrun', JSON.stringify(state));
         await pushToCloud();
         renderAll();
+        updateAnthropicKeyStatus();
         setSyncStatus('✔ Synced · ' + new Date().toLocaleTimeString());
       } else {
         await pushToCloud();
@@ -1724,12 +1739,19 @@ async function doAutoSync() {
   try {
     const remote = await pullFromCloud(syncKey);
     if (remote) {
+      // Restore API keys synced from another device
+      if (remote._keys) {
+        if (remote._keys.anthropic && !loadAnthropicKey()) localStorage.setItem('fuelrun_anthropic_key', remote._keys.anthropic);
+        if (remote._keys.ghToken   && !getGarminGhToken()) localStorage.setItem(GARMIN_GH_TOKEN_KEY, remote._keys.ghToken);
+        delete remote._keys;
+      }
       const merged = mergeStates(state, remote);
       // Always apply merge — merge is idempotent so this is safe
       applyParsed(merged);
       localStorage.setItem('fuelrun', JSON.stringify(state));
       await pushToCloud();
       renderAll();
+      updateAnthropicKeyStatus();
       setSyncStatus('✔ Synced · ' + new Date().toLocaleTimeString());
     }
   } catch(e) { console.error('Auto-sync error:', e); }
@@ -1961,6 +1983,16 @@ function formatPace(speedMps) {
 }
 
 // ── Garmin GitHub token storage ──────────────────────────────────────────────
+const GARMIN_GH_TOKEN_KEY = 'fuelrun_garmin_gh_token';
+
+// Migrate token previously stored under the undefined-key bug
+(function migrateGarminToken() {
+  const bad = localStorage.getItem('undefined');
+  if (bad && (bad.startsWith('ghp_') || bad.startsWith('github_pat_'))) {
+    localStorage.setItem(GARMIN_GH_TOKEN_KEY, bad);
+    localStorage.removeItem('undefined');
+  }
+})();
 
 function getGarminGhToken() { return localStorage.getItem(GARMIN_GH_TOKEN_KEY) || ''; }
 function setGarminGhToken(t) { if (t) localStorage.setItem(GARMIN_GH_TOKEN_KEY, t); else localStorage.removeItem(GARMIN_GH_TOKEN_KEY); }

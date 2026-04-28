@@ -39,6 +39,17 @@ jobs:
           key: garmin-token-marysia-${{ github.run_id }}
           restore-keys: garmin-token-marysia-
 
+      # If no cached token, inject the one stored as a secret (base64-encoded).
+      # Generated once locally via: python scripts/garmin_save_token.py marysia
+      - name: Inject Marysia Garmin token from secret (if no cache)
+        env:
+          GARMIN_TOKEN_B64: ${{ secrets.GARMIN_MARYSIA_TOKEN }}
+        run: |
+          if [ ! -f ~/.garminconnect_token_marysia ] && [ -n "$GARMIN_TOKEN_B64" ]; then
+            echo "$GARMIN_TOKEN_B64" | base64 -d > ~/.garminconnect_token_marysia
+            echo "Garmin token restored from secret"
+          fi
+
       - name: Run Garmin sync (Marysia)
         env:
           GARMIN_EMAIL: ${{ secrets.GARMIN_MARYSIA_EMAIL }}

@@ -257,19 +257,30 @@
     border-bottom: 1px solid var(--border);
   }
   .pantry-cat-tabs {
-    display: flex; gap: .3rem; overflow-x: auto; padding-bottom: .5rem;
-    margin-bottom: .75rem; scrollbar-width: none; flex-shrink: 0; width: 100%;
+    display: flex; flex-wrap: wrap; gap: .3rem;
+    margin-bottom: .6rem;
   }
-  .pantry-cat-tabs::-webkit-scrollbar { display: none; }
   .pantry-cat-tab {
     flex-shrink: 0; border: 1px solid var(--border); background: var(--surface);
-    color: var(--muted); border-radius: 20px; padding: .28rem .7rem;
-    font-size: .78rem; cursor: pointer; white-space: nowrap;
+    color: var(--muted); border-radius: 20px; padding: .28rem .65rem;
+    font-size: .76rem; cursor: pointer; white-space: nowrap;
     transition: border-color .15s, color .15s, background .15s;
   }
   .pantry-cat-tab:hover { border-color: var(--accent); color: var(--text); }
   .pantry-cat-tab.active { border-color: var(--accent); color: var(--accent); background: rgba(110,198,160,.1); font-weight: 600; }
   .pcat-count { font-size: .68rem; opacity: .65; margin-left: .2rem; }
+  .pantry-search-wrap { position: relative; margin-bottom: .65rem; }
+  .pantry-search-wrap input {
+    width: 100%; box-sizing: border-box;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+    color: var(--text); font-size: .85rem; padding: .4rem .75rem .4rem 2rem;
+    outline: none; transition: border-color .15s;
+  }
+  .pantry-search-wrap input:focus { border-color: var(--accent); }
+  .pantry-search-wrap::before {
+    content: '🔍'; position: absolute; left: .65rem; top: 50%; transform: translateY(-50%);
+    font-size: .8rem; pointer-events: none;
+  }
   .product-list { display: flex; flex-wrap: wrap; gap: .3rem .5rem; }
   .product-chip {
     display: inline-flex; align-items: center; gap: .25rem;
@@ -881,6 +892,7 @@
             </div>
           </div>
           <p style="font-size:.8rem; color:var(--muted); margin-bottom:.75rem;">Click a product to see nutrition details. Tap <strong>＋</strong> to log it.</p>
+          <div class="pantry-search-wrap"><input type="search" id="pantry-search-input" placeholder="Search products…" oninput="setPantrySearch(this.value)" autocomplete="off" /></div>
           <div id="product-list" class="product-list"></div>
           <p id="no-products" style="color:var(--muted); font-size:.85rem;">No products saved yet. Use the buttons above to add one.</p>
         </div>
@@ -3422,37 +3434,55 @@ function renderProducts() {
   `;
 
   const CAT_TABS = [
-    {key:'All', label:'All'},
-    {key:'🌾 Grains & Bread', label:'🌾 Grains & Bread'},
-    {key:'🧀 Dairy & Eggs', label:'🧀 Dairy & Eggs'},
-    {key:'🐟 Meat & Fish', label:'🐟 Meat & Fish'},
-    {key:'🌱 Protein & Legumes', label:'🌱 Protein & Legumes'},
-    {key:'🍎 Fruit', label:'🍎 Fruit'},
-    {key:'🥦 Veg', label:'🥦 Veg'},
-    {key:'🥜 Nuts & Spreads', label:'🥜 Nuts & Spreads'},
-    {key:'🍫 Treats', label:'🍫 Treats'},
-    {key:'🍺 Drinks', label:'🍺 Drinks'},
-    {key:'⚡ Sports', label:'⚡ Sports'},
-    {key:'💊 Supplements', label:'💊 Supplements'},
+    {key:'All',                  label:'All'},
+    {key:'🌾 Grains & Bread',   label:'🌾 Grains'},
+    {key:'🧀 Dairy & Eggs',     label:'🧀 Dairy & Eggs'},
+    {key:'🐟 Meat & Fish',      label:'🐟 Meat & Fish'},
+    {key:'🌱 Protein & Legumes',label:'🌱 Protein'},
+    {key:'🍎 Fruit',            label:'🍎 Fruit'},
+    {key:'🥦 Veg',              label:'🥦 Veg'},
+    {key:'🥜 Nuts & Spreads',   label:'🥜 Nuts'},
+    {key:'🍫 Treats',           label:'🍫 Treats'},
+    {key:'🍺 Drinks',           label:'🍺 Drinks'},
+    {key:'⚡ Sports',           label:'⚡ Sports'},
+    {key:'💊 Supplements',      label:'💊 Supps'},
   ];
 
   const activeCat = window.pantryCatFilter || 'All';
-  const filtered = activeCat === 'All' ? activeProducts : activeProducts.filter(p => p.cat === activeCat);
+  const searchQ = (window.pantrySearch || '').toLowerCase().trim();
+
+  // Search overrides tab filter; otherwise apply tab
+  let filtered = searchQ
+    ? activeProducts.filter(p => (p.name || '').toLowerCase().includes(searchQ) || (p.nickname || '').toLowerCase().includes(searchQ))
+    : (activeCat === 'All' ? activeProducts : activeProducts.filter(p => p.cat === activeCat));
 
   const tabStrip = `<div class="pantry-cat-tabs">${
     CAT_TABS.map(t => {
       const count = t.key === 'All' ? activeProducts.length : activeProducts.filter(p => p.cat === t.key).length;
       if (t.key !== 'All' && count === 0) return '';
-      return `<button class="pantry-cat-tab${activeCat === t.key ? ' active' : ''}" onclick="setPantryCat('${t.key}')">${t.label}${t.key !== 'All' ? `<span class="pcat-count">${count}</span>` : ''}</button>`;
+      // Dim tabs when search is active
+      const dimmed = searchQ ? ' style="opacity:.45; pointer-events:none;"' : '';
+      return `<button class="pantry-cat-tab${!searchQ && activeCat === t.key ? ' active' : ''}"${dimmed} onclick="setPantryCat('${t.key}')">${t.label}${t.key !== 'All' ? `<span class="pcat-count">${count}</span>` : ''}</button>`;
     }).join('')
   }</div>`;
 
-  list.innerHTML = tabStrip + filtered.map(productChip).join('');
+  const chips = filtered.length
+    ? filtered.map(productChip).join('')
+    : `<p style="color:var(--muted); font-size:.85rem; padding:.25rem 0;">No products match "${searchQ}".</p>`;
+
+  list.innerHTML = tabStrip + chips;
 }
 
 window.setPantryCat = cat => {
   window.pantryCatFilter = cat;
   renderProducts();
+};
+
+window.setPantrySearch = val => {
+  window.pantrySearch = val;
+  renderProducts();
+  // Scroll product list into view on mobile when typing
+  document.getElementById('product-list').scrollIntoView({behavior:'smooth', block:'nearest'});
 };
 
 window.toggleProductCard = (id, e) => {

@@ -44,8 +44,19 @@ GARMIN_EMAIL         = os.environ.get('GARMIN_EMAIL', '')
 GARMIN_PASSWORD      = os.environ.get('GARMIN_PASSWORD', '')
 SUPABASE_URL         = os.environ.get('SUPABASE_URL', '')
 SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', '')
+# GARMIN_PROFILE controls which Supabase tables to write to.
+# 'michal'  → garmin_daily + garmin_activities  (default)
+# 'marysia' → garmin_daily_marysia + garmin_activities_marysia
+GARMIN_PROFILE       = os.environ.get('GARMIN_PROFILE', 'michal').lower()
 
-TOKEN_FILE = Path.home() / '.garminconnect_token'
+if GARMIN_PROFILE == 'marysia':
+    DAILY_TABLE      = 'garmin_daily_marysia'
+    ACTIVITIES_TABLE = 'garmin_activities_marysia'
+    TOKEN_FILE       = Path.home() / '.garminconnect_token_marysia'
+else:
+    DAILY_TABLE      = 'garmin_daily'
+    ACTIVITIES_TABLE = 'garmin_activities'
+    TOKEN_FILE       = Path.home() / '.garminconnect_token'
 
 # Garmin sport type → Fuel&Run session type
 SPORT_MAP = {
@@ -181,7 +192,7 @@ def extract_laps(raw_laps: list) -> list:
 
 def sync_daily(api: Garmin, sb, days_back: int):
     today = date.today()
-    print(f"\nSyncing {days_back} days of wellness data...")
+    print(f"\nSyncing {days_back} days of wellness data → {DAILY_TABLE}...")
 
     for i in range(days_back):
         d = today - timedelta(days=i)
@@ -194,7 +205,7 @@ def sync_daily(api: Garmin, sb, days_back: int):
         projected_kcal = round(float(s.get('totalKilocalories') or 0))
         resting_hr     = s.get('restingHeartRate') or None
 
-        sb.table('garmin_daily').upsert(
+        sb.table(DAILY_TABLE).upsert(
             {
                 'date': date_str,
                 'steps': steps,
@@ -219,7 +230,7 @@ def sync_activities(api: Garmin, sb, days_back: int):
     start_str = (today - timedelta(days=days_back)).strftime('%Y-%m-%d')
     end_str   = today.strftime('%Y-%m-%d')
 
-    print(f"\nSyncing activities {start_str} to {end_str}...")
+    print(f"\nSyncing activities {start_str} to {end_str} → {ACTIVITIES_TABLE}...")
     activities = fetch_activities(api, start_str, end_str)
     print(f"  Found {len(activities)} activities")
 
@@ -245,7 +256,7 @@ def sync_activities(api: Garmin, sb, days_back: int):
             raw_laps = fetch_laps(api, int(activity_id))
             laps = extract_laps(raw_laps)
 
-        sb.table('garmin_activities').upsert(
+        sb.table(ACTIVITIES_TABLE).upsert(
             {
                 'activity_id': int(activity_id),
                 'date': act_date,
@@ -289,6 +300,7 @@ def main():
 
     api = garmin_login()
     sb  = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    print(f"Profile: {GARMIN_PROFILE} → tables: {DAILY_TABLE}, {ACTIVITIES_TABLE}")
 
     sync_daily(api, sb, days_back)
     sync_activities(api, sb, days_back)

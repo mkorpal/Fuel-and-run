@@ -1394,6 +1394,15 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 window.garminDailyCache = {};      // date (YYYY-MM-DD) → {steps, resting_kcal, active_kcal, projected_kcal, resting_hr}
 window.garminActivitiesCache = []; // raw DB rows, imported into weekSessions
 
+// Returns the Supabase table names to use for the currently active profile.
+// Michal → garmin_daily / garmin_activities (original tables)
+// Marysia → garmin_daily_marysia / garmin_activities_marysia
+function getGarminTables() {
+  const name = (activeProfile().name || '').toLowerCase();
+  if (name.includes('marysia')) return { daily: 'garmin_daily_marysia', activities: 'garmin_activities_marysia' };
+  return { daily: 'garmin_daily', activities: 'garmin_activities' };
+}
+
 // Returns a projected total kcal for a given date using Garmin cache.
 // Logic: resting_kcal (bmrKilocalories) from Garmin is only accumulated so far today,
 //        but yesterday's complete resting_kcal is a reliable full-day BMR estimate.
@@ -2051,7 +2060,9 @@ document.getElementById('btn-garmin-save-token').addEventListener('click', () =>
 async function triggerGarminSync(daysBack = 7) {
   const token = getGarminGhToken();
   if (!token) { toast('⚠️ Add your GitHub token in Settings → Garmin Connect first'); return false; }
-  const resp = await fetch('https://api.github.com/repos/mkorpal/Fuel-and-run/actions/workflows/garmin-sync.yml/dispatches', {
+  const profileName = (activeProfile().name || '').toLowerCase();
+  const workflowFile = profileName.includes('marysia') ? 'garmin-sync-marysia.yml' : 'garmin-sync.yml';
+  const resp = await fetch(`https://api.github.com/repos/mkorpal/Fuel-and-run/actions/workflows/${workflowFile}/dispatches`, {
     method: 'POST',
     headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ ref: 'main', inputs: { days_back: String(daysBack) } })
@@ -2158,7 +2169,7 @@ document.getElementById('btn-garmin-raw-debug').addEventListener('click', async 
   out.innerHTML = '⏳ Querying Supabase directly…';
   try {
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 5);
-    const res = await sb.from('garmin_daily').select('date,resting_kcal,active_kcal,projected_kcal,steps').gte('date', cutoff.toISOString().slice(0,10)).order('date', { ascending: false });
+    const res = await sb.from(getGarminTables().daily).select('date,resting_kcal,active_kcal,projected_kcal,steps').gte('date', cutoff.toISOString().slice(0,10)).order('date', { ascending: false });
     if (!res.data || !res.data.length) { out.innerHTML = '⚠️ No rows returned from Supabase'; return; }
     const todayStr = dateStr(new Date());
     const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
@@ -5271,6 +5282,10 @@ document.getElementById('btn-add-profile').addEventListener('click', () => {
 window.switchProfile = id => {
   state.activeProfileId = id;
   save(); renderAll();
+  // Reload Garmin data for the new profile's tables
+  window.garminDailyCache = {};
+  window.garminActivitiesCache = [];
+  loadGarminData();
   toast('Switched to ' + (activeProfile().name || 'profile'));
 };
 
@@ -6807,12 +6822,13 @@ async function loadGarminData() {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 30);
     const cutoffStr = dateStr(cutoff);
+    const tables = getGarminTables();
     window.garminLoadInProgress = true;
     const timeout = ms => new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
     const [dailyRes, activitiesRes] = await Promise.race([
       Promise.all([
-        sb.from('garmin_daily').select('*').gte('date', cutoffStr).order('date', { ascending: false }),
-        sb.from('garmin_activities').select('*').gte('date', cutoffStr).order('date', { ascending: false }),
+        sb.from(tables.daily).select('*').gte('date', cutoffStr).order('date', { ascending: false }),
+        sb.from(tables.activities).select('*').gte('date', cutoffStr).order('date', { ascending: false }),
       ]),
       timeout(12000).then(() => { throw new Error('Supabase query timed out'); })
     ]);
@@ -6930,6 +6946,34 @@ function renderGarminStatus() {
   el.innerHTML = `✅ Garmin synced<br><span style="font-size:.75rem; color:var(--muted);">${rows}</span>`;
 }
 
+function removeDuplicateProfiles() {
+  // Group profiles by normalised name
+  const nameGroups = {};
+  state.profiles.forEach(p => {
+    const key = (p.name || '').toLowerCase().trim();
+    if (!nameGroups[key]) nameGroups[key] = [];
+    nameGroups[key].push(p);
+  });
+  let changed = false;
+  Object.values(nameGroups).forEach(group => {
+    if (group.length <= 1) return;
+    // Score each profile: more data = higher score = keep
+    group.sort((a, b) => {
+      const score = p => (p.sessions || []).length + (p.dailyLog || []).length +
+        Object.keys(p.weekSessions || {}).length + Object.keys(p.weekMeals || {}).length;
+      return score(b) - score(a);
+    });
+    const toRemove = group.slice(1).map(p => p.id);
+    state.profiles = state.profiles.filter(p => !toRemove.includes(p.id));
+    if (toRemove.includes(state.activeProfileId)) state.activeProfileId = group[0].id;
+    changed = true;
+    const kept = group[0].name;
+    const n = toRemove.length;
+    console.log(`Removed ${n} duplicate profile(s) for "${kept}"`);
+  });
+  if (changed) save();
+}
+
 function migrateProductCategories() {
   if (state.catsMigrated2026) return;
   // Map specific product names to new categories (takes priority over old cat mapping)
@@ -6963,6 +7007,7 @@ function migrateProductCategories() {
 
 function initApp() {
   load();
+  removeDuplicateProfiles();
   migrateProductCategories();
   renderAll();
   loadGarminData();

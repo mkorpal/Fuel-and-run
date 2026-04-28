@@ -1,0 +1,55 @@
+name: Garmin Sync — Marysia
+
+on:
+  # Triggered manually via GitHub API (from the app button when Marysia's profile is active)
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: 'Days of data to sync'
+        required: false
+        default: '7'
+
+  # Runs every 2 hours to keep today's active_kcal current
+  schedule:
+    - cron: '30 */2 * * *'   # offset by 30 min so it doesn't clash with Michal's cron
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'scripts/requirements.txt'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      # Cache Marysia's Garmin OAuth token separately from Michal's
+      - name: Restore Garmin auth token cache (Marysia)
+        uses: actions/cache@v4
+        with:
+          path: ~/.garminconnect_token_marysia
+          key: garmin-token-marysia-${{ github.run_id }}
+          restore-keys: garmin-token-marysia-
+
+      - name: Run Garmin sync (Marysia)
+        env:
+          GARMIN_EMAIL: ${{ secrets.GARMIN_MARYSIA_EMAIL }}
+          GARMIN_PASSWORD: ${{ secrets.GARMIN_MARYSIA_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GARMIN_PROFILE: marysia
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            DAYS=3
+          else
+            DAYS="${{ github.event.inputs.days_back || '7' }}"
+          fi
+          python scripts/sync_garmin_to_supabase.py $DAYS

@@ -646,8 +646,12 @@
       </div>
 
       <div class="card">
-        <div class="card-title">📊 Diet Insights</div>
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>📊 Diet Insights</span>
+          <button id="btn-ai-insights" class="btn btn-secondary btn-sm" style="font-size:.75rem; padding:.25rem .65rem;" onclick="generateAiInsights()">✨ AI Analysis</button>
+        </div>
         <div id="dash-guide"></div>
+        <div id="dash-ai-status" style="font-size:.72rem; color:var(--muted); margin-top:.4rem;"></div>
       </div>
 
       <div class="card" id="dash-tip-card">
@@ -5247,6 +5251,17 @@ function renderDashboard() {
     guide.innerHTML = `<p style="font-size:.85rem; color:var(--muted);">Start logging your meals to see personalised diet insights here.</p>`;
   }
 
+  // --- Show AI insights if cached for today, else show static ---
+  const todayKey = dateStr(new Date());
+  const aiCache = window._aiInsightsCache;
+  if (aiCache && aiCache.date === todayKey) {
+    guide.innerHTML = aiCache.html;
+    const statusEl = document.getElementById('dash-ai-status');
+    if (statusEl) statusEl.textContent = 'AI analysis generated at ' + aiCache.time;
+  } else if (recentDays.length >= 1) {
+    // static fallback already rendered above
+  }
+
   // Rotating tip — dynamic, considers weight target & training volume
   if (tipEl) {
     const gw = ap.goalWeight || ap.weight;
@@ -5502,6 +5517,209 @@ async function callClaude(userPrompt) {
   }
   const data = await resp.json();
   return data.content[0].text;
+}
+
+// ============================================================
+// AI DASHBOARD INSIGHTS
+// ============================================================
+window._aiInsightsCache = null;
+
+async function generateAiInsights() {
+  const btn = document.getElementById('btn-ai-insights');
+  const guide = document.getElementById('dash-guide');
+  const statusEl = document.getElementById('dash-ai-status');
+  if (!btn || !guide) return;
+
+  const key = loadAnthropicKey();
+  if (!key) {
+    guide.innerHTML = '<p style="font-size:.85rem; color:var(--muted);">⚠️ No Anthropic API key set. Go to <strong>Profile → AI Nutrition Analysis</strong> to add your key.</p>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Analysing…';
+  guide.innerHTML = '<p style="font-size:.85rem; color:var(--muted);">⏳ Generating personalised insights…</p>';
+  if (statusEl) statusEl.textContent = '';
+
+  try {
+    const ap = activeProfile();
+    const w = ap.weight || 72;
+    const gw = ap.goalWeight || w;
+    const isFemale = ap.sex === 'female';
+    const h = ap.height || 175;
+    const age = ap.age || 35;
+    const rmr = ap.rmr || (isFemale ? Math.round(10*w + 6.25*h - 5*age - 161) : Math.round(10*w + 6.25*h - 5*age + 5));
+    const log = ap.dailyLog || [];
+
+    // Build per-day data for last 7 days (including today)
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const dt = new Date(); dt.setDate(dt.getDate() - i);
+      const ds = dateStr(dt);
+      const dayMon0 = (dt.getDay() + 6) % 7;
+      const mon = new Date(dt); mon.setDate(dt.getDate() - dayMon0); mon.setHours(0,0,0,0);
+      const wk = isoWeekKey(mon);
+      const daySessions = ((ap.weekSessions && ap.weekSessions[wk]) || []).filter(s => s.day === dayMon0);
+      const entry = log.find(l => l.date === ds);
+      const items = entry ? (entry.items || []) : [];
+
+      // Calories burned
+      const garminBurn = garminProjectedKcal(ds);
+      const exBurn = daySessions.reduce((a, s) => a + estimateBurn(s), 0);
+      const burned = garminBurn !== null ? garminBurn : (rmr + exBurn);
+
+      // Macros
+      const kcalEaten = entry ? (entry.consumed || 0) : 0;
+      const prot = items.reduce((s, i) => s + (i.prot || 0), 0);
+      const carb = items.reduce((s, i) => s + (i.carb || 0), 0);
+      const fat  = items.reduce((s, i) => s + (i.fat  || 0), 0);
+
+      // Training summary
+      const sessStr = daySessions.length
+        ? daySessions.map(s => {
+            const parts = [s.type];
+            if (s.dist) parts.push(s.dist.toFixed(1) + 'km');
+            if (s.dur) parts.push(s.dur + 'min');
+            if (s.intensity) parts.push(s.intensity);
+            if (s.calories) parts.push(s.calories + 'kcal');
+            return parts.join(' ');
+          }).join(', ')
+        : 'Rest/easy';
+
+      const garminSteps = window.garminDailyCache && window.garminDailyCache[ds] ? (window.garminDailyCache[ds].steps || 0) : 0;
+
+      days.push({
+        date: ds,
+        dayName: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][dayMon0],
+        training: sessStr,
+        steps: garminSteps,
+        burned,
+        kcalEaten,
+        prot: Math.round(prot),
+        protPerKg: w > 0 ? (prot / w).toFixed(2) : '?',
+        carb: Math.round(carb),
+        carbPerKg: w > 0 ? (carb / w).toFixed(2) : '?',
+        fat: Math.round(fat),
+        deficit: kcalEaten > 0 ? Math.round(kcalEaten - burned) : null,
+        logged: kcalEaten > 0,
+      });
+    }
+
+    const loggedDays = days.filter(d => d.logged);
+    if (loggedDays.length === 0) {
+      guide.innerHTML = '<p style="font-size:.85rem; color:var(--muted);">No food logged in the past 7 days — start logging to get AI insights.</p>';
+      btn.disabled = false; btn.textContent = '✨ AI Analysis';
+      return;
+    }
+
+    // Format the data table for the prompt
+    const tableRows = days.map(d =>
+      `${d.dayName} ${d.date}: Training=[${d.training}]${d.steps ? ' Steps=' + d.steps.toLocaleString() : ''} | Burned=${d.burned}kcal | ` +
+      (d.logged
+        ? `Eaten=${d.kcalEaten}kcal Deficit=${d.deficit > 0 ? '+' + d.deficit : d.deficit}kcal | Protein=${d.prot}g(${d.protPerKg}g/kg) Carbs=${d.carb}g(${d.carbPerKg}g/kg) Fat=${d.fat}g`
+        : 'NO FOOD LOGGED')
+    ).join('\n');
+
+    const prompt = `You are a sports dietitian specialising in endurance running and body composition. Analyse this athlete's last 7 days of training and nutrition data and provide specific, actionable feedback.
+
+ATHLETE PROFILE:
+- Name: ${ap.name || 'Athlete'}
+- Sex: ${ap.sex || 'male'}, Age: ${age}, Weight: ${w}kg, Height: ${h}cm
+- Goal weight: ${gw}kg (${w > gw ? 'losing ' + (w - gw).toFixed(1) + 'kg' : w < gw ? 'gaining ' + (gw - w).toFixed(1) + 'kg' : 'maintaining'})
+- RMR: ~${rmr} kcal/day, Weekly running target: ${ap.weeklyKm || 75}km
+- Diet style: ${ap.diet || 'balanced'}, Training goal: ${ap.trainingGoal || 'general fitness'}
+- PBs: ${[ap.pbMarathon && 'Marathon ' + ap.pbMarathon, ap.pbHalf && 'Half ' + ap.pbHalf, ap.pb10k && '10k ' + ap.pb10k, ap.pb5k && '5k ' + ap.pb5k].filter(Boolean).join(', ') || 'not set'}
+
+LAST 7 DAYS (training load + nutrition):
+${tableRows}
+
+TARGETS FOR THIS ATHLETE:
+- Protein: 1.8–2.2 g/kg (${Math.round(1.8*w)}–${Math.round(2.2*w)}g/day)
+- Carbs on hard/long run days: ≥5 g/kg (${Math.round(5*w)}g), easy/rest days: 3–4 g/kg
+- Calorie deficit: ideally –300 to –500 kcal/day on easy days, near maintenance on hard days
+- Fat: ≥0.8 g/kg/day (${Math.round(0.8*w)}g minimum)
+
+Respond ONLY with a JSON object using exactly this structure (no markdown, no code blocks):
+{
+  "overall": "2-3 sentence summary of the overall nutrition pattern and how well it aligns with training load",
+  "patterns": [
+    {"day": "Mon DD/MM", "flag": "good|warning|critical", "note": "specific observation for this day linking training load to what was eaten — be concrete with numbers"}
+  ],
+  "recommendations": [
+    "Specific actionable recommendation 1 with concrete food suggestions and quantities",
+    "Specific actionable recommendation 2",
+    "Specific actionable recommendation 3"
+  ],
+  "nextDays": "1-2 sentences on what to focus on nutritionally in the next 2-3 days given the pattern"
+}
+
+Only include days where food was logged in the patterns array. Be direct, specific, and use the actual numbers from the data.`;
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 1200,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      throw new Error('API error ' + resp.status + (errText ? ': ' + errText.slice(0,100) : ''));
+    }
+    const data = await resp.json();
+    const raw = data.content[0].text;
+
+    // Parse JSON response
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Unexpected response format');
+    const result = JSON.parse(jsonMatch[0]);
+
+    const flagIcon = { good: '✅', warning: '⚠️', critical: '🚨' };
+    const flagColor = { good: 'var(--accent)', warning: '#e67e00', critical: '#c62828' };
+
+    const patternsHtml = (result.patterns || []).map(p =>
+      `<div style="display:flex; gap:.5rem; margin-bottom:.4rem; align-items:baseline;">
+        <span style="font-size:.85rem; min-width:1.2rem;">${flagIcon[p.flag] || '📌'}</span>
+        <div><span style="font-size:.76rem; font-weight:700; color:${flagColor[p.flag] || 'var(--muted)'};">${p.day}</span>
+        <span style="font-size:.82rem; color:var(--text); margin-left:.3rem;">${p.note}</span></div>
+      </div>`
+    ).join('');
+
+    const recsHtml = (result.recommendations || []).map((r, i) =>
+      `<div style="display:flex; gap:.5rem; margin-bottom:.35rem;">
+        <span style="font-size:.8rem; font-weight:700; color:var(--accent); min-width:1.2rem;">${i+1}.</span>
+        <span style="font-size:.82rem;">${r}</span>
+      </div>`
+    ).join('');
+
+    const html = `
+      <div style="font-size:.85rem; line-height:1.7; color:var(--text);">
+        <p style="margin-bottom:.8rem; color:var(--muted);">${result.overall || ''}</p>
+        ${patternsHtml ? `<div style="font-size:.74rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:.6rem 0 .35rem;">Day-by-Day</div>${patternsHtml}` : ''}
+        ${recsHtml ? `<div style="font-size:.74rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:.75rem 0 .35rem;">Top Recommendations</div>${recsHtml}` : ''}
+        ${result.nextDays ? `<div style="margin-top:.7rem; padding:.5rem .7rem; background:rgba(72,199,160,.08); border-left:3px solid var(--accent); border-radius:0 6px 6px 0; font-size:.82rem;"><strong>Next 2–3 days:</strong> ${result.nextDays}</div>` : ''}
+      </div>`;
+
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    window._aiInsightsCache = { date: dateStr(new Date()), time: now, html };
+    guide.innerHTML = html;
+    if (statusEl) statusEl.textContent = 'AI analysis generated at ' + now + ' · Click "✨ AI Analysis" to refresh';
+
+  } catch(e) {
+    guide.innerHTML = `<p style="font-size:.83rem; color:#c62828;">❌ ${e.message}</p>`;
+    if (statusEl) statusEl.textContent = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ AI Analysis';
+  }
 }
 
 function parseAiNutritionJson(text) {

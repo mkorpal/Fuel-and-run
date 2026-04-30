@@ -9,9 +9,9 @@ on:
         required: false
         default: '7'
 
-  # Runs every 2 hours to keep today's active_kcal current
-  schedule:
-    - cron: '30 */2 * * *'   # offset by 30 min so it doesn't clash with Michal's cron
+  # Schedule disabled — re-enable when Marysia's token is set up
+  # schedule:
+  #   - cron: '30 */2 * * *'   # offset by 30 min so it doesn't clash with Michal's cron
 
 jobs:
   sync:

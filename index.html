@@ -691,8 +691,8 @@
           _addToPlateCat = null;
           document.getElementById('add-to-plate-modal').style.display = '';
           const cats = mode === 'product'
-            ? ['Dairy','Protein','Carbs','Fruit & Veg','Snack','Drink','Supplement','Other']
-            : ['Breakfast','Pre-Run','Lunch','Dinner','Snack','Other'];
+            ? ['🌾 Grains & Legumes','🧀 Dairy & Eggs','🐟 Meat & Fish','🌱 Protein & Legumes','🍎 Fruit','🥦 Veg','🥜 Nuts & Spreads','🍫 Treats','🍺 Drinks','⚡ Sports','💊 Supplements']
+            : ['Breakfast','Pre-Run','Lunch / Dinner','Snack','Salads & Sides','Outdoor / Takeaway'];
           const catDiv = document.getElementById('add-to-plate-categories');
           catDiv.innerHTML = cats.map(cat =>
             `<button class="btn btn-secondary btn-sm" style="font-size:.82rem;" onclick="filterAddToPlateByCategory('${cat.replace(/'/g, "\\'")}')">${cat}</button>`
@@ -712,7 +712,7 @@
           renderAddToPlateList();
         }
         // Map display category name → mealCat value used by meals
-        const _mealCatMap = { 'Breakfast':'breakfast', 'Pre-Run':'prerun', 'Lunch':'lunch', 'Dinner':'lunch', 'Snack':'snack' };
+        const _mealCatMap = { 'Breakfast':'breakfast', 'Pre-Run':'prerun', 'Lunch':'lunch', 'Lunch / Dinner':'lunch', 'Dinner':'lunch', 'Snack':'snack', 'Salads & Sides':'salad', 'Outdoor / Takeaway':'outdoor' };
         function renderAddToPlateList() {
           const listDiv = document.getElementById('add-to-plate-list');
           const q = document.getElementById('add-to-plate-search').value.trim().toLowerCase();
@@ -938,7 +938,7 @@
               <div class="form-row" style="flex:1;">
                 <label>Category</label>
                 <select id="p-cat">
-                  <option>🌾 Grains & Bread</option><option>🧀 Dairy & Eggs</option><option>🐟 Meat & Fish</option>
+                  <option>🌾 Grains & Legumes</option><option>🧀 Dairy & Eggs</option><option>🐟 Meat & Fish</option>
                   <option>🌱 Protein & Legumes</option><option>🍎 Fruit</option><option>🥦 Veg</option>
                   <option>🥜 Nuts & Spreads</option><option>🍫 Treats</option><option>🍺 Drinks</option>
                   <option>⚡ Sports</option><option>💊 Supplements</option><option>Other</option>
@@ -998,6 +998,8 @@
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="prerun">🏃 Pre-Run</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="lunch">🍽️ Lunch / Dinner</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="snack">🥜 Snack</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="salad">🥗 Salads & Sides</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="outdoor">🌿 Outdoor / Takeaway</button>
           </div>
           <div class="meal-grid" id="meal-grid"></div>
           <p id="no-meals" style="color:var(--muted); font-size:.85rem;">No meals saved yet. Create your first meal above.</p>
@@ -1263,6 +1265,8 @@
         <option value="prerun">🏃 Pre-Run</option>
         <option value="lunch" selected>🍽️ Lunch / Dinner</option>
         <option value="snack">🥜 Snack</option>
+        <option value="salad">🥗 Salads & Sides</option>
+        <option value="outdoor">🌿 Outdoor / Takeaway</option>
       </select>
     </div>
     <!-- Pantry section -->
@@ -3462,7 +3466,7 @@ function renderProducts() {
 
   const CAT_TABS = [
     {key:'All',                  label:'All'},
-    {key:'🌾 Grains & Bread',   label:'🌾 Grains'},
+    {key:'🌾 Grains & Legumes', label:'🌾 Grains & Legumes'},
     {key:'🧀 Dairy & Eggs',     label:'🧀 Dairy & Eggs'},
     {key:'🐟 Meat & Fish',      label:'🐟 Meat & Fish'},
     {key:'🌱 Protein & Legumes',label:'🌱 Protein'},
@@ -3607,13 +3611,18 @@ function productPerGram(p) {
 // ============================================================
 function guessCategory(name, cats) {
   const n = (name + ' ' + (cats || '')).toLowerCase();
-  if (/milk|yogh|cheese|butter|cream/.test(n)) return 'Dairy';
-  if (/meat|chicken|fish|egg|tofu|bean|lentil|protein/.test(n)) return 'Protein';
-  if (/bread|rice|pasta|oat|cereal|flour|potato/.test(n)) return 'Carbs';
-  if (/fruit|veg|banana|apple|berry|spinach|broccoli|carrot|tomato|avocado|mango|orange/.test(n)) return 'Fruit & Veg';
-  if (/chip|biscuit|chocolate|bar|cookie|candy|snack/.test(n)) return 'Snack';
-  if (/juice|water|soda|beer|wine|coffee|tea|drink|kombucha/.test(n)) return 'Drink';
-  if (/vitamin|supplement|whey|creatine|electrolyte/.test(n)) return 'Supplement';
+  if (/milk|yogh|cheese|cream/.test(n)) return '🧀 Dairy & Eggs';
+  if (/egg/.test(n)) return '🧀 Dairy & Eggs';
+  if (/salmon|tuna|fish|seafood|beef|lamb|pork|chicken|turkey|meat/.test(n)) return '🐟 Meat & Fish';
+  if (/tofu|bean|lentil|legume|chickpea/.test(n)) return '🌱 Protein & Legumes';
+  if (/bread|rice|pasta|oat|cereal|flour|potato|grain/.test(n)) return '🌾 Grains & Legumes';
+  if (/banana|apple|berry|mango|orange|fruit/.test(n)) return '🍎 Fruit';
+  if (/spinach|broccoli|carrot|tomato|avocado|veg/.test(n)) return '🥦 Veg';
+  if (/nut|almond|peanut|walnut|cashew|pistachio|spread/.test(n)) return '🥜 Nuts & Spreads';
+  if (/chocolate|biscuit|cookie|candy|treat|dessert/.test(n)) return '🍫 Treats';
+  if (/juice|water|soda|beer|wine|coffee|tea|drink|kombucha/.test(n)) return '🍺 Drinks';
+  if (/gel|maurten|sports|electrolyte/.test(n)) return '⚡ Sports';
+  if (/vitamin|supplement|whey|creatine|powder|collagen/.test(n)) return '💊 Supplements';
   return 'Other';
 }
 
@@ -4598,8 +4607,8 @@ function renderMeals() {
   none.style.display = 'none';
 
   // Group by meal category
-  const catLabels = { breakfast: '🌅 Breakfast', prerun: '🏃 Pre-Run', lunch: '🍽️ Lunch / Dinner', snack: '🥜 Snack' };
-  const catOrder = ['breakfast', 'prerun', 'lunch', 'snack'];
+  const catLabels = { breakfast: '🌅 Breakfast', prerun: '🏃 Pre-Run', lunch: '🍽️ Lunch / Dinner', snack: '🥜 Snack', salad: '🥗 Salads & Sides', outdoor: '🌿 Outdoor / Takeaway' };
+  const catOrder = ['breakfast', 'prerun', 'lunch', 'snack', 'salad', 'outdoor'];
   const groups = {};
   filtered.forEach(m => {
     const cat = m.mealCat || 'lunch';
@@ -5759,7 +5768,7 @@ async function onBarcodeScanned(barcode) {
     updateNutrLabels();
     // Guess category from tags
     const tags = (data.categories_tags || []).join(' ');
-    const catMap = [['dairy','Dairy'],['yogurt','Dairy'],['fish','Protein'],['meat','Protein'],['legume','Carbs'],['cereal','Carbs'],['bread','Carbs'],['fruit','Fruit & Veg'],['vegetable','Fruit & Veg'],['snack','Snack'],['beverage','Drink'],['supplement','Supplement']];
+    const catMap = [['dairy','🧀 Dairy & Eggs'],['yogurt','🧀 Dairy & Eggs'],['fish','🐟 Meat & Fish'],['meat','🐟 Meat & Fish'],['legume','🌱 Protein & Legumes'],['cereal','🌾 Grains & Legumes'],['bread','🌾 Grains & Legumes'],['fruit','🍎 Fruit'],['vegetable','🥦 Veg'],['snack','🍫 Treats'],['beverage','🍺 Drinks'],['supplement','💊 Supplements']];
     const matched = catMap.find(([k]) => tags.includes(k));
     if (matched) document.getElementById('p-cat').value = matched[1];
     closeScanner();
@@ -6998,7 +7007,7 @@ function migrateProductCategories() {
     'gentle fibre': '💊 Supplements', 'protein powder': '💊 Supplements',
     'boiled egg': '🧀 Dairy & Eggs', 'egg': '🧀 Dairy & Eggs',
     'maurten': '⚡ Sports',
-    'protein balls': '🌱 Protein & Legumes', 'chickpeas': '🌱 Protein & Legumes',
+    'protein balls': '🍫 Treats', 'chickpeas': '🌾 Grains & Legumes',
     'peanut butter': '🥜 Nuts & Spreads', 'almond': '🥜 Nuts & Spreads', 'walnut': '🥜 Nuts & Spreads',
     'vegemite': '🥜 Nuts & Spreads', 'jam': '🥜 Nuts & Spreads',
     'lindt': '🍫 Treats', 'chocolate': '🍫 Treats',
@@ -7007,7 +7016,7 @@ function migrateProductCategories() {
     'beef': '🐟 Meat & Fish', 'salmon': '🐟 Meat & Fish', 'tuna': '🐟 Meat & Fish', 'fish': '🐟 Meat & Fish',
   };
   const catMap = {
-    'Dairy': '🧀 Dairy & Eggs', 'Protein': '🌱 Protein & Legumes', 'Carbs': '🌾 Grains & Bread',
+    'Dairy': '🧀 Dairy & Eggs', 'Protein': '🌱 Protein & Legumes', 'Carbs': '🌾 Grains & Legumes',
     'Fruit & Veg': '🍎 Fruit', 'Snack': '🥜 Nuts & Spreads', 'Drink': '🍺 Drinks', 'Supplement': '💊 Supplements',
   };
   let changed = false;
@@ -7021,9 +7030,27 @@ function migrateProductCategories() {
   if (changed) save();
 }
 
+function migrateProductCategories2026b() {
+  if (state.catsMigrated2026b) return;
+  const nameOverrides = {
+    'chickpeas': '🌾 Grains & Legumes',
+    'protein balls': '🍫 Treats',
+  };
+  let changed = false;
+  (state.products || []).forEach(p => {
+    if (p.cat === '🌾 Grains & Bread') { p.cat = '🌾 Grains & Legumes'; changed = true; }
+    const n = ((p.name || '') + ' ' + (p.nickname || '')).toLowerCase();
+    const override = Object.entries(nameOverrides).find(([k]) => n.includes(k));
+    if (override) { p.cat = override[1]; changed = true; }
+  });
+  state.catsMigrated2026b = true;
+  if (changed) save();
+}
+
 function initApp() {
   load();
   migrateProductCategories();
+  migrateProductCategories2026b();
   renderAll();
   loadGarminData();
   initGarminSettings();

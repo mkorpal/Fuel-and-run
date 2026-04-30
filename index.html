@@ -7214,6 +7214,17 @@ function importGarminActivities(activities) {
     const existing = ap.weekSessions[weekKey].find(x => x.garminId && x.garminId === act.activity_id);
     if (existing && existing.updatedAt && existing.updatedAt >= (act.updated_at || '')) continue;
 
+    // Preserve user-set fields before removing the stale entry
+    const preserved = {};
+    for (const wk of Object.keys(ap.weekSessions)) {
+      const stale = ap.weekSessions[wk].find(x => x.garminId && x.garminId === act.activity_id);
+      if (stale) {
+        if (stale.energyLevel != null) preserved.energyLevel = stale.energyLevel;
+        if (stale.caloriesOverride != null) preserved.caloriesOverride = stale.caloriesOverride;
+        if (stale._originalCalories != null) preserved._originalCalories = stale._originalCalories;
+      }
+    }
+
     // Remove stale entry for this activity from all weeks
     for (const wk of Object.keys(ap.weekSessions)) {
       ap.weekSessions[wk] = ap.weekSessions[wk].filter(x => !(x.garminId && x.garminId === act.activity_id));
@@ -7235,7 +7246,7 @@ function importGarminActivities(activities) {
       dur:          durMin,
       intensity:    fitIntensity(avgHr, maxHrV),
       title:        act.name || act.type || 'Activity',
-      calories:     act.calories || null,
+      calories:     preserved.caloriesOverride != null ? preserved.caloriesOverride : (act.calories || null),
       avgHr,
       maxHr:        maxHrV,
       pace:         formatPace(act.avg_speed_ms),
@@ -7246,6 +7257,9 @@ function importGarminActivities(activities) {
       garminId:     act.activity_id,
       startDate:    act.start_time_local || act.date,
       updatedAt:    act.updated_at || new Date().toISOString(),
+      ...(preserved.energyLevel != null && { energyLevel: preserved.energyLevel }),
+      ...(preserved.caloriesOverride != null && { caloriesOverride: preserved.caloriesOverride }),
+      ...(preserved._originalCalories != null && { _originalCalories: preserved._originalCalories }),
     });
     imported++;
   }

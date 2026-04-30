@@ -2990,20 +2990,110 @@ function renderSingleWorkoutDetail(s, dayIdx, dateLabel) {
   const ap = activeProfile();
   const cls = classifyWorkout(s);
 
-  // Polish running term detection — enrich insight with coach methodology context
+  // Coach-style insights — Polish label awareness with pace/HR trend analysis
   {
     const tu = (s.title || '').toUpperCase();
-    const polishTerms = [
-      { re: /\bBC1\b/, note: 'This workout is labelled **BC1** (Bieg Ciągły 1 — Easy Continuous Run), a Polish coaching term for Zone 1–2 aerobic base work. BC1 should feel fully conversational. If HR or pace was higher than easy zone today, aim to slow down next time.' },
-      { re: /\bBC2\b/, note: 'Labelled **BC2** (Bieg Ciągły 2 — Steady Continuous Run): upper Zone 2 to Zone 3 aerobic effort, comfortably sustainable but not easy. Good for building general aerobic fitness above base pace.' },
-      { re: /\bWT\b/,  note: 'Labelled **WT** (Wytrzymałość Tempowa — Tempo Endurance): sustained running at or near lactate threshold, analogous to Daniels\' T-pace. Target HR 80–88% max. Validates if avg pace aligns with your half-marathon race pace.' },
-      { re: /\bWS\b/,  note: 'Labelled **WS** (Wytrzymałość Szybkościowa — Speed Endurance): fast sustained effort at or above 10k race pace, targeting upper aerobic / VO₂max zone. Target HR 88–95% max — a high-quality session requiring 48 h recovery.' },
-      { re: /\bBPG\b/, note: 'Labelled **BPG** (Bieg Pod Górę — Uphill/Hill Running): strength-focused hill work. Pace per km will be slower than flat runs but HR and muscular load are significantly higher — do not compare pace to flat-run benchmarks. Builds leg strength, running economy, and is excellent for marathon/trail preparation.' },
-      { re: /\bRTM\b/, note: 'Labelled **RTM** (Rytm Tempowy Maratonu — Marathon Tempo Rhythm): controlled running at marathon race pace, targeting ~75–83% max HR. Trains lactate clearance at goal pace and is a cornerstone of marathon-specific preparation.' },
-    ];
-    for (const { re, note } of polishTerms) {
-      if (re.test(tu)) { cls.purpose += ' ' + note; break; }
+    const _hrMax = getEffectiveMaxHr(ap);
+    const _pctHr = s.avgHr ? s.avgHr / _hrMax : null;
+    const _hrPct = _pctHr ? Math.round(_pctHr * 100) : null;
+    let _avgPaceSec = null;
+    if (s.pace) { const [_m, _sc] = s.pace.split(':').map(Number); _avgPaceSec = _m * 60 + _sc; }
+    const _halfPaceRef = pbPacePerKm(ap.pbHalf, 21.0975);
+    const _marathonPaceRef = pbPacePerKm(ap.pbMarathon, 42.195);
+    const _tenKPaceRef = pbPacePerKm(ap.pb10k, 10);
+    const _elevm = s.totalAscent || 0;
+
+    // Identify prior sessions with same workout label for trend comparison
+    const _currentId = String(s.garminId || s.updatedAt || '');
+    const _allSess = Object.values(ap.weekSessions || {}).flat()
+      .filter(ws => ws.type !== 'rest' && String(ws.garminId || ws.updatedAt || '') !== _currentId)
+      .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+
+    function _findPrior(re) {
+      return _allSess.filter(ws => re.test((ws.title || '').toUpperCase()) && ws.pace);
     }
+
+    function _paceHrTrend(prior) {
+      if (!prior.length || !_avgPaceSec) return '';
+      const recent = prior.slice(0, 3);
+      const n = recent.length;
+      const avgPriorPace = recent.reduce((sum, ws) => {
+        const [m2, sc2] = ws.pace.split(':').map(Number);
+        return sum + m2 * 60 + sc2;
+      }, 0) / n;
+      const priorHrs = recent.filter(ws => ws.avgHr);
+      const avgPriorHr = priorHrs.length ? Math.round(priorHrs.reduce((sum, ws) => sum + ws.avgHr, 0) / priorHrs.length) : null;
+      const paceDiff = Math.round(_avgPaceSec - avgPriorPace);
+      const hrDiff = (s.avgHr && avgPriorHr) ? Math.round(s.avgHr - avgPriorHr) : null;
+      if (Math.abs(paceDiff) <= 5) return n >= 2 ? ` Consistent with your last ${n} similar sessions.` : '';
+      if (paceDiff < 0) {
+        if (hrDiff === null || hrDiff <= 2) return ` ${Math.abs(paceDiff)}s/km faster than your last ${n} similar session${n > 1 ? 's' : ''} at similar effort — trending in the right direction.`;
+        if (hrDiff > 5) return ` ${Math.abs(paceDiff)}s/km faster than recent similar sessions but HR is also ${hrDiff} bpm higher — harder conditions or accumulated fatigue.`;
+        return ` ${Math.abs(paceDiff)}s/km faster than recent similar sessions — good progress.`;
+      } else {
+        if (hrDiff !== null && hrDiff < -3) return ` Pace is ${paceDiff}s/km off recent sessions but at lower HR (${Math.abs(hrDiff)} bpm less) — aerobic efficiency improving.`;
+        return ` ${paceDiff}s/km slower than recent similar sessions — could be fatigue, heat, or terrain.`;
+      }
+    }
+
+    let _polishNote = '';
+
+    if (/\bBC1\b/.test(tu)) {
+      if (_hrPct && _hrPct > 76) _polishNote = ` HR at ${_hrPct}% — above aerobic base zone for this session type; ease back next time to keep it truly conversational.`;
+      else if (_hrPct) _polishNote = ` HR well within the aerobic base zone at ${_hrPct}% — on target.`;
+      _polishNote += _paceHrTrend(_findPrior(/\bBC1\b/));
+
+    } else if (/\bBC2\b/.test(tu)) {
+      if (_hrPct && _hrPct > 85) _polishNote = ` HR at ${_hrPct}% — slightly above the upper aerobic ceiling; may have drifted toward threshold territory.`;
+      else if (_hrPct) _polishNote = ` HR at ${_hrPct}% — solid steady aerobic effort.`;
+      _polishNote += _paceHrTrend(_findPrior(/\bBC2\b/));
+
+    } else if (/\bWT\b/.test(tu)) {
+      if (_avgPaceSec && _halfPaceRef) {
+        const _d = _avgPaceSec - _halfPaceRef;
+        if (Math.abs(_d) < 10) _polishNote = ` Right at half marathon pace — on-target threshold stimulus.`;
+        else if (_d < 0) _polishNote = ` Faster than half marathon pace — strong session; make sure the effort was sustainable rather than a race effort.`;
+        else _polishNote = ` ${Math.round(_d)}s/km off half marathon pace — push closer to race pace to get maximum threshold benefit.`;
+      }
+      if (_hrPct) _polishNote += _hrPct > 90 ? ` HR hit ${_hrPct}% — high for sustained threshold work; allow proper recovery before the next quality session.` : ` HR at ${_hrPct}%.`;
+      _polishNote += _paceHrTrend(_findPrior(/\bWT\b/));
+
+    } else if (/\bWS\b/.test(tu)) {
+      if (_avgPaceSec && _tenKPaceRef) {
+        const _d = _avgPaceSec - _tenKPaceRef;
+        if (Math.abs(_d) < 10) _polishNote = ` Hitting 10k race pace — exactly the speed endurance stimulus this session calls for.`;
+        else if (_d < 0) _polishNote = ` Faster than 10k pace — excellent quality; factor in 48 h recovery before the next hard session.`;
+        else _polishNote = ` ${Math.round(_d)}s/km off 10k pace — this session's adaptation requires sustained near race-pace effort.`;
+      }
+      if (_hrPct) _polishNote += ` HR at ${_hrPct}%.`;
+      _polishNote += _paceHrTrend(_findPrior(/\bWS\b/));
+
+    } else if (/\bBPG\b/.test(tu)) {
+      _polishNote = ` Pace per km doesn't tell the full story here — focus on HR and effort over gradient.${_elevm > 30 ? ` ${Math.round(_elevm)}m ascent — solid strength stimulus.` : ''}`;
+      if (_hrPct) _polishNote += ` HR at ${_hrPct}%.`;
+      const _priorBPG = _allSess.filter(ws => /\bBPG\b/.test((ws.title || '').toUpperCase()) && ws.avgHr).slice(0, 3);
+      if (_priorBPG.length && s.avgHr) {
+        const _avgPriorHr = Math.round(_priorBPG.reduce((sum, ws) => sum + ws.avgHr, 0) / _priorBPG.length);
+        const _hrD = Math.round(s.avgHr - _avgPriorHr);
+        if (Math.abs(_hrD) > 3) {
+          _polishNote += _hrD > 0 ? ` HR ${_hrD} bpm higher than recent hill sessions — check if terrain was harder or fatigue is accumulating.` : ` HR ${Math.abs(_hrD)} bpm lower than recent hill sessions — efficiency improving.`;
+        } else {
+          _polishNote += ` Consistent HR effort with recent hill sessions.`;
+        }
+      }
+
+    } else if (/\bRTM\b/.test(tu)) {
+      if (_avgPaceSec && _marathonPaceRef) {
+        const _d = _avgPaceSec - _marathonPaceRef;
+        if (Math.abs(_d) < 10) _polishNote = ` Right at goal marathon pace — excellent race-specific stimulus.`;
+        else if (_d < 0) _polishNote = ` Faster than goal marathon pace — strong, but check it was a controlled sustained effort.`;
+        else _polishNote = ` ${Math.round(_d)}s/km off marathon pace — dial in closer to race pace for maximum specificity.`;
+      }
+      if (_hrPct) _polishNote += ` HR at ${_hrPct}%.`;
+      _polishNote += _paceHrTrend(_findPrior(/\bRTM\b/));
+    }
+
+    if (_polishNote) cls.purpose += _polishNote;
   }
   const laps = s.laps || [];
   const hrMax = ap.age ? Math.round(220 - ap.age) : 190;

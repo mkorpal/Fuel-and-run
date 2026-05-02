@@ -5890,7 +5890,7 @@ Only include days where food was logged in the patterns array. Be direct, specif
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5',
-        max_tokens: 1200,
+        max_tokens: 1800,
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -5902,10 +5902,16 @@ Only include days where food was logged in the patterns array. Be direct, specif
     const data = await resp.json();
     const raw = data.content[0].text;
 
-    // Parse JSON response
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Unexpected response format');
-    const result = JSON.parse(jsonMatch[0]);
+    // Strip markdown code fences the model sometimes adds, then extract JSON
+    const cleaned = raw.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON found in response');
+    let result;
+    try {
+      result = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      throw new Error('JSON parse failed: ' + parseErr.message + ' — raw: ' + cleaned.slice(0, 120));
+    }
 
     const flagIcon = { good: '✅', warning: '⚠️', critical: '🚨' };
     const flagColor = { good: 'var(--accent)', warning: '#e67e00', critical: '#c62828' };

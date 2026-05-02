@@ -592,8 +592,14 @@
     font-family: var(--font-body); font-weight: 600; transition: color .15s;
     -webkit-tap-highlight-color: transparent;
   }
-  .mob-nav-btn.active { color: var(--accent); }
+  .mob-nav-btn.active { color: var(--accent); border-top: 2px solid var(--accent); background: rgba(110,198,160,.09); margin-top: -2px; }
+  .mob-nav-btn { border-top: 2px solid transparent; }
   .mob-nav-icon { font-size: 1.25rem; line-height: 1; }
+  .meal-tag-opt { display:inline-flex; align-items:center; gap:.2rem; padding:.25rem .6rem; border:1.5px solid var(--border); border-radius:20px; background:var(--surface); color:var(--muted); font-size:.78rem; cursor:pointer; transition:all .15s; }
+  .meal-tag-opt.active { border-color: var(--accent); background: rgba(110,198,160,.12); color: var(--accent); font-weight:600; }
+  .meal-tag-filter-row { display:flex; gap:.35rem; flex-wrap:wrap; margin-bottom:.65rem; padding:.4rem .5rem; background:var(--surface2); border-radius:8px; }
+  .meal-tag-filter-label { font-size:.7rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; align-self:center; margin-right:.1rem; }
+  .meal-tag-badge { display:inline-flex; align-items:center; gap:.15rem; padding:.1rem .45rem; border-radius:20px; background:rgba(110,198,160,.13); color:var(--accent); font-size:.68rem; font-weight:600; border:1px solid rgba(110,198,160,.25); }
 </style>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -872,7 +878,6 @@
     <section id="tab-training" class="section">
 
       <div class="card">
-        <div class="card-title">📅 My Week</div>
         <div class="week-nav">
           <button class="week-nav-btn" id="week-prev">← Prev</button>
           <span class="week-nav-label" id="week-label"></span>
@@ -955,7 +960,7 @@
       <div class="pantry-layout">
         <div class="card">
           <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.4rem;">
-            <span>My Product Pantry</span>
+            <span>Pantry</span>
             <div style="display:flex; gap:.35rem; flex-wrap:wrap;">
               <button class="btn btn-secondary btn-sm" id="btn-scan-barcode" style="font-size:.72rem;">📷 Scan</button>
               <button class="btn btn-secondary btn-sm" style="font-size:.72rem; background:#1a8a3f; border-color:#1a8a3f; color:#fff;" onclick="openProductModal('search')">🛒 Search Coles / Woolies</button>
@@ -1059,11 +1064,10 @@
       <div class="pantry-layout">
         <div class="card">
           <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-            <span>🍽️ My Meals</span>
             <button class="btn btn-primary btn-sm" id="btn-new-meal">+ Create Meal</button>
           </div>
 
-          <div style="display:flex; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+          <div style="display:flex; gap:.5rem; margin-bottom:.6rem; flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm meal-filter-btn active" data-filter="all">All meals</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="breakfast">🌅 Breakfast</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="prerun">🏃 Pre-Run</button>
@@ -1071,6 +1075,14 @@
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="snack">🥜 Snack</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="salad">🥗 Salads & Sides</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="outdoor">🌿 Outdoor / Takeaway</button>
+          </div>
+          <div class="meal-tag-filter-row" id="meal-tag-filter-row">
+            <span class="meal-tag-filter-label">Tags:</span>
+            <button class="meal-tag-opt" data-tag="fish">🐟 Fish</button>
+            <button class="meal-tag-opt" data-tag="meat">🥩 Meat</button>
+            <button class="meal-tag-opt" data-tag="pasta">🍝 Pasta</button>
+            <button class="meal-tag-opt" data-tag="vegetarian">🥦 Vegetarian</button>
+            <button class="meal-tag-opt" data-tag="vegan">🌱 Vegan</button>
           </div>
           <div class="meal-grid" id="meal-grid"></div>
           <p id="no-meals" style="color:var(--muted); font-size:.85rem;">No meals saved yet. Create your first meal above.</p>
@@ -1253,7 +1265,7 @@
     <button class="mob-nav-btn active" data-tab="dashboard"><span class="mob-nav-icon">📊</span>Home</button>
     <button class="mob-nav-btn" data-tab="training"><span class="mob-nav-icon">📅</span>Week</button>
     <button class="mob-nav-btn" data-tab="plate"><span class="mob-nav-icon">🍽️</span>Plate</button>
-    <button class="mob-nav-btn" data-tab="products"><span class="mob-nav-icon">🛒</span>Pantry</button>
+    <button class="mob-nav-btn" data-tab="products"><span class="mob-nav-icon">🫙</span>Pantry</button>
     <button class="mob-nav-btn" data-tab="meals"><span class="mob-nav-icon">🍲</span>Meals</button>
     <button class="mob-nav-btn" data-tab="recommendations"><span class="mob-nav-icon">🦘</span>Ideas</button>
     <button class="mob-nav-btn" data-tab="profile"><span class="mob-nav-icon">👤</span>Profile</button>
@@ -1328,7 +1340,7 @@
     <button id="meal-modal-close" title="Close">✕</button>
     <h3>🍽️ Create a Meal</h3>
     <div class="meal-type-tabs">
-      <button class="meal-type-tab active" data-mtype="pantry">🛒 From my pantry</button>
+      <button class="meal-type-tab active" data-mtype="pantry">🫙 From my pantry</button>
       <button class="meal-type-tab" data-mtype="recipe">🌐 Internet recipe</button>
       <button class="meal-type-tab" data-mtype="manual">✍️ Manual</button>
       <button class="meal-type-tab" data-mtype="ai-ingredients">🤖 AI Ingredients</button>
@@ -1348,6 +1360,16 @@
         <option value="salad">🥗 Salads & Sides</option>
         <option value="outdoor">🌿 Outdoor / Takeaway</option>
       </select>
+    </div>
+    <div class="form-row">
+      <label>Tags <span style="font-weight:400; color:var(--muted); font-size:.78rem;">— multi-select, helps with search</span></label>
+      <div id="meal-tags-picker" style="display:flex; gap:.4rem; flex-wrap:wrap; margin-top:.2rem;">
+        <button type="button" class="meal-tag-opt" data-tag="fish">🐟 Fish</button>
+        <button type="button" class="meal-tag-opt" data-tag="meat">🥩 Meat</button>
+        <button type="button" class="meal-tag-opt" data-tag="pasta">🍝 Pasta</button>
+        <button type="button" class="meal-tag-opt" data-tag="vegetarian">🥦 Vegetarian</button>
+        <button type="button" class="meal-tag-opt" data-tag="vegan">🌱 Vegan</button>
+      </div>
     </div>
     <!-- Pantry section -->
     <div id="meal-pantry-section">
@@ -4331,6 +4353,7 @@ function openMealModal() {
   document.getElementById('meal-m-notes').value = '';
   const fetchStatus = document.getElementById('recipe-fetch-status');
   if (fetchStatus) fetchStatus.textContent = '';
+  document.querySelectorAll('#meal-tags-picker .meal-tag-opt').forEach(b => b.classList.remove('active'));
   setMealBuilderType('pantry');
   renderIngredientRows();
   addIngredientRow(); // start with one row
@@ -4349,6 +4372,9 @@ window.editMeal = id => {
   // Clear all fields first
   document.getElementById('meal-name').value = m.name || '';
   document.getElementById('meal-cat').value = m.mealCat || 'lunch';
+  document.querySelectorAll('#meal-tags-picker .meal-tag-opt').forEach(b => {
+    b.classList.toggle('active', (m.tags||[]).includes(b.dataset.tag));
+  });
   document.getElementById('meal-url').value = m.url || '';
   document.getElementById('meal-source').value = m.source || '';
   document.getElementById('meal-notes').value = m.notes || '';
@@ -4419,6 +4445,8 @@ function closeMealModal() {
   _customiseLogMode = null;
   // Restore all tab buttons visibility
   document.querySelectorAll('.meal-type-tab').forEach(t => t.style.display = '');
+  // Clear tag picker
+  document.querySelectorAll('#meal-tags-picker .meal-tag-opt').forEach(b => b.classList.remove('active'));
 }
 
 function setMealBuilderType(type) {
@@ -4574,6 +4602,10 @@ document.querySelectorAll('.meal-type-tab').forEach(btn => {
   btn.addEventListener('click', () => setMealBuilderType(btn.dataset.mtype));
 });
 
+document.querySelectorAll('#meal-tags-picker .meal-tag-opt').forEach(btn => {
+  btn.addEventListener('click', () => btn.classList.toggle('active'));
+});
+
 // ---- Fetch nutrition from recipe URL ----
 document.getElementById('btn-fetch-recipe').addEventListener('click', async () => {
   const url = document.getElementById('meal-url').value.trim();
@@ -4707,8 +4739,9 @@ document.getElementById('btn-save-meal').addEventListener('click', () => {
       updatedAt: new Date().toISOString(),
     };
   }
-  // Add meal category
+  // Add meal category and tags
   mealData.mealCat = document.getElementById('meal-cat').value || 'lunch';
+  mealData.tags = [...document.querySelectorAll('#meal-tags-picker .meal-tag-opt.active')].map(b => b.dataset.tag);
 
   // --- Customise & Log mode: log directly to plate instead of saving meal ---
   if (_customiseLogMode && mealBuilderType === 'pantry') {
@@ -4759,11 +4792,20 @@ window.deleteMeal = id => {
 
 // ---- Filter ----
 let mealFilter = 'all';
+let mealTagFilter = new Set();
 document.querySelectorAll('.meal-filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     mealFilter = btn.dataset.filter;
     document.querySelectorAll('.meal-filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    renderMeals();
+  });
+});
+document.getElementById('meal-tag-filter-row').querySelectorAll('.meal-tag-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tag = btn.dataset.tag;
+    if (mealTagFilter.has(tag)) { mealTagFilter.delete(tag); btn.classList.remove('active'); }
+    else { mealTagFilter.add(tag); btn.classList.add('active'); }
     renderMeals();
   });
 });
@@ -4774,7 +4816,15 @@ function renderMeals() {
   const none = document.getElementById('no-meals');
   if (!grid) return;
 
-  const filtered = state.meals.filter(m => !m.deletedAt && (mealFilter === 'all' || (m.mealCat || 'lunch') === mealFilter));
+  const filtered = state.meals.filter(m => {
+    if (m.deletedAt) return false;
+    if (mealFilter !== 'all' && (m.mealCat || 'lunch') !== mealFilter) return false;
+    if (mealTagFilter.size > 0) {
+      const mt = m.tags || [];
+      for (const t of mealTagFilter) { if (!mt.includes(t)) return false; }
+    }
+    return true;
+  });
   if (!filtered.length) {
     grid.innerHTML = '';
     none.style.display = '';
@@ -4794,7 +4844,7 @@ function renderMeals() {
 
   const mealChip = m => {
     const badgeClass = m.type === 'pantry' ? 'meal-type-pantry' : m.type === 'manual' ? 'meal-type-manual' : 'meal-type-recipe';
-    const badgeLabel = m.type === 'pantry' ? '🛒 From Pantry' : m.type === 'manual' ? '✍️ Manual' : '🌐 From Recipe';
+    const badgeLabel = m.type === 'pantry' ? '🫙 From Pantry' : m.type === 'manual' ? '✍️ Manual' : '🌐 From Recipe';
 
     let ingredientLines = '';
     let macroHtml = '';
@@ -4882,6 +4932,7 @@ function renderMeals() {
         <div class="meal-detail-pop" onclick="event.stopPropagation()">
           <div style="font-weight:700; margin-bottom:.25rem;">${m.name}</div>
           <span class="meal-type-badge ${badgeClass}">${badgeLabel}</span>
+          ${(m.tags&&m.tags.length)?`<div style="display:flex;gap:.3rem;flex-wrap:wrap;margin:.3rem 0;">${m.tags.map(t=>({fish:'🐟 Fish',meat:'🥩 Meat',pasta:'🍝 Pasta',vegetarian:'🥦 Veg',vegan:'🌱 Vegan'})[t]||t).map(tl=>`<span class="meal-tag-badge">${tl}</span>`).join('')}</div>`:''}
           ${ingredientLines ? `<div class="meal-ingredients">${ingredientLines}</div>` : ''}
           ${macroHtml}
           ${m.url ? `<div style="margin-top:.4rem;"><a href="${m.url}" target="_blank" style="font-size:.76rem;">View recipe ↗</a></div>` : ''}

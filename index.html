@@ -525,12 +525,56 @@
   .meal-filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   .chart-period.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   /* ---- Responsive ---- */
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   @media (max-width: 640px) {
-    main { padding: 1rem; }
-    .week-grid { grid-template-columns: repeat(2, 1fr); }
+    main { padding: .75rem .75rem calc(4.5rem + env(safe-area-inset-bottom)); }
+    #main-nav { display: none; }
+    /* Week grid → horizontal scroll strip */
+    .week-grid {
+      display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      scroll-snap-type: x mandatory; gap: .4rem; padding-bottom: .25rem;
+      scrollbar-width: none;
+    }
+    .week-grid::-webkit-scrollbar { display: none; }
+    .week-grid > * { flex: 0 0 110px; scroll-snap-align: start; }
     header { padding: .8rem 1rem; flex-wrap:wrap; }
     header .mobile-log-activity { order:10; width:100%; margin-top:.3rem; }
+    /* Bottom sheet overlays */
+    .workout-detail-overlay, .meal-detail-overlay { align-items: flex-end; }
+    .workout-detail-card, .meal-detail-card {
+      max-width: 100%; width: 100%;
+      border-radius: var(--radius) var(--radius) 0 0;
+      max-height: 90vh;
+      padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+      animation: slideUp .25s ease;
+    }
+    /* Touch targets — min 44×44px per HIG */
+    .btn-sm { min-height: 44px; }
+    .ing-remove, .pchip-del, .mchip-del, .meal-slot-del {
+      min-width: 44px; min-height: 44px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .week-nav-btn { min-height: 44px; min-width: 80px; }
+    /* Toast above bottom nav */
+    #toast { bottom: calc(5rem + env(safe-area-inset-bottom)); right: 1rem; }
   }
+  /* ---- Mobile bottom navigation ---- */
+  #mobile-bottom-nav {
+    display: none; position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--surface); border-top: 1px solid var(--border); z-index: 500;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  @media (max-width: 640px) { #mobile-bottom-nav { display: flex; } }
+  .mob-nav-btn {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: .45rem .1rem; background: none; border: none; cursor: pointer;
+    font-size: .58rem; color: var(--muted); gap: .1rem; min-height: 54px;
+    text-transform: uppercase; letter-spacing: .03em;
+    font-family: var(--font-body); font-weight: 600; transition: color .15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mob-nav-btn.active { color: var(--accent); }
+  .mob-nav-icon { font-size: 1.25rem; line-height: 1; }
 </style>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
@@ -1182,6 +1226,15 @@
 
     </section>
   <footer>Fuel &amp; Run — personalised nutrition for active lifestyles · Data stored locally in your browser only</footer>
+  <nav id="mobile-bottom-nav" aria-label="Main navigation">
+    <button class="mob-nav-btn active" data-tab="dashboard"><span class="mob-nav-icon">📊</span>Home</button>
+    <button class="mob-nav-btn" data-tab="training"><span class="mob-nav-icon">📅</span>Week</button>
+    <button class="mob-nav-btn" data-tab="plate"><span class="mob-nav-icon">🍽️</span>Plate</button>
+    <button class="mob-nav-btn" data-tab="meals"><span class="mob-nav-icon">🍲</span>Meals</button>
+    <button class="mob-nav-btn" data-tab="products"><span class="mob-nav-icon">🛒</span>Pantry</button>
+    <button class="mob-nav-btn" data-tab="recommendations"><span class="mob-nav-icon">🦘</span>Ideas</button>
+    <button class="mob-nav-btn" data-tab="profile"><span class="mob-nav-icon">👤</span>Profile</button>
+  </nav>
 </div>
 
 <!-- Quantity Modal -->
@@ -1855,23 +1908,29 @@ function setSyncStatus(msg) {
 // ============================================================
 // NAVIGATION
 // ============================================================
-document.querySelectorAll('#main-nav button').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#main-nav button').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-    // Reset plate to today whenever navigating away from or to the plate tab
-    plateOffset = 0;
-    renderAll();
-    // Auto-refresh Garmin in background when opening My Week (if data is >10 min old)
-    if (btn.dataset.tab === 'training') {
-      const staleMs = 10 * 60 * 1000;
-      if (!window.garminLoadInProgress && (!window.garminLastLoaded || Date.now() - window.garminLastLoaded > staleMs)) {
-        loadGarminData();
-      }
+function switchToTab(tabName) {
+  document.querySelectorAll('#main-nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#mobile-bottom-nav .mob-nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  const mainBtn = document.querySelector(`#main-nav button[data-tab="${tabName}"]`);
+  if (mainBtn) mainBtn.classList.add('active');
+  const mobBtn = document.querySelector(`#mobile-bottom-nav [data-tab="${tabName}"]`);
+  if (mobBtn) mobBtn.classList.add('active');
+  document.getElementById('tab-' + tabName).classList.add('active');
+  plateOffset = 0;
+  renderAll();
+  if (tabName === 'training') {
+    const staleMs = 10 * 60 * 1000;
+    if (!window.garminLoadInProgress && (!window.garminLastLoaded || Date.now() - window.garminLastLoaded > staleMs)) {
+      loadGarminData();
     }
-  });
+  }
+}
+document.querySelectorAll('#main-nav button').forEach(btn => {
+  btn.addEventListener('click', () => switchToTab(btn.dataset.tab));
+});
+document.querySelectorAll('#mobile-bottom-nav .mob-nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchToTab(btn.dataset.tab));
 });
 
 // ============================================================

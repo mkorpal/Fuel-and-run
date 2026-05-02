@@ -658,7 +658,7 @@
       <!-- Calorie Chart -->
       <div class="card">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem;">
-          <span>📈 Calories: Used vs Consumed</span>
+          <span>CALORIES: USED VS CONSUMED</span>
           <div style="display:flex; gap:.35rem; flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm chart-period active" data-period="7">Week</button>
             <button class="btn btn-secondary btn-sm chart-period" data-period="30">Month</button>
@@ -681,7 +681,7 @@
       <!-- Protein per kg Chart -->
       <div class="card">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem;">
-          <span>📈 Protein per kg body weight</span>
+          <span>PROTEIN PER KG BODY WEIGHT</span>
           <div style="display:flex; gap:.35rem; flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm chart-period-macro active" data-period="7">Week</button>
             <button class="btn btn-secondary btn-sm chart-period-macro" data-period="30">Month</button>
@@ -699,7 +699,7 @@
       <!-- Carbs per kg Chart -->
       <div class="card">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.5rem;">
-          <span>📈 Carbs per kg body weight</span>
+          <span>CARBS PER KG BODY WEIGHT</span>
           <div style="display:flex; gap:.35rem; flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm chart-period-macro active" data-period="7">Week</button>
             <button class="btn btn-secondary btn-sm chart-period-macro" data-period="30">Month</button>
@@ -716,7 +716,7 @@
 
       <div class="card">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-          <span>📊 Diet Insights</span>
+          <span>DIET INSIGHTS</span>
           <button id="btn-ai-insights" class="btn btn-secondary btn-sm" style="font-size:.75rem; padding:.25rem .65rem;" onclick="generateAiInsights()">✨ AI Analysis</button>
         </div>
         <div id="dash-guide"></div>
@@ -724,7 +724,7 @@
       </div>
 
       <div class="card" id="dash-tip-card">
-        <div class="card-title">💡 Dietitian Tip</div>
+        <div class="card-title">DIETITIAN TIP</div>
         <div id="dash-tip" style="font-size:.9rem; color: var(--muted);"></div>
       </div>
 
@@ -733,7 +733,7 @@
     <!-- MY PLATE -->
     <section id="tab-plate" class="section">
       <div class="card">
-        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="card-title" style="display:flex; justify-content:center; align-items:center;">
           <div style="display:flex; align-items:center; gap:.4rem;">
             <button class="btn btn-secondary btn-sm" id="btn-plate-prev" style="padding:.2rem .5rem;">◀</button>
             <span id="plate-nav-label" style="font-size:.8rem; min-width:5rem; text-align:center; font-weight:700; text-transform:uppercase; letter-spacing:.04em;">TODAY</span>
@@ -959,7 +959,7 @@
     <section id="tab-products" class="section">
       <div class="pantry-layout">
         <div class="card">
-          <div class="card-title" style="display:flex; justify-content:flex-end; align-items:center; flex-wrap:wrap; gap:.4rem;">
+          <div class="card-title" style="display:flex; justify-content:flex-start; align-items:center; flex-wrap:wrap; gap:.4rem;">
             <div style="display:flex; gap:.35rem; flex-wrap:wrap;">
               <button class="btn btn-secondary btn-sm" id="btn-scan-barcode" style="font-size:.72rem;">📷 Scan</button>
               <button class="btn btn-secondary btn-sm" style="font-size:.72rem; background:#1a8a3f; border-color:#1a8a3f; color:#fff;" onclick="openProductModal('search')">🛒 Search Coles / Woolies</button>
@@ -1962,6 +1962,7 @@ function switchToTab(tabName) {
   if (mobBtn) mobBtn.classList.add('active');
   document.getElementById('tab-' + tabName).classList.add('active');
   plateOffset = 0;
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   renderAll();
   if (tabName === 'training') {
     const staleMs = 10 * 60 * 1000;
@@ -6972,7 +6973,7 @@ function renderPlateTab() {
   // Update nav label and next button
   const navLabel = document.getElementById('plate-nav-label');
   const nextBtn = document.getElementById('btn-plate-next');
-  if (navLabel) navLabel.textContent = isToday ? 'TODAY' : viewedDate;
+  if (navLabel) navLabel.textContent = isToday ? 'TODAY' : new Date(viewedDate + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase();
   if (nextBtn) nextBtn.disabled = isToday;
 
   // "Add food to this day" button for past days

@@ -215,6 +215,9 @@
 
   /* ---- Nutrition targets ---- */
   .targets-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+  @media (max-width: 640px) {
+    .targets-grid { grid-template-columns: repeat(2, 1fr); }
+  }
   .target-card {
     background: var(--surface2);
     border-radius: var(--radius);
@@ -441,6 +444,14 @@
     background: var(--surface); border-radius: var(--radius);
     padding: 1.25rem; width: min(94vw, 420px); position: relative;
   }
+  @media (max-width: 640px) {
+    #scanner-modal { align-items: flex-end; }
+    #scanner-box {
+      width: 100%; border-radius: var(--radius) var(--radius) 0 0;
+      padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+    }
+    #reader { max-height: 55vh; }
+  }
   #scanner-box h3 { font-family: var(--font-head); font-size: 1.05rem; margin-bottom: .75rem; }
   #reader { width: 100%; border-radius: 4px; overflow: hidden; }
   #scanner-status { font-size: .82rem; color: var(--muted); margin-top: .6rem; min-height: 1.2em; }
@@ -624,7 +635,7 @@
     <button class="active" data-tab="dashboard">Dashboard</button>
     <button data-tab="training">My Week</button>
     <button data-tab="plate">My Plate</button>
-    <button data-tab="products">My Products</button>
+    <button data-tab="products">My Pantry</button>
     <button data-tab="meals">My Meals</button>
     <button data-tab="recommendations">AU Food Ideas</button>
     <button data-tab="profile">Profile</button>
@@ -732,7 +743,7 @@
           <div style="background:var(--surface); border-radius:var(--radius); padding:1.25rem; width:min(96vw,420px); position:relative; margin:auto;">
             <button onclick="closeAddToPlateModal()" style="position:absolute; top:.7rem; right:.9rem; background:none; border:none; font-size:1.6rem; cursor:pointer; color:var(--muted); padding:.3rem;">✕</button>
             <h3 style="margin-bottom:.7rem;">Add to My Plate</h3>
-            <input id="add-to-plate-search" type="text" placeholder="Search by name..." style="width:100%; margin-bottom:.7rem; padding:.4rem; border-radius:6px; border:1px solid var(--border); font-size:.95rem;" />
+            <input id="add-to-plate-search" type="text" placeholder="Search by name..." style="width:100%; margin-bottom:.7rem; padding:.4rem; border-radius:6px; border:1px solid var(--border); font-size:.95rem;" autocomplete="off" />
             <div id="add-to-plate-categories" style="display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:1rem;"></div>
             <div id="add-to-plate-list" style="max-height:320px; overflow-y:auto;"></div>
           </div>
@@ -755,6 +766,10 @@
           ).join('');
           document.getElementById('add-to-plate-search').value = '';
           document.getElementById('add-to-plate-search').oninput = renderAddToPlateList;
+          // On mobile, dismiss keyboard when user picks from list
+          document.getElementById('add-to-plate-list').addEventListener('click', () => {
+            document.getElementById('add-to-plate-search').blur();
+          }, { once: true });
           // Double-RAF: ensures overlay paints before list renders (instant visual response)
           requestAnimationFrame(() => requestAnimationFrame(renderAddToPlateList));
         }
@@ -947,7 +962,7 @@
               <button class="btn btn-secondary btn-sm" style="font-size:.72rem;" onclick="openProductModal('add')">➕ New Product</button>
             </div>
           </div>
-          <p style="font-size:.8rem; color:var(--muted); margin-bottom:.75rem;">Click a product to see nutrition details. Tap <strong>＋</strong> to log it.</p>
+
           <div class="pantry-search-wrap"><input type="search" id="pantry-search-input" placeholder="Search products…" oninput="setPantrySearch(this.value)" autocomplete="off" /></div>
           <div id="product-list" class="product-list"></div>
           <p id="no-products" style="color:var(--muted); font-size:.85rem;">No products saved yet. Use the buttons above to add one.</p>
@@ -1047,7 +1062,7 @@
             <span>🍽️ My Meals</span>
             <button class="btn btn-primary btn-sm" id="btn-new-meal">+ Create Meal</button>
           </div>
-          <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">Build meals from your pantry products or save recipes. <strong>Drag</strong> a meal card (or tap <strong>＋</strong>) to log it to my plate.</p>
+
           <div style="display:flex; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm meal-filter-btn active" data-filter="all">All meals</button>
             <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="breakfast">🌅 Breakfast</button>
@@ -1238,8 +1253,8 @@
     <button class="mob-nav-btn active" data-tab="dashboard"><span class="mob-nav-icon">📊</span>Home</button>
     <button class="mob-nav-btn" data-tab="training"><span class="mob-nav-icon">📅</span>Week</button>
     <button class="mob-nav-btn" data-tab="plate"><span class="mob-nav-icon">🍽️</span>Plate</button>
-    <button class="mob-nav-btn" data-tab="meals"><span class="mob-nav-icon">🍲</span>Meals</button>
     <button class="mob-nav-btn" data-tab="products"><span class="mob-nav-icon">🛒</span>Pantry</button>
+    <button class="mob-nav-btn" data-tab="meals"><span class="mob-nav-icon">🍲</span>Meals</button>
     <button class="mob-nav-btn" data-tab="recommendations"><span class="mob-nav-icon">🦘</span>Ideas</button>
     <button class="mob-nav-btn" data-tab="profile"><span class="mob-nav-icon">👤</span>Profile</button>
   </nav>
@@ -1298,7 +1313,7 @@
 
 <!-- Barcode Scanner Modal -->
 <div id="scanner-modal">
-  <div id="scanner-box">
+  <div id="scanner-box" style="">
     <button id="scanner-close" title="Close">✕</button>
     <h3>📷 Scan Product Barcode</h3>
     <div id="reader"></div>
@@ -5102,6 +5117,7 @@ function renderCalorieChart() {
     },
   };
 
+  const isMobile = window.innerWidth < 640;
   calorieChart = new Chart(canvas, {
     type: 'line',
     data: { labels, datasets },
@@ -5112,7 +5128,7 @@ function renderCalorieChart() {
         legend: {
           position: 'top',
           labels: {
-            font: { size: 12 }, boxWidth: 28, padding: 14,
+            font: { size: isMobile ? 10 : 12 }, boxWidth: isMobile ? 18 : 28, padding: isMobile ? 8 : 14,
             filter: item => !item.text.startsWith('Target zone'),
           },
         },
@@ -5142,6 +5158,7 @@ function renderMacroCharts() {
   const log = ap.dailyLog || [];
   const { labels, protkg, carbkg } = aggregateCalorieData(log, macroPeriodDays);
   const ptRadius = macroPeriodDays <= 30 ? 4 : 2;
+  const isMobile = window.innerWidth < 640;
 
   // Protein chart
   const pCanvas = document.getElementById('protein-chart');
@@ -5164,7 +5181,7 @@ function renderMacroCharts() {
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) + ' g/kg' : 'not logged' } }, rangeBand: [{ yAxisID: 'y', min: 1.8, max: 2.2, color: 'rgba(72,219,251,0.10)', label: 'Target 1.8\u20132.2 g/kg', labelColor: 'rgba(72,219,251,0.5)' }] },
-          scales: { x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } }, y: { min: 1, title: { display: true, text: 'g / kg', font: { size: 11 } }, ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' } } },
+          scales: { x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: isMobile ? 7 : 14 } }, y: { min: 1, title: { display: !isMobile, text: 'g / kg', font: { size: 11 } }, ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' } } },
         },
       });
     }
@@ -5191,7 +5208,7 @@ function renderMacroCharts() {
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) + ' g/kg' : 'not logged' } } },
-          scales: { x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: 14 } }, y: { beginAtZero: true, title: { display: true, text: 'g / kg', font: { size: 11 } }, ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' } } },
+          scales: { x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true, maxTicksLimit: isMobile ? 7 : 14 } }, y: { beginAtZero: true, title: { display: !isMobile, text: 'g / kg', font: { size: 11 } }, ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,.06)' } } },
         },
       });
     }

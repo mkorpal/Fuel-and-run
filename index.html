@@ -651,7 +651,7 @@
     <!-- DASHBOARD -->
     <section id="tab-dashboard" class="section active">
       <div class="card">
-        <div class="card-title">Weekly Overview</div>
+        <div class="card-title" style="text-transform:uppercase; letter-spacing:.04em;">Weekly Overview</div>
         <div id="dash-summary"></div>
       </div>
 
@@ -736,7 +736,7 @@
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
           <div style="display:flex; align-items:center; gap:.4rem;">
             <button class="btn btn-secondary btn-sm" id="btn-plate-prev" style="padding:.2rem .5rem;">◀</button>
-            <span id="plate-nav-label" style="font-size:.8rem; min-width:5rem; text-align:center;">Today</span>
+            <span id="plate-nav-label" style="font-size:.8rem; min-width:5rem; text-align:center; font-weight:700; text-transform:uppercase; letter-spacing:.04em;">TODAY</span>
             <button class="btn btn-secondary btn-sm" id="btn-plate-next" style="padding:.2rem .5rem;" disabled>▶</button>
           </div>
         </div>
@@ -959,8 +959,7 @@
     <section id="tab-products" class="section">
       <div class="pantry-layout">
         <div class="card">
-          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:.4rem;">
-            <span>Pantry</span>
+          <div class="card-title" style="display:flex; justify-content:flex-end; align-items:center; flex-wrap:wrap; gap:.4rem;">
             <div style="display:flex; gap:.35rem; flex-wrap:wrap;">
               <button class="btn btn-secondary btn-sm" id="btn-scan-barcode" style="font-size:.72rem;">📷 Scan</button>
               <button class="btn btn-secondary btn-sm" style="font-size:.72rem; background:#1a8a3f; border-color:#1a8a3f; color:#fff;" onclick="openProductModal('search')">🛒 Search Coles / Woolies</button>
@@ -1063,7 +1062,7 @@
     <section id="tab-meals" class="section">
       <div class="pantry-layout">
         <div class="card">
-          <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="card-title" style="display:flex; justify-content:flex-end; align-items:center;">
             <button class="btn btn-primary btn-sm" id="btn-new-meal">+ Create Meal</button>
           </div>
 
@@ -2538,7 +2537,7 @@ function renderWeekGrid() {
 
   const labelEl = document.getElementById('week-label');
   if (labelEl) {
-    const suffix = weekOffset === 0 ? ' (this week)' : weekOffset < 0 ? ' (past)' : ' (upcoming)';
+    const suffix = weekOffset === 0 ? ' (THIS WEEK)' : weekOffset < 0 ? ' (past)' : ' (upcoming)';
     labelEl.textContent = weekRangeLabel(monday) + suffix;
   }
 
@@ -5379,7 +5378,7 @@ function renderDashboard() {
   // Deficit / surplus per day: consumed minus burned (RMR + exercise)
   const deficitTotal = kcalConsumed - kcalBurned;
   const deficitPerDay = daysElapsed > 0 ? Math.round(deficitTotal / daysElapsed) : 0;
-  const deficitLabel = deficitPerDay > 0 ? '+' + deficitPerDay : String(deficitPerDay);
+  const deficitLabel = deficitPerDay > 0 ? '+' + deficitPerDay : deficitPerDay < 0 ? '(' + Math.abs(deficitPerDay) + ')' : '0';
   const deficitClass = deficitPerDay > 0 ? 'danger' : '';
 
   const protPerKgDay = daysElapsed > 0 ? (totalProt / daysElapsed / w).toFixed(1) : '—';
@@ -6973,7 +6972,7 @@ function renderPlateTab() {
   // Update nav label and next button
   const navLabel = document.getElementById('plate-nav-label');
   const nextBtn = document.getElementById('btn-plate-next');
-  if (navLabel) navLabel.textContent = isToday ? 'Today' : viewedDate;
+  if (navLabel) navLabel.textContent = isToday ? 'TODAY' : viewedDate;
   if (nextBtn) nextBtn.disabled = isToday;
 
   // "Add food to this day" button for past days

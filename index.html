@@ -302,7 +302,7 @@
   .product-chip .pchip-log:hover { opacity: .85; }
   /* Detail popover (appears below chip on click) */
   .product-detail-pop {
-    display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+    display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 560;
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
     box-shadow: 0 6px 24px rgba(0,0,0,.35); padding: .65rem .85rem;
     min-width: 220px; max-width: 300px; font-size: .8rem;
@@ -483,7 +483,7 @@
   }
   .meal-chip .mchip-log:hover { opacity: .85; }
   .meal-detail-pop {
-    display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+    display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 560;
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
     box-shadow: 0 6px 24px rgba(0,0,0,.35); padding: .65rem .85rem;
     min-width: 240px; max-width: 340px; font-size: .8rem;
@@ -557,6 +557,11 @@
     .week-nav-btn { min-height: 44px; min-width: 80px; }
     /* Toast above bottom nav */
     #toast { bottom: calc(5rem + env(safe-area-inset-bottom)); right: 1rem; }
+    /* Popovers open upward so bottom nav never covers their buttons */
+    .product-detail-pop, .meal-detail-pop {
+      top: auto;
+      bottom: calc(100% + 6px);
+    }
   }
   /* ---- Mobile bottom navigation ---- */
   #mobile-bottom-nav {

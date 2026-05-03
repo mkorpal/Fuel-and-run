@@ -987,9 +987,9 @@
           </div>
           <div class="pantry-search-wrap"><input type="search" id="library-search-input" placeholder="Search products &amp; meals…" oninput="setLibrarySearch(this.value)" autocomplete="off" /></div>
           <div id="product-list" class="product-list"></div>
-          <p id="no-products" style="color:var(--muted); font-size:.85rem; display:none;">No products yet. Use the buttons above to add one.</p>
+          <p id="no-products" style="color:var(--muted); font-size:.85rem;">No products yet. Use the buttons above to add one.</p>
           <div class="meal-grid" id="meal-grid"></div>
-          <p id="no-meals" style="color:var(--muted); font-size:.85rem; display:none;">No meals saved yet. Create your first meal above.</p>
+          <p id="no-meals" style="color:var(--muted); font-size:.85rem;">No meals saved yet. Create your first meal above.</p>
         </div>
       </div>
     </section>
@@ -3623,10 +3623,11 @@ function renderProducts() {
   if (!list) return;
   const activeProducts = state.products.filter(p => !p.deletedAt);
   if (!activeProducts.length) {
-    list.innerHTML = ''; none.style.display = '';
+    list.innerHTML = '';
+    if (none) none.style.display = '';
     return;
   }
-  none.style.display = 'none';
+  if (none) none.style.display = 'none';
 
   const productChip = p => `
     <div class="product-chip" id="pcard-${p.id}"
@@ -4811,10 +4812,10 @@ function renderMeals() {
   });
   if (!filtered.length) {
     grid.innerHTML = '';
-    none.style.display = '';
+    if (none) none.style.display = '';
     return;
   }
-  none.style.display = 'none';
+  if (none) none.style.display = 'none';
 
   // Group by meal category
   const catLabels = { breakfast: '🌅 Breakfast', prerun: '🏃 Pre-Run', lunch: '🍽️ Lunch / Dinner', snack: '🥜 Snack', salad: '🥗 Salads & Sides', outdoor: '🌿 Outdoor / Takeaway' };

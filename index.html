@@ -971,8 +971,8 @@
         <div class="card">
           <div style="display:flex; gap:.35rem; flex-wrap:wrap; margin-bottom:.7rem;">
             <button class="btn btn-secondary btn-sm" id="btn-scan-barcode" style="font-size:.72rem;">📷 Scan</button>
-            <button class="btn btn-secondary btn-sm" style="font-size:.72rem; background:#1a8a3f; border-color:#1a8a3f; color:#fff;" onclick="openProductModal('search')">🔍 Search Food</button>
-            <button class="btn btn-primary btn-sm" style="font-size:.72rem;" onclick="openProductModal('add')">➕ Add Food</button>
+            <button class="btn btn-secondary btn-sm" style="font-size:.72rem; background:#1a8a3f; border-color:#1a8a3f; color:#fff;" onclick="openProductModal('search')">🔍 Search</button>
+            <button class="btn btn-primary btn-sm" style="font-size:.72rem;" onclick="openProductModal('add')">➕ Add</button>
           </div>
           <div class="meal-tag-filter-row" id="library-tag-filter-row" style="margin-bottom:.6rem;">
             <span class="meal-tag-filter-label" style="white-space:nowrap;">Filter:</span>
@@ -1094,7 +1094,7 @@
             <button class="btn btn-primary" type="submit" id="btn-save-product">💾 Save Food</button>
             <button class="btn btn-secondary" type="button" id="btn-cancel-edit-product" style="display:none;" onclick="cancelProductEdit()">Cancel Edit</button>
             <div style="margin-top:.75rem; padding-top:.75rem; border-top:1px solid var(--border);">
-              <button type="button" class="btn btn-secondary btn-sm" onclick="closeProductModal(); document.getElementById('meal-modal').classList.add('open'); setMealBuilderType('pantry');">🫙 Build this food from pantry ingredients →</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="closeProductModal(); document.getElementById('meal-modal').classList.add('open'); setMealBuilderType('pantry');">🫙 Build from pantry ingredients →</button>
             </div>
           </form>
         </div>

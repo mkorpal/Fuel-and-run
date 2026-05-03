@@ -42,7 +42,8 @@ def get_mfa():
     return input("Enter MFA / verification code from your email or authenticator: ").strip()
 
 print("\nLogging in to Garmin Connect...")
-api = Garmin(email, password, prompt_mfa=get_mfa)
+# marysia has MFA enabled; michal does not
+api = Garmin(email, password, prompt_mfa=get_mfa if profile == 'marysia' else None)
 
 try:
     api.login()

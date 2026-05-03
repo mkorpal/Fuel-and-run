@@ -972,8 +972,7 @@
           <div style="display:flex; gap:.35rem; flex-wrap:wrap; margin-bottom:.7rem;">
             <button class="btn btn-secondary btn-sm" id="btn-scan-barcode" style="font-size:.72rem;">📷 Scan</button>
             <button class="btn btn-secondary btn-sm" style="font-size:.72rem; background:#1a8a3f; border-color:#1a8a3f; color:#fff;" onclick="openProductModal('search')">🔍 Search Food</button>
-            <button class="btn btn-secondary btn-sm" style="font-size:.72rem;" onclick="openProductModal('add')">➕ New Product</button>
-            <button class="btn btn-primary btn-sm" id="btn-new-meal" style="font-size:.72rem;">🍽️ Create Meal</button>
+            <button class="btn btn-primary btn-sm" style="font-size:.72rem;" onclick="openProductModal('add')">➕ Add Food</button>
           </div>
           <div class="meal-tag-filter-row" id="library-tag-filter-row" style="margin-bottom:.6rem;">
             <span class="meal-tag-filter-label" style="white-space:nowrap;">Filter:</span>
@@ -1000,9 +999,9 @@
           </div>
           <div class="pantry-search-wrap"><input type="search" id="library-search-input" placeholder="Search products &amp; meals…" oninput="setLibrarySearch(this.value)" autocomplete="off" /></div>
           <div id="product-list" class="product-list"></div>
-          <p id="no-products" style="color:var(--muted); font-size:.85rem;">No products yet. Use the buttons above to add one.</p>
+          <p id="no-products" style="color:var(--muted); font-size:.85rem;">No food items yet. Use the buttons above to add one.</p>
           <div class="meal-grid" id="meal-grid"></div>
-          <p id="no-meals" style="color:var(--muted); font-size:.85rem;">No meals saved yet. Create your first meal above.</p>
+          <p id="no-meals" style="color:var(--muted); font-size:.85rem; display:none;">No composed food saved yet.</p>
         </div>
       </div>
     </section>
@@ -1020,7 +1019,7 @@
           <div id="super-search-results" style="margin-bottom:.75rem;"></div>
         </div>
         <div id="product-modal-section-add">
-          <h3 id="product-modal-title" style="font-size:1rem; margin-bottom:.75rem;">➕ Add a Product</h3>
+          <h3 id="product-modal-title" style="font-size:1rem; margin-bottom:.75rem;">➕ Add Food</h3>
           <div id="product-db-search-section" style="margin-bottom:.75rem;">
             <label style="font-size:.82rem; font-weight:600;">🔍 Search food database</label>
             <div style="display:flex; gap:.4rem; margin-top:.3rem;">
@@ -1032,7 +1031,7 @@
           <form id="product-form" onsubmit="return false;">
             <div class="form-inline">
               <div class="form-row" style="flex:2; min-width:200px;">
-                <label>Product Name</label>
+                <label>Food Name</label>
                 <input type="text" id="p-name" placeholder="e.g. Chobani Greek Yoghurt" required />
               </div>
               <div class="form-row" style="flex:1; min-width:140px;">
@@ -1092,8 +1091,11 @@
               <label>Product URL (optional)</label>
               <input type="url" id="p-url" placeholder="https://www.woolworths.com.au/..." />
             </div>
-            <button class="btn btn-primary" type="submit" id="btn-save-product">💾 Save Product</button>
+            <button class="btn btn-primary" type="submit" id="btn-save-product">💾 Save Food</button>
             <button class="btn btn-secondary" type="button" id="btn-cancel-edit-product" style="display:none;" onclick="cancelProductEdit()">Cancel Edit</button>
+            <div style="margin-top:.75rem; padding-top:.75rem; border-top:1px solid var(--border);">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="closeProductModal(); document.getElementById('meal-modal').classList.add('open'); setMealBuilderType('pantry');">🫙 Build this food from pantry ingredients →</button>
+            </div>
           </form>
         </div>
       </div>
@@ -1345,7 +1347,7 @@
 <div id="meal-modal">
   <div id="meal-box">
     <button id="meal-modal-close" title="Close">✕</button>
-    <h3>🍽️ Create a Meal</h3>
+    <h3>🫙 Food from Ingredients</h3>
     <div class="meal-type-tabs">
       <button class="meal-type-tab active" data-mtype="pantry">🫙 From my pantry</button>
       <button class="meal-type-tab" data-mtype="recipe">🌐 Internet recipe</button>
@@ -1464,7 +1466,7 @@
       <div id="ai-restaurant-preview" style="display:none; background:var(--surface2); border-radius:8px; padding:.7rem; margin-bottom:.5rem; font-size:.85rem;"></div>
     </div>
     <div style="display:flex; gap:.75rem; margin-top:.5rem;">
-      <button class="btn btn-primary" id="btn-save-meal">Save Meal</button>
+      <button class="btn btn-primary" id="btn-save-meal">Save Food</button>
       <button class="btn btn-secondary" id="btn-cancel-meal">Cancel</button>
     </div>
   </div>
@@ -3685,7 +3687,7 @@ function renderProducts() {
     });
   }
 
-  const sectionHeader = `<div class="product-group-title" style="width:100%;">PRODUCTS <span style="font-weight:400; font-size:.72rem;">(${filtered.length})</span></div>`;
+  const sectionHeader = '';
   list.innerHTML = sectionHeader + filtered.map(productChip).join('');
 }
 
@@ -4352,9 +4354,9 @@ function openMealModal() {
   renderIngredientRows();
   addIngredientRow(); // start with one row
   const heading = document.querySelector('#meal-box > h3');
-  if (heading) heading.textContent = '\ud83c\udf7d\ufe0f Create a Meal';
+  if (heading) heading.textContent = '\ud83e\uded9 Food from Ingredients';
   const saveBtn = document.getElementById('btn-save-meal');
-  if (saveBtn) saveBtn.textContent = 'Save Meal';
+  if (saveBtn) saveBtn.textContent = 'Save Food';
   document.getElementById('meal-modal').classList.add('open');
 }
 
@@ -4443,7 +4445,7 @@ function closeMealModal() {
   document.querySelectorAll('#meal-tags-picker .meal-tag-opt').forEach(b => b.classList.remove('active'));
 }
 
-function setMealBuilderType(type) {
+window.setMealBuilderType = function setMealBuilderType(type) {
   mealBuilderType = type;
   document.querySelectorAll('.meal-type-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.mtype === type);
@@ -4584,7 +4586,8 @@ function updateMealPreview() {
     `<span>Fat <strong>${m.fat}g</strong></span>`;
 }
 
-document.getElementById('btn-new-meal').addEventListener('click', openMealModal);
+const _btnNewMeal = document.getElementById('btn-new-meal');
+if (_btnNewMeal) _btnNewMeal.addEventListener('click', openMealModal);
 document.getElementById('meal-modal-close').addEventListener('click', closeMealModal);
 document.getElementById('btn-cancel-meal').addEventListener('click', closeMealModal);
 document.getElementById('btn-add-ingredient').addEventListener('click', () => addIngredientRow());
@@ -4945,14 +4948,12 @@ function renderMeals() {
       </div>`;
   };
 
-  // Render grouped by category
+  // Render as flat list (no MEALS header, no per-category dividers)
   const catsToShow = catOrder.filter(c => groups[c]);
-  grid.innerHTML = `<div class="product-group-title" style="width:100%; margin-top:.75rem;">MEALS <span style="font-weight:400; font-size:.72rem;">(${filtered.length})</span></div>` +
-    catsToShow.map(cat => {
+  grid.innerHTML = catsToShow.map(cat => {
     const meals = groups[cat] || [];
     if (!meals.length) return '';
-    return (catsToShow.length > 1 ? `<div class="product-group-title" style="width:100%; margin-top:.4rem; font-size:.7rem; opacity:.7;">${catLabels[cat] || cat}</div>` : '')
-      + meals.map(mealChip).join('');
+    return meals.map(mealChip).join('');
   }).join('');
 }
 

@@ -540,15 +540,16 @@
   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   @media (max-width: 640px) {
     main { padding: .75rem .75rem calc(1.5rem + env(safe-area-inset-bottom)); }
-    /* Nav shown as sticky second row under the header */
-    nav#main-nav { display: flex; position: sticky; top: 50px; z-index: 199; }
-    nav#main-nav {
+    nav#main-nav { display: flex; position: sticky; top: 50px; z-index: 199;
       overflow-x: hidden;
     }
     nav#main-nav button {
-      flex: 1; padding: .35rem .1rem; font-size: .65rem;
+      flex: 1; padding: .3rem .05rem; font-size: .72rem;
       letter-spacing: 0; white-space: nowrap;
+      display: flex; flex-direction: column; align-items: center; gap: .05rem;
+      border-bottom-width: 3px;
     }
+    nav#main-nav button .nav-icon { font-size: 1.1rem; line-height: 1; }
     /* Week grid → horizontal scroll strip */
     .week-grid {
       display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch;
@@ -641,11 +642,11 @@
     </div>
   </header>
   <nav id="main-nav">
-    <button class="active" data-tab="dashboard">Home</button>
-    <button data-tab="training">My Week</button>
-    <button data-tab="plate">My Plate</button>
-    <button data-tab="library">Food</button>
-    <button data-tab="profile">Settings</button>
+    <button class="active" data-tab="dashboard"><span class="nav-icon">📊</span>Home</button>
+    <button data-tab="training"><span class="nav-icon">📅</span>Week</button>
+    <button data-tab="plate"><span class="nav-icon">🍽️</span>Plate</button>
+    <button data-tab="library"><span class="nav-icon">🫙</span>Food</button>
+    <button data-tab="profile"><span class="nav-icon">⚙️</span>Settings</button>
   </nav>
   <main>
 

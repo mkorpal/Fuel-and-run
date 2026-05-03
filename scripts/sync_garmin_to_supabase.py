@@ -106,6 +106,13 @@ def garmin_login() -> Garmin:
             api = Garmin()
             api.client.load(str(TOKEN_FILE))
             print(f"Reusing saved Garmin session from {TOKEN_FILE}")
+            # get_stats() requires display_name to be set; loading from token skips the
+            # normal login flow that populates it. Fetch the social profile to fill it in.
+            try:
+                social = api.client.connectapi('/userprofile-service/socialProfile')
+                api.display_name = social.get('displayName') or social.get('userName') or ''
+            except Exception as e:
+                print(f"  WARNING: Could not fetch display_name: {e}")
             try:
                 api.client.dump(str(TOKEN_FILE))
             except Exception:

@@ -35,7 +35,7 @@ try:
 except ImportError:
     pass
 
-from garminconnect import Garmin
+from garminconnect import Garmin, GarminConnectAuthenticationError
 from supabase import create_client
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -94,26 +94,53 @@ def _get(obj, *keys, default=None):
 # ── Garmin auth ───────────────────────────────────────────────────────────────
 
 def garmin_login() -> Garmin:
-    """Login to Garmin Connect using saved token file (no MFA/credentials needed in CI)."""
-    if not TOKEN_FILE.exists():
-        print(f"ERROR: Token file not found at {TOKEN_FILE}")
-        print("Run locally: python scripts/garmin_save_token.py to generate a token, then update the GitHub secret.")
+    """Login to Garmin Connect.
+
+    Priority:
+    1. If a saved token file exists, load it (no network login needed — avoids 429/MFA).
+    2. Otherwise fall back to credential login (works for accounts without MFA).
+       Accounts with MFA must pre-generate a token locally and store it as a GitHub secret.
+    """
+    if TOKEN_FILE.exists():
+        try:
+            api = Garmin()
+            api.client.load(str(TOKEN_FILE))
+            print(f"Reusing saved Garmin session from {TOKEN_FILE}")
+            try:
+                api.client.dump(str(TOKEN_FILE))
+            except Exception:
+                pass
+            return api
+        except Exception:
+            print("Saved token invalid or expired, falling back to credential login...")
+
+    # Credential fallback (no MFA accounts only)
+    if not GARMIN_EMAIL or not GARMIN_PASSWORD:
+        print(f"ERROR: No token file at {TOKEN_FILE} and no credentials provided.")
+        print("For MFA accounts: run scripts/garmin_save_token.py locally and store the result as a GitHub secret.")
         sys.exit(1)
 
+    print(f"Logging in to Garmin Connect as {GARMIN_EMAIL} ...")
+    api = Garmin(GARMIN_EMAIL, GARMIN_PASSWORD)
     try:
-        api = Garmin()
-        api.client.load(str(TOKEN_FILE))
-        print(f"Reusing saved Garmin session from {TOKEN_FILE}")
-        # Save back after any automatic token refresh
-        try:
-            api.client.dump(str(TOKEN_FILE))
-        except Exception:
-            pass
-        return api
-    except Exception as e:
-        print(f"ERROR: Failed to load Garmin token: {e}")
-        print("Token may be expired. Run locally: python scripts/garmin_save_token.py to regenerate, then update the GitHub secret.")
+        api.login()
+    except GarminConnectAuthenticationError as e:
+        print(f"Login failed: {e}")
         sys.exit(1)
+    except Exception as e:
+        msg = str(e)
+        if '429' in msg or 'rate' in msg.lower():
+            print("WARNING: Garmin rate-limited (429) — skipping this run. Will retry next cron cycle.")
+            sys.exit(0)
+        raise
+
+    try:
+        api.client.dump(str(TOKEN_FILE))
+    except Exception:
+        pass
+
+    print("Logged in to Garmin Connect")
+    return api
 
 
 # ── Garmin API fetchers ───────────────────────────────────────────────────────
@@ -268,8 +295,6 @@ def main():
     days_back = int(sys.argv[1]) if len(sys.argv) > 1 else 14
 
     missing = [name for var, name in [
-        (GARMIN_EMAIL,         'GARMIN_EMAIL'),
-        (GARMIN_PASSWORD,      'GARMIN_PASSWORD'),
         (SUPABASE_URL,         'SUPABASE_URL'),
         (SUPABASE_SERVICE_KEY, 'SUPABASE_SERVICE_KEY'),
     ] if not var]

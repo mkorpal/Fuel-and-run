@@ -542,7 +542,13 @@
     main { padding: .75rem .75rem calc(1.5rem + env(safe-area-inset-bottom)); }
     /* Nav shown as sticky second row under the header */
     nav#main-nav { display: flex; position: sticky; top: 50px; z-index: 199; }
-    nav#main-nav button { padding: .4rem .65rem; font-size: .75rem; }
+    nav#main-nav {
+      overflow-x: hidden;
+    }
+    nav#main-nav button {
+      flex: 1; padding: .35rem .1rem; font-size: .65rem;
+      letter-spacing: 0; white-space: nowrap;
+    }
     /* Week grid → horizontal scroll strip */
     .week-grid {
       display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch;
@@ -635,10 +641,10 @@
     </div>
   </header>
   <nav id="main-nav">
-    <button class="active" data-tab="dashboard">Dashboard</button>
+    <button class="active" data-tab="dashboard">Home</button>
     <button data-tab="training">My Week</button>
     <button data-tab="plate">My Plate</button>
-    <button data-tab="library">Products/Meals</button>
+    <button data-tab="library">Food</button>
     <button data-tab="profile">Settings</button>
   </nav>
   <main>

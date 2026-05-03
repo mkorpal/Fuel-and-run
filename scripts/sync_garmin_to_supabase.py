@@ -35,7 +35,7 @@ try:
 except ImportError:
     pass
 
-from garminconnect import Garmin, GarminConnectAuthenticationError
+from garminconnect import Garmin
 from supabase import create_client
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -94,37 +94,26 @@ def _get(obj, *keys, default=None):
 # ── Garmin auth ───────────────────────────────────────────────────────────────
 
 def garmin_login() -> Garmin:
-    """Login to Garmin Connect, reusing saved tokens if available."""
-    api = Garmin(GARMIN_EMAIL, GARMIN_PASSWORD)
-
-    if TOKEN_FILE.exists():
-        try:
-            api.login(tokenstore=str(TOKEN_FILE))
-            print("Reusing saved Garmin session")
-            return api
-        except Exception:
-            print("Saved token expired, logging in again...")
-
-    print(f"Logging in to Garmin Connect as {GARMIN_EMAIL} ...")
-    try:
-        api.login()
-    except GarminConnectAuthenticationError as e:
-        print(f"Login failed: {e}")
+    """Login to Garmin Connect using saved token file (no MFA/credentials needed in CI)."""
+    if not TOKEN_FILE.exists():
+        print(f"ERROR: Token file not found at {TOKEN_FILE}")
+        print("Run locally: python scripts/garmin_save_token.py to generate a token, then update the GitHub secret.")
         sys.exit(1)
-    except Exception as e:
-        msg = str(e)
-        if '429' in msg or 'rate' in msg.lower():
-            print(f"WARNING: Garmin rate-limited (429) — skipping this run. Will retry next cron cycle.")
-            sys.exit(0)
-        raise
 
     try:
-        api.client.dump(str(TOKEN_FILE))
-    except Exception:
-        pass
-
-    print("Logged in to Garmin Connect")
-    return api
+        api = Garmin()
+        api.client.load(str(TOKEN_FILE))
+        print(f"Reusing saved Garmin session from {TOKEN_FILE}")
+        # Save back after any automatic token refresh
+        try:
+            api.client.dump(str(TOKEN_FILE))
+        except Exception:
+            pass
+        return api
+    except Exception as e:
+        print(f"ERROR: Failed to load Garmin token: {e}")
+        print("Token may be expired. Run locally: python scripts/garmin_save_token.py to regenerate, then update the GitHub secret.")
+        sys.exit(1)
 
 
 # ── Garmin API fetchers ───────────────────────────────────────────────────────

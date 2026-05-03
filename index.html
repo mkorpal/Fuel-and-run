@@ -54,6 +54,7 @@
     flex-wrap: wrap;
     gap: .5rem;
     border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 200;
   }
   header h1 { font-family: var(--font-head); font-size: 1.25rem; font-weight: 800; letter-spacing: -.02em; color: var(--accent); }
   header span { font-size: .82rem; opacity: .75; }
@@ -538,8 +539,10 @@
   /* ---- Responsive ---- */
   @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   @media (max-width: 640px) {
-    main { padding: .75rem .75rem calc(4.5rem + env(safe-area-inset-bottom)); }
-    #main-nav { display: none; }
+    main { padding: .75rem .75rem calc(1.5rem + env(safe-area-inset-bottom)); }
+    /* Nav shown as sticky second row under the header */
+    nav#main-nav { display: flex; position: sticky; top: 50px; z-index: 199; }
+    nav#main-nav button { padding: .4rem .65rem; font-size: .75rem; }
     /* Week grid → horizontal scroll strip */
     .week-grid {
       display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch;
@@ -548,8 +551,7 @@
     }
     .week-grid::-webkit-scrollbar { display: none; }
     .week-grid > * { flex: 0 0 110px; scroll-snap-align: start; }
-    header { padding: .8rem 1rem; flex-wrap:wrap; }
-    header .mobile-log-activity { order:10; width:100%; margin-top:.3rem; }
+    header { padding: .6rem 1rem; flex-wrap: nowrap; }
     /* Bottom sheet overlays */
     .workout-detail-overlay, .meal-detail-overlay { align-items: flex-end; }
     .workout-detail-card, .meal-detail-card {
@@ -566,9 +568,9 @@
       display: inline-flex; align-items: center; justify-content: center;
     }
     .week-nav-btn { min-height: 44px; min-width: 80px; }
-    /* Toast above bottom nav */
-    #toast { bottom: calc(5rem + env(safe-area-inset-bottom)); right: 1rem; }
-    /* Popovers open upward so bottom nav never covers their buttons */
+    /* Toast */
+    #toast { bottom: 1.5rem; right: 1rem; }
+    /* Popovers open upward */
     .product-detail-pop, .meal-detail-pop {
       top: auto;
       bottom: calc(100% + 6px);
@@ -583,7 +585,7 @@
     background: var(--surface); border-top: 1px solid var(--border); z-index: 500;
     padding-bottom: env(safe-area-inset-bottom);
   }
-  @media (max-width: 640px) { #mobile-bottom-nav { display: flex; } }
+  /* #mobile-bottom-nav hidden — navigation moved to top second row on mobile */
   .mob-nav-btn {
     flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
     padding: .45rem .1rem; background: none; border: none; cursor: pointer;
@@ -625,16 +627,11 @@
 
 <div id="app" style="display:none;">
   <header>
-    <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; width:100%;">
-      <h1>⚡ Fuel &amp; Run</h1>
-      <div id="profile-switcher" style="display:flex; align-items:center; gap:.5rem;"></div>
-      <button class="btn btn-sm" onclick="doLogout()" style="font-size:.72rem; background:transparent; color:var(--muted); border:1px solid var(--border);">🚪</button>
-      <div class="mobile-log-activity" style="margin-left:auto; display:flex; gap:.4rem; flex-wrap:wrap;">
-        <button class="btn btn-sm" id="btn-garmin-week-sync" style="font-size:.68rem; padding:.25rem .5rem; background:#007ac1; color:#fff; border:1px solid #007ac1;">🔄 Garmin</button>
-        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:var(--accent); color:#fff; border:1px solid var(--accent);" onclick="openLogActivityModal()">🔥 +Activity</button>
-        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:#1a8a3f; color:#fff; border:1px solid #1a8a3f;" onclick="openAddToPlateModal('product')">🛒 +Product</button>
-        <button class="btn btn-sm" style="font-size:.68rem; padding:.25rem .5rem; background:#1a8a3f; color:#fff; border:1px solid #1a8a3f;" onclick="openAddToPlateModal('meal')">🍽️ +Meal</button>
-      </div>
+    <div style="display:flex; align-items:center; gap:.5rem; width:100%; flex-wrap:nowrap; overflow:hidden;">
+      <h1 style="white-space:nowrap;">⚡ Fuel &amp; Run</h1>
+      <div id="profile-switcher" style="display:flex; align-items:center; gap:.3rem; flex-shrink:0;"></div>
+      <button class="btn btn-sm" onclick="doLogout()" style="font-size:.72rem; background:transparent; color:var(--muted); border:1px solid var(--border); flex-shrink:0;">🚪</button>
+      <button class="btn btn-sm" onclick="openLogActivityModal()" style="margin-left:auto; font-size:.9rem; padding:.25rem .55rem; background:var(--accent); color:#fff; border:1px solid var(--accent); flex-shrink:0; white-space:nowrap;" title="Log activity">🔥 +</button>
     </div>
   </header>
   <nav id="main-nav">
@@ -763,7 +760,9 @@
           document.getElementById('add-to-plate-modal').style.display = '';
           const cats = mode === 'product'
             ? ['🌾 Grains & Legumes','🧀 Dairy & Eggs','🐟 Meat & Fish','🌱 Protein & Legumes','🍎 Fruit','🥦 Veg','🥜 Nuts & Spreads','🍫 Treats','🍺 Drinks','⚡ Sports','💊 Supplements']
-            : ['Breakfast','Pre-Run','Lunch / Dinner','Snack','Salads & Sides','Outdoor / Takeaway'];
+            : mode === 'meal'
+            ? ['Breakfast','Pre-Run','Lunch / Dinner','Snack','Salads & Sides','Outdoor / Takeaway']
+            : [];
           const catDiv = document.getElementById('add-to-plate-categories');
           catDiv.innerHTML = cats.map(cat =>
             `<button class="btn btn-secondary btn-sm" style="font-size:.82rem;" onclick="filterAddToPlateByCategory('${cat.replace(/'/g, "\\'")}')">${cat}</button>`
@@ -791,13 +790,21 @@
         function renderAddToPlateList() {
           const listDiv = document.getElementById('add-to-plate-list');
           const q = document.getElementById('add-to-plate-search').value.trim().toLowerCase();
-          let items = _addToPlateMode === 'product'
-            ? (state.products || []).filter(p => !p.deletedAt)
-            : (state.meals   || []).filter(m => !m.deletedAt);
+          let items;
+          if (_addToPlateMode === 'all') {
+            items = [
+              ...(state.products || []).filter(p => !p.deletedAt).map(p => ({...p, _t:'product'})),
+              ...(state.meals   || []).filter(m => !m.deletedAt).map(m => ({...m, _t:'meal'})),
+            ];
+          } else {
+            items = _addToPlateMode === 'product'
+              ? (state.products || []).filter(p => !p.deletedAt).map(p => ({...p, _t:'product'}))
+              : (state.meals   || []).filter(m => !m.deletedAt).map(m => ({...m, _t:'meal'}));
+          }
           if (_addToPlateCat) {
             if (_addToPlateMode === 'product') {
               items = items.filter(i => (i.cat || 'Other') === _addToPlateCat);
-            } else {
+            } else if (_addToPlateMode === 'meal') {
               const mcat = _mealCatMap[_addToPlateCat] || _addToPlateCat.toLowerCase();
               items = items.filter(i => (i.mealCat || 'lunch') === mcat);
             }
@@ -808,13 +815,12 @@
             return;
           }
           listDiv.innerHTML = items.map(i =>
-            `<div class="product-chip" style="cursor:pointer;display:block;margin:.2rem 0;" onclick="addToPlateFromModal('${i.id}')">${i.nickname || i.name}</div>`
+            `<div class="product-chip" style="cursor:pointer;display:block;margin:.2rem 0;" onclick="addToPlateFromModal('${i.id}','${i._t}')">${i.nickname || i.name}</div>`
           ).join('');
         }
-        function addToPlateFromModal(id) {
+        function addToPlateFromModal(id, type) {
           closeAddToPlateModal();
-          if (_addToPlateMode === 'product') openQtyModal('product', id);
-          else openQtyModal('meal', id);
+          openQtyModal(type || _addToPlateMode, id);
         }
         function closeAddToPlateModal() {
           document.getElementById('add-to-plate-modal').style.display = 'none';
@@ -2235,7 +2241,8 @@ document.getElementById('btn-garmin-full-sync').addEventListener('click', async 
 
 // Garmin refresh button (in My Week header) — always pulls from Supabase immediately,
 // then triggers a full Garmin sync in the background if a GitHub token is available.
-document.getElementById('btn-garmin-week-sync').addEventListener('click', async () => {
+const _garminWeekSyncBtn = document.getElementById('btn-garmin-week-sync');
+if (_garminWeekSyncBtn) _garminWeekSyncBtn.addEventListener('click', async () => {
   const btn = document.getElementById('btn-garmin-week-sync');
   btn.textContent = '⏳ Garmin';
   btn.disabled = true;
@@ -6969,8 +6976,7 @@ function renderPlateTab() {
 
   // "Add food to this day" button for past days
   const addFoodBtn = `<div style="text-align:center; margin-bottom:.6rem;">
-    <button class="btn btn-secondary btn-sm" onclick="openAddToPlateModal('product')" style="margin-right:.4rem;">🛒 Add Product</button>
-    <button class="btn btn-secondary btn-sm" onclick="openAddToPlateModal('meal')">🍽️ Add Meal</button>
+    <button class="btn btn-secondary btn-sm" onclick="openAddToPlateModal('all')">🍽️ Add Product / Meal</button>
     ${!isToday ? '<span style="font-size:.75rem; color:var(--muted); margin-left:.4rem;">to ' + viewedDate + '</span>' : ''}
   </div>`;
 

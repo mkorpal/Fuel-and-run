@@ -213,6 +213,12 @@ def sync_daily(api: Garmin, sb, days_back: int):
         projected_kcal = round(float(s.get('totalKilocalories') or 0))
         resting_hr     = s.get('restingHeartRate') or None
 
+        # Skip the upsert when Garmin returned empty/zero data (e.g. token expired or
+        # day not yet synced to Garmin servers) — avoids overwriting good existing data with zeros.
+        if not steps and not projected_kcal and not resting_kcal and not resting_hr:
+            print(f"  [--] {date_str}: Garmin returned no data — skipping upsert")
+            continue
+
         sb.table(DAILY_TABLE).upsert(
             {
                 'date': date_str,

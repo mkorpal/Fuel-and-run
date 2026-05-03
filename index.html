@@ -847,8 +847,8 @@
           const rmr = ap.rmr ? ap.rmr : (isFemale ? Math.round(10*w+6.25*h-5*age-161) : Math.round(10*w+6.25*h-5*age+5));
           const { estimateBurn: _eb } = window;
           const exBurn = wSess.filter(s => s.day === dayIdx).reduce((sum, s) => sum + estimateBurn(s), 0);
-          // Prefer Garmin: yesterday's completed resting_kcal + today's active_kcal for today;
-          // for past days use that day's own resting_kcal + active_kcal (complete day).
+          // Prefer Garmin: for today use yesterday's resting_kcal + today's active_kcal;
+          // for past completed days use projected_kcal (Garmin total, includes workout calories).
           const gd = window.garminDailyCache && window.garminDailyCache[viewedDate];
           const garminTotal = garminProjectedKcal(viewedDate);
           const hasGarmin = garminTotal !== null;
@@ -862,8 +862,12 @@
             return (gd && gd.resting_kcal > 0) ? gd.resting_kcal : rmr;
           })();
           const activeKcal  = (gd && gd.active_kcal  > 0) ? gd.active_kcal  : exBurn;
+          // For past days using projected_kcal: show Garmin total + breakdown as context.
+          const isPastGarminProjected = hasGarmin && viewedDate !== dateStr(new Date()) && gd && (gd.projected_kcal > 0);
           const splitLine = hasGarmin
-            ? `<div style="font-size:.74rem; color:var(--muted); margin-top:.15rem;">💤 ${restingKcal.toLocaleString()} rest + ⚡ ${activeKcal.toLocaleString()} active = ${tdee.toLocaleString()} total kcal</div>`
+            ? isPastGarminProjected
+              ? `<div style="font-size:.74rem; color:var(--muted); margin-top:.15rem;">📊 ${tdee.toLocaleString()} kcal Garmin total · 💤 ${restingKcal.toLocaleString()} rest + ⚡ ${activeKcal.toLocaleString()} active tracked</div>`
+              : `<div style="font-size:.74rem; color:var(--muted); margin-top:.15rem;">💤 ${restingKcal.toLocaleString()} rest + ⚡ ${activeKcal.toLocaleString()} active = ${tdee.toLocaleString()} total kcal</div>`
             : '';
           const el = document.getElementById('plate-deficit');
           if (!el) return;
@@ -1532,19 +1536,23 @@ function garminProjectedKcal(ds) {
   const gd = cache[ds];
   if (!gd) return null;
   const todayStr = dateStr(new Date());
-  // Always use resting_kcal + active_kcal.
-  // For today: resting_kcal (bmrKilocalories) is only partial — use yesterday's completed
-  // resting_kcal as the full-day BMR proxy + today's active_kcal.
-  // For past days: use that day's own resting_kcal + active_kcal.
-  // NOTE: projected_kcal (totalKilocalories) is NOT used — it differs from the Garmin watch display.
-  let restingKcal;
-  if (ds === todayStr) {
-    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-    const ygd = cache[dateStr(yesterday)];
-    restingKcal = (ygd && ygd.resting_kcal > 0) ? ygd.resting_kcal : (gd.resting_kcal || 0);
-  } else {
-    restingKcal = gd.resting_kcal || 0;
+  // For today (in-progress): use yesterday's completed resting_kcal + today's active_kcal.
+  // projected_kcal (totalKilocalories) is a projection for today that inflates the number.
+  // For past COMPLETED days: prefer projected_kcal (Garmin's own full-day total, matching
+  // what Garmin Connect shows and including workout calories that activeKilocalories can miss).
+  // Fall back to resting + active if projected_kcal is absent.
+  if (ds !== todayStr) {
+    const projKcal = gd.projected_kcal || 0;
+    if (projKcal > 0) return projKcal;
+    const restingKcal = gd.resting_kcal || 0;
+    const activeKcal = gd.active_kcal || 0;
+    if (restingKcal <= 0 && activeKcal <= 0) return null;
+    return restingKcal + activeKcal;
   }
+  // Today: resting from yesterday's completed day + today's accumulating active_kcal.
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const ygd = cache[dateStr(yesterday)];
+  const restingKcal = (ygd && ygd.resting_kcal > 0) ? ygd.resting_kcal : (gd.resting_kcal || 0);
   const activeKcal = gd.active_kcal || 0;
   if (restingKcal <= 0 && activeKcal <= 0) return null;
   return restingKcal + activeKcal;

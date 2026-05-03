@@ -35,7 +35,7 @@ jobs:
       - name: Restore Garmin auth token cache (Marysia)
         uses: actions/cache@v4
         with:
-          path: ~/.garminconnect_token_marysia
+          path: ~/.garminconnect_token_marysia.json
           key: garmin-token-marysia-${{ github.run_id }}
           restore-keys: garmin-token-marysia-
 
@@ -45,8 +45,8 @@ jobs:
         env:
           GARMIN_TOKEN_B64: ${{ secrets.GARMIN_MARYSIA_TOKEN }}
         run: |
-          if [ ! -f ~/.garminconnect_token_marysia ] && [ -n "$GARMIN_TOKEN_B64" ]; then
-            echo "$GARMIN_TOKEN_B64" | base64 -d > ~/.garminconnect_token_marysia
+          if [ ! -f ~/.garminconnect_token_marysia.json ] && [ -n "$GARMIN_TOKEN_B64" ]; then
+            echo "$GARMIN_TOKEN_B64" | base64 -d > ~/.garminconnect_token_marysia.json
             echo "Garmin token restored from secret"
           fi
 

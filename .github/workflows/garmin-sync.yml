@@ -38,7 +38,7 @@ jobs:
       - name: Restore Garmin auth token cache
         uses: actions/cache@v4
         with:
-          path: ~/.garminconnect_token
+          path: ~/.garminconnect_token.json
           key: garmin-token-${{ github.run_id }}
           restore-keys: garmin-token-
 

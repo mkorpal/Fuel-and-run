@@ -16,8 +16,7 @@ Copy the base64 output and add it as a GitHub secret:
   michal   → GARMIN_TOKEN
 """
 import base64
-import getpass
-import pickle
+import os
 import sys
 from pathlib import Path
 
@@ -29,15 +28,15 @@ except ImportError:
 
 profile = sys.argv[1].lower() if len(sys.argv) > 1 else 'michal'
 token_file = Path.home() / (
-    '.garminconnect_token_marysia' if profile == 'marysia' else '.garminconnect_token'
+    '.garminconnect_token_marysia.json' if profile == 'marysia' else '.garminconnect_token.json'
 )
 secret_name = 'GARMIN_MARYSIA_TOKEN' if profile == 'marysia' else 'GARMIN_TOKEN'
 
 print(f"\nGarmin token generator — profile: {profile}")
 print("=" * 50)
 
-email    = input("Garmin email: ").strip()
-password = getpass.getpass("Garmin password: ")
+email    = os.environ.get('GARMIN_EMAIL') or input("Garmin email: ").strip()
+password = os.environ.get('GARMIN_PASSWORD') or input("Garmin password: ").strip()
 
 def get_mfa():
     return input("Enter MFA / verification code from your email or authenticator: ").strip()
@@ -51,14 +50,12 @@ except Exception as e:
     print(f"\n❌ Login failed: {e}")
     sys.exit(1)
 
-# Save token locally (so the local sync script also reuses it)
-token_data = api.garth.dumps()
-with open(token_file, 'wb') as f:
-    pickle.dump(token_data, f)
+# Save token as JSON file locally
+api.client.dump(str(token_file))
 print(f"\n✅ Token saved locally to {token_file}")
 
 # Encode as base64 for GitHub secret
-token_b64 = base64.b64encode(open(token_file, 'rb').read()).decode()
+token_b64 = base64.b64encode(token_file.read_bytes()).decode()
 
 print(f"\nNow add this as GitHub secret  →  {secret_name}")
 print("Go to: github.com/mkorpal/Fuel-and-run → Settings → Secrets and variables → Actions → New repository secret")

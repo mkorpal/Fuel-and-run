@@ -24,7 +24,6 @@ Install dependencies:
 
 import json
 import os
-import pickle
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -52,11 +51,11 @@ GARMIN_PROFILE       = os.environ.get('GARMIN_PROFILE', 'michal').lower()
 if GARMIN_PROFILE == 'marysia':
     DAILY_TABLE      = 'garmin_daily_marysia'
     ACTIVITIES_TABLE = 'garmin_activities_marysia'
-    TOKEN_FILE       = Path.home() / '.garminconnect_token_marysia'
+    TOKEN_FILE       = Path.home() / '.garminconnect_token_marysia.json'
 else:
     DAILY_TABLE      = 'garmin_daily'
     ACTIVITIES_TABLE = 'garmin_activities'
-    TOKEN_FILE       = Path.home() / '.garminconnect_token'
+    TOKEN_FILE       = Path.home() / '.garminconnect_token.json'
 
 # Garmin sport type → Fuel&Run session type
 SPORT_MAP = {
@@ -100,10 +99,7 @@ def garmin_login() -> Garmin:
 
     if TOKEN_FILE.exists():
         try:
-            with open(TOKEN_FILE, 'rb') as f:
-                saved = pickle.load(f)
-            api.garth.loads(saved)
-            api.display_name  # validates token
+            api.login(tokenstore=str(TOKEN_FILE))
             print("Reusing saved Garmin session")
             return api
         except Exception:
@@ -118,16 +114,12 @@ def garmin_login() -> Garmin:
     except Exception as e:
         msg = str(e)
         if '429' in msg or 'rate' in msg.lower():
-            # Garmin is rate-limiting this IP (common on shared CI runners).
-            # Exit 0 so the workflow isn't marked as failed — data will be current
-            # from the previous successful run or the next window.
             print(f"WARNING: Garmin rate-limited (429) — skipping this run. Will retry next cron cycle.")
             sys.exit(0)
         raise
 
     try:
-        with open(TOKEN_FILE, 'wb') as f:
-            pickle.dump(api.garth.dumps(), f)
+        api.client.dump(str(TOKEN_FILE))
     except Exception:
         pass
 

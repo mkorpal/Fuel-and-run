@@ -641,8 +641,7 @@
     <button class="active" data-tab="dashboard">Dashboard</button>
     <button data-tab="training">My Week</button>
     <button data-tab="plate">My Plate</button>
-    <button data-tab="products">My Pantry</button>
-    <button data-tab="meals">My Meals</button>
+    <button data-tab="library">Products/Meals</button>
     <button data-tab="recommendations">AU Food Ideas</button>
     <button data-tab="profile">Profile</button>
   </nav>
@@ -954,9 +953,8 @@
       <div class="workout-detail-card" id="workout-detail-card"></div>
     </div>
 
-    <!-- NUTRITION TARGETS -->
-    <!-- MY PRODUCTS -->
-    <section id="tab-products" class="section">
+    <!-- PRODUCTS / MEALS -->
+    <section id="tab-library" class="section">
       <div class="pantry-layout">
         <div class="card">
           <div class="card-title" style="display:flex; justify-content:flex-start; align-items:center; flex-wrap:wrap; gap:.4rem;">
@@ -970,6 +968,33 @@
           <div class="pantry-search-wrap"><input type="search" id="pantry-search-input" placeholder="Search products…" oninput="setPantrySearch(this.value)" autocomplete="off" /></div>
           <div id="product-list" class="product-list"></div>
           <p id="no-products" style="color:var(--muted); font-size:.85rem;">No products saved yet. Use the buttons above to add one.</p>
+        </div>
+      </div>
+      <div class="pantry-layout" style="margin-top:1rem;">
+        <div class="card">
+          <div class="card-title" style="display:flex; justify-content:flex-end; align-items:center;">
+            <button class="btn btn-primary btn-sm" id="btn-new-meal">+ Create Meal</button>
+          </div>
+
+          <div style="display:flex; gap:.5rem; margin-bottom:.6rem; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm meal-filter-btn active" data-filter="all">All meals</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="breakfast">🌅 Breakfast</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="prerun">🏃 Pre-Run</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="lunch">🍽️ Lunch / Dinner</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="snack">🥜 Snack</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="salad">🥗 Salads & Sides</button>
+            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="outdoor">🌿 Outdoor / Takeaway</button>
+          </div>
+          <div class="meal-tag-filter-row" id="meal-tag-filter-row">
+            <span class="meal-tag-filter-label">Tags:</span>
+            <button class="meal-tag-opt" data-tag="fish">🐟 Fish</button>
+            <button class="meal-tag-opt" data-tag="meat">🥩 Meat</button>
+            <button class="meal-tag-opt" data-tag="pasta">🍝 Pasta</button>
+            <button class="meal-tag-opt" data-tag="vegetarian">🥦 Vegetarian</button>
+            <button class="meal-tag-opt" data-tag="vegan">🌱 Vegan</button>
+          </div>
+          <div class="meal-grid" id="meal-grid"></div>
+          <p id="no-meals" style="color:var(--muted); font-size:.85rem;">No meals saved yet. Create your first meal above.</p>
         </div>
       </div>
     </section>
@@ -1055,37 +1080,6 @@
         <div class="card-title">Australian Food Recommendations for Runners</div>
         <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">Widely available in Woolworths, Coles, or IGA. Selected for nutritional value, convenience, and suitability for an active plant-forward lifestyle.</p>
         <div class="rec-grid" id="rec-grid"></div>
-      </div>
-    </section>
-
-    <!-- MY MEALS -->
-    <section id="tab-meals" class="section">
-      <div class="pantry-layout">
-        <div class="card">
-          <div class="card-title" style="display:flex; justify-content:flex-end; align-items:center;">
-            <button class="btn btn-primary btn-sm" id="btn-new-meal">+ Create Meal</button>
-          </div>
-
-          <div style="display:flex; gap:.5rem; margin-bottom:.6rem; flex-wrap:wrap;">
-            <button class="btn btn-secondary btn-sm meal-filter-btn active" data-filter="all">All meals</button>
-            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="breakfast">🌅 Breakfast</button>
-            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="prerun">🏃 Pre-Run</button>
-            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="lunch">🍽️ Lunch / Dinner</button>
-            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="snack">🥜 Snack</button>
-            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="salad">🥗 Salads & Sides</button>
-            <button class="btn btn-secondary btn-sm meal-filter-btn" data-filter="outdoor">🌿 Outdoor / Takeaway</button>
-          </div>
-          <div class="meal-tag-filter-row" id="meal-tag-filter-row">
-            <span class="meal-tag-filter-label">Tags:</span>
-            <button class="meal-tag-opt" data-tag="fish">🐟 Fish</button>
-            <button class="meal-tag-opt" data-tag="meat">🥩 Meat</button>
-            <button class="meal-tag-opt" data-tag="pasta">🍝 Pasta</button>
-            <button class="meal-tag-opt" data-tag="vegetarian">🥦 Vegetarian</button>
-            <button class="meal-tag-opt" data-tag="vegan">🌱 Vegan</button>
-          </div>
-          <div class="meal-grid" id="meal-grid"></div>
-          <p id="no-meals" style="color:var(--muted); font-size:.85rem;">No meals saved yet. Create your first meal above.</p>
-        </div>
       </div>
     </section>
 
@@ -1264,8 +1258,7 @@
     <button class="mob-nav-btn active" data-tab="dashboard"><span class="mob-nav-icon">📊</span>Home</button>
     <button class="mob-nav-btn" data-tab="training"><span class="mob-nav-icon">📅</span>Week</button>
     <button class="mob-nav-btn" data-tab="plate"><span class="mob-nav-icon">🍽️</span>Plate</button>
-    <button class="mob-nav-btn" data-tab="products"><span class="mob-nav-icon">🫙</span>Pantry</button>
-    <button class="mob-nav-btn" data-tab="meals"><span class="mob-nav-icon">🍲</span>Meals</button>
+    <button class="mob-nav-btn" data-tab="library"><span class="mob-nav-icon">🫙</span>Library</button>
     <button class="mob-nav-btn" data-tab="recommendations"><span class="mob-nav-icon">🦘</span>Ideas</button>
     <button class="mob-nav-btn" data-tab="profile"><span class="mob-nav-icon">👤</span>Profile</button>
   </nav>

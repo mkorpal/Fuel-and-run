@@ -996,6 +996,7 @@
             <button class="meal-tag-opt" data-tag="drinks">🍺 Drinks</button>
             <button class="meal-tag-opt" data-tag="sports">⚡ Sports</button>
             <button class="meal-tag-opt" data-tag="supplements">💊 Supps</button>
+            <button class="meal-tag-opt" data-tag="bakery">🥐 Bakery</button>
           </div>
           <div class="pantry-search-wrap"><input type="search" id="library-search-input" placeholder="Search products &amp; meals…" oninput="setLibrarySearch(this.value)" autocomplete="off" /></div>
           <div id="product-list" class="product-list"></div>
@@ -1066,6 +1067,7 @@
                   <button type="button" class="meal-tag-opt lib-tag-opt" data-tag="drinks">🍺 Drinks</button>
                   <button type="button" class="meal-tag-opt lib-tag-opt" data-tag="sports">⚡ Sports</button>
                   <button type="button" class="meal-tag-opt lib-tag-opt" data-tag="supplements">💊 Supps</button>
+                  <button type="button" class="meal-tag-opt lib-tag-opt" data-tag="bakery">🥐 Bakery</button>
                 </div>
               </div>
             </div>
@@ -3803,6 +3805,7 @@ function guessCategory(name, cats) {
   if (/egg/.test(n)) return '🧀 Dairy & Eggs';
   if (/salmon|tuna|fish|seafood|beef|lamb|pork|chicken|turkey|meat/.test(n)) return '🐟 Meat & Fish';
   if (/tofu|bean|lentil|legume|chickpea/.test(n)) return '🌱 Protein & Legumes';
+  if (/croissant|muffin|bagel|pastry|waffle|pancake|donut|doughnut/.test(n)) return '🥐 Bakery';
   if (/bread|rice|pasta|oat|cereal|flour|potato|grain/.test(n)) return '🌾 Grains & Legumes';
   if (/banana|apple|berry|mango|orange|fruit/.test(n)) return '🍎 Fruit';
   if (/spinach|broccoli|carrot|tomato|avocado|veg/.test(n)) return '🥦 Veg';
@@ -4798,6 +4801,7 @@ const CAT_TO_TAGS = {
   '🍎 Fruit': ['fruit'], '🥦 Veg': ['veg'], '🥜 Nuts & Spreads': ['nuts'],
   '🍫 Treats': ['treats'], '🍺 Drinks': ['drinks'],
   '⚡ Sports': ['sports'], '💊 Supplements': ['supplements'],
+  '🥐 Bakery': ['bakery'],
 };
 function productEffTags(p) { return (p.tags && p.tags.length) ? p.tags : (CAT_TO_TAGS[p.cat || ''] || []); }
 let libraryTagFilter = new Set();

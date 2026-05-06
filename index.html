@@ -285,31 +285,40 @@
     content: '🔍'; position: absolute; left: .65rem; top: 50%; transform: translateY(-50%);
     font-size: .8rem; pointer-events: none;
   }
-  .product-list { display: flex; flex-wrap: wrap; gap: .3rem .5rem; }
+  .product-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: .6rem; }
   .product-chip {
-    display: inline-flex; align-items: center; gap: .25rem;
-    background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
-    padding: .35rem .7rem; font-size: .95rem; cursor: pointer;
-    transition: border-color .15s, box-shadow .15s; position: relative;
-    white-space: nowrap;
+    display: flex; flex-direction: column;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+    padding: .7rem .75rem; cursor: pointer; position: relative;
+    transition: border-color .15s, box-shadow .15s;
   }
-  .product-chip:hover, .product-chip.active { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-  .product-chip .pchip-name { font-weight: 600; }
+  .product-chip:hover, .product-chip.active { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  .product-chip .pchip-name { font-weight: 700; font-size: .88rem; margin-bottom: .25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 1.2rem; }
+  .product-chip .pchip-kcal { font-size: 1.05rem; font-weight: 800; color: var(--accent); }
+  .product-chip .pchip-kcal span { font-size: .68rem; font-weight: 400; color: var(--muted); }
+  .pchip-macro-bar { height: 5px; border-radius: 3px; background: var(--border); display: flex; overflow: hidden; margin: .4rem 0; }
+  .pchip-macro-bar-p { background: #52b788; }
+  .pchip-macro-bar-c { background: #f4a261; }
+  .pchip-macro-bar-f { background: #e76f51; }
+  .pchip-macro-labels { display: flex; gap: .4rem; font-size: .69rem; margin-bottom: .4rem; }
+  .pchip-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: .3rem; }
+  .pchip-tag { font-size: .65rem; color: var(--muted); }
   .product-chip .pchip-del {
-    background: none; border: none; cursor: pointer; color: var(--muted); font-size: 1rem; padding: .2rem; margin-left: .1rem;
+    position: absolute; top: .35rem; right: .4rem;
+    background: none; border: none; cursor: pointer; color: var(--muted); font-size: .75rem; padding: .2rem;
   }
   .product-chip .pchip-del:hover { color: var(--danger); }
   .product-chip .pchip-log {
-    background: var(--accent); color: #fff; border: none; border-radius: 10px;
-    font-size: .85rem; font-weight: 700; padding: .2rem .5rem; cursor: pointer; margin-left: .15rem;
+    background: var(--accent); color: #fff; border: none; border-radius: 7px;
+    font-size: .85rem; font-weight: 700; padding: .3rem .6rem; cursor: pointer; min-height: 32px;
   }
   .product-chip .pchip-log:hover { opacity: .85; }
-  /* Detail popover (appears below chip on click) */
+  /* Detail popover — spans both columns, JS sets left/right per column */
   .product-detail-pop {
     display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 560;
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    box-shadow: 0 6px 24px rgba(0,0,0,.35); padding: .65rem .85rem;
-    min-width: 220px; max-width: 300px; font-size: .8rem;
+    box-shadow: 0 6px 24px rgba(0,0,0,.35); padding: .75rem 1rem;
+    width: calc(200% + .6rem); max-width: min(92vw, 340px); font-size: .8rem;
   }
   .product-chip.active .product-detail-pop { display: block; }
   .nutrient-row { display: flex; justify-content: space-between; font-size: .76rem; padding: .15rem 0; border-top: 1px solid var(--border); }
@@ -978,8 +987,7 @@
             <button class="btn btn-secondary btn-sm" style="font-size:.72rem; background:#1a8a3f; border-color:#1a8a3f; color:#fff;" onclick="openProductModal('search')">🔍 Search</button>
             <button class="btn btn-primary btn-sm" style="font-size:.72rem;" onclick="openProductModal('add')">➕ Add</button>
           </div>
-          <div class="meal-tag-filter-row" id="library-tag-filter-row" style="margin-bottom:.6rem;">
-            <span class="meal-tag-filter-label" style="white-space:nowrap;">Filter:</span>
+          <div class="meal-tag-filter-row" id="library-tag-filter-row" style="margin-bottom:.6rem; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; background:transparent; padding:.1rem 0;">
             <button class="meal-tag-opt" data-tag="breakfast">🌅 Breakfast</button>
             <button class="meal-tag-opt" data-tag="prerun">🏃 Pre-Run</button>
             <button class="meal-tag-opt" data-tag="lunch">🍽️ Lunch/Dinner</button>
@@ -3655,25 +3663,55 @@ function renderProducts() {
   }
   if (none) none.style.display = 'none';
 
-  const productChip = p => `
+  const TAG_EMOJI = {breakfast:'🌅',prerun:'🏃',lunch:'🍽️',snack:'🥜',salad:'🥗',outdoor:'🌿',fish:'🐟',meat:'🥩',vegetarian:'🥦',vegan:'🌱',pasta:'🍝',grains:'🌾',bakery:'🥐',dairy:'🧀',fruit:'🍎',veg:'🥦',nuts:'🥜',treats:'🍫',drinks:'🍺',sports:'⚡',supplements:'💊'};
+  const productChip = p => {
+    const per = p.nutrPer || '100g';
+    const perLabel = per === 'serving' ? '/serving' : '/100g';
+    const lbl = per === 'serving' ? 'per single item/serving' : 'per 100g';
+    const typeBadge = per === 'serving'
+      ? '<span style="font-size:.65rem; background:#2a1a0a; color:#f4a261; padding:.1rem .35rem; border-radius:3px; font-weight:600;">PER SERVING</span>'
+      : '<span style="font-size:.65rem; background:#122e1e; color:#52b788; padding:.1rem .35rem; border-radius:3px; font-weight:600;">PER 100g</span>';
+    const pKcal = (p.prot || 0) * 4;
+    const cKcal = (p.carb || 0) * 4;
+    const fKcal = (p.fat || 0) * 9;
+    const tot = pKcal + cKcal + fKcal || 1;
+    const pPct = Math.round(pKcal / tot * 100);
+    const cPct = Math.round(cKcal / tot * 100);
+    const fPct = Math.round(fKcal / tot * 100);
+    const primaryTag = productEffTags(p)[0] || '';
+    const tagEmoji = TAG_EMOJI[primaryTag] || '🫙';
+    return `
     <div class="product-chip" id="pcard-${p.id}"
          onclick="toggleProductCard('${p.id}', event)"
          draggable="true" ondragstart="startDrag(event,'product','${p.id}')">
-      <span class="pchip-name">${p.nickname || p.name}</span>
-      <button class="pchip-log" onclick="event.stopPropagation(); openQtyModal('product','${p.id}')">＋</button>
       <button class="pchip-del" onclick="event.stopPropagation(); deleteProduct('${p.id}')" title="Delete">✕</button>
+      <div class="pchip-name">${p.nickname || p.name}</div>
+      <div class="pchip-kcal">${p.kcal ?? '—'} <span>kcal${perLabel}</span></div>
+      <div class="pchip-macro-bar">
+        <div class="pchip-macro-bar-p" style="width:${pPct}%"></div>
+        <div class="pchip-macro-bar-c" style="width:${cPct}%"></div>
+        <div class="pchip-macro-bar-f" style="width:${fPct}%"></div>
+      </div>
+      <div class="pchip-macro-labels">
+        <span style="color:#52b788;">P ${p.prot ?? '—'}g</span>
+        <span style="color:#f4a261;">C ${p.carb ?? '—'}g</span>
+        <span style="color:#e76f51;">F ${p.fat ?? '—'}g</span>
+      </div>
+      <div class="pchip-footer">
+        <span class="pchip-tag">${tagEmoji} ${primaryTag || '—'}</span>
+        <button class="pchip-log" onclick="event.stopPropagation(); openQtyModal('product','${p.id}')">＋ Log</button>
+      </div>
       <div class="product-detail-pop" onclick="event.stopPropagation()">
         <div style="font-weight:700; margin-bottom:.25rem;">${p.nickname || p.name}</div>
         ${p.nickname ? `<div style="font-size:.74rem; color:var(--muted);">${p.name}</div>` : ''}
         ${p.brand ? `<div style="font-size:.74rem; color:var(--muted);">${p.brand}</div>` : ''}
         ${p.notes ? `<div style="font-size:.73rem; color:var(--muted); margin:.2rem 0;">${p.notes}</div>` : ''}
-        ${(() => { const per = p.nutrPer || '100g'; const lbl = per === 'serving' ? `per single item/serving` : 'per 100g'; const typeBadge = per === 'serving' ? '<span style=\"font-size:.65rem; background:#2a1a0a; color:#f4a261; padding:.1rem .35rem; border-radius:3px; font-weight:600;\">PER SERVING</span>' : '<span style=\"font-size:.65rem; background:#122e1e; color:#52b788; padding:.1rem .35rem; border-radius:3px; font-weight:600;\">PER 100g</span>'; return `
         <div style="margin:.3rem 0;">${typeBadge}</div>
         ${per === 'serving' ? `<div class="nutrient-row"><span>Serving size</span><span>${p.serve || '—'}g/ml</span></div>` : ''}
-        <div class="nutrient-row"><span>Calories</span><span><b>${p.kcal || '—'}</b> kcal <span style="font-size:.7rem;color:var(--muted);">${lbl}</span></span></div>
-        <div class="nutrient-row"><span>Protein</span><span>${p.prot || '—'}g <span style="font-size:.7rem;color:var(--muted);">${lbl}</span></span></div>
-        <div class="nutrient-row"><span>Carbs</span><span>${p.carb || '—'}g <span style="font-size:.7rem;color:var(--muted);">${lbl}</span></span></div>
-        <div class="nutrient-row"><span>Fat</span><span>${p.fat || '—'}g <span style="font-size:.7rem;color:var(--muted);">${lbl}</span></span></div>`;})()}
+        <div class="nutrient-row"><span>Calories</span><span><b>${p.kcal ?? '—'}</b> kcal <span style="font-size:.7rem;color:var(--muted);">${lbl}</span></span></div>
+        <div class="nutrient-row"><span>Protein</span><span>${p.prot ?? '—'}g <span style="font-size:.7rem;color:var(--muted);">${lbl}</span></span></div>
+        <div class="nutrient-row"><span>Carbs</span><span>${p.carb ?? '—'}g <span style="font-size:.7rem;color:var(--muted);">${lbl}</span></span></div>
+        <div class="nutrient-row"><span>Fat</span><span>${p.fat ?? '—'}g <span style="font-size:.7rem;color:var(--muted);">${lbl}</span></span></div>
         ${p.url ? `<div style="margin-top:.4rem;"><a href="${p.url}" target="_blank" style="font-size:.74rem;">View product ↗</a></div>` : ''}
         <div style="display:flex; gap:.4rem; margin-top:.4rem; flex-wrap:wrap;">
           <button class="plog-btn" onclick="openQtyModal('product','${p.id}')">＋ Log today</button>
@@ -3682,7 +3720,7 @@ function renderProducts() {
         </div>
       </div>
     </div>
-  `;
+  `; };
 
   const searchQ = (window.librarySearch || '').toLowerCase().trim();
   let filtered = activeProducts;
@@ -3720,7 +3758,18 @@ window.toggleProductCard = (id, e) => {
     if (el.id !== 'pcard-' + id) el.classList.remove('active');
   });
   const card = document.getElementById('pcard-' + id);
-  if (card) card.classList.toggle('active');
+  if (card) {
+    card.classList.toggle('active');
+    if (card.classList.contains('active')) {
+      const rect = card.getBoundingClientRect();
+      const pop = card.querySelector('.product-detail-pop');
+      if (pop) {
+        const isRight = rect.left > window.innerWidth / 2;
+        pop.style.left = isRight ? 'auto' : '0';
+        pop.style.right = isRight ? '0' : 'auto';
+      }
+    }
+  }
 };
 
 // Close product detail when clicking outside

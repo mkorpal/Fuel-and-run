@@ -287,7 +287,12 @@
   }
   .product-list { display: block; }
   .product-group { margin-bottom: 1rem; }
-  .product-group-header { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: .45rem; padding-bottom: .3rem; border-bottom: 1px solid var(--border); }
+  .product-group-header { display: flex; justify-content: space-between; align-items: center; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); padding: .45rem 0 .3rem; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+  .product-group-header:hover { color: var(--text); }
+  .product-group-chevron { font-size: .7rem; transition: transform .2s; display: inline-block; }
+  .product-group.collapsed .product-group-chevron { transform: rotate(-90deg); }
+  .product-group-grid { margin-top: .45rem; }
+  .product-group.collapsed .product-group-grid { display: none; }
   .product-group-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .6rem; }
   .product-chip {
     display: flex; flex-direction: column;
@@ -3759,14 +3764,27 @@ function renderProducts() {
   const orderedCats = CAT_ORDER.filter(c => groups[c]);
   if (groups['__other__']) orderedCats.push('__other__');
 
+  if (!window._pgCollapsed) window._pgCollapsed = {};
+
   list.innerHTML = orderedCats.map(cat => {
     const label = cat === '__other__' ? '🫙 Other' : `${TAG_EMOJI[cat] || ''} ${CAT_LABEL[cat] || cat}`;
-    return `<div class="product-group">
-      <div class="product-group-header">${label}</div>
+    const collapsed = window._pgCollapsed[cat] ? ' collapsed' : '';
+    return `<div class="product-group${collapsed}" data-cat="${cat}">
+      <div class="product-group-header" onclick="window._togglePG('${cat}')">
+        <span>${label} <span style="color:var(--muted); font-weight:400;">(${groups[cat].length})</span></span>
+        <span class="product-group-chevron">▼</span>
+      </div>
       <div class="product-group-grid">${groups[cat].map(productChip).join('')}</div>
     </div>`;
   }).join('');
 }
+
+window._togglePG = cat => {
+  if (!window._pgCollapsed) window._pgCollapsed = {};
+  window._pgCollapsed[cat] = !window._pgCollapsed[cat];
+  const el = document.querySelector(`.product-group[data-cat="${CSS.escape(cat)}"]`);
+  if (el) el.classList.toggle('collapsed', !!window._pgCollapsed[cat]);
+};
 
 window.setPantryCat = cat => {
   window.pantryCatFilter = cat;

@@ -291,25 +291,24 @@
   .product-group-header:hover { color: var(--text); }
   .product-group-chevron { font-size: .7rem; transition: transform .2s; display: inline-block; }
   .product-group.collapsed .product-group-chevron { transform: rotate(-90deg); }
-  .product-group-grid { margin-top: .45rem; }
+  .product-group-grid { margin-top: .45rem; display: flex; flex-direction: column; gap: .35rem; }
   .product-group.collapsed .product-group-grid { display: none; }
-  .product-group-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .6rem; }
   .product-chip {
-    display: flex; flex-direction: column;
+    display: flex; flex-direction: row; flex-wrap: wrap; align-items: center;
     background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
-    padding: .7rem .75rem; cursor: pointer; position: relative;
+    padding: .55rem .75rem; cursor: pointer; position: relative;
     transition: border-color .15s, box-shadow .15s;
   }
   .product-chip:hover, .product-chip.active { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
-  .product-chip .pchip-name { font-weight: 700; font-size: .88rem; margin-bottom: .25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 1.2rem; }
-  .product-chip .pchip-kcal { font-size: 1.05rem; font-weight: 800; color: var(--accent); }
+  .product-chip .pchip-name { order: 1; flex: 1 1 auto; min-width: 0; font-weight: 700; font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 1.4rem; }
+  .product-chip .pchip-kcal { order: 2; flex: 0 0 auto; font-size: .9rem; font-weight: 800; color: var(--accent); margin-left: .5rem; white-space: nowrap; }
   .product-chip .pchip-kcal span { font-size: .68rem; font-weight: 400; color: var(--muted); }
-  .pchip-macro-bar { height: 5px; border-radius: 3px; background: var(--border); display: flex; overflow: hidden; margin: .4rem 0; }
+  .pchip-macro-bar { order: 4; flex: 0 0 100%; height: 4px; border-radius: 3px; background: var(--border); display: flex; overflow: hidden; margin: .3rem 0 .2rem; }
   .pchip-macro-bar-p { background: #52b788; }
   .pchip-macro-bar-c { background: #f4a261; }
   .pchip-macro-bar-f { background: #e76f51; }
-  .pchip-macro-labels { display: flex; gap: .3rem; font-size: .69rem; margin-bottom: .4rem; justify-content: space-between; }
-  .pchip-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: .3rem; }
+  .pchip-macro-labels { order: 5; flex: 0 0 auto; display: flex; gap: .5rem; font-size: .72rem; }
+  .pchip-footer { order: 3; flex: 0 0 auto; margin-left: .4rem; padding-top: 0; margin-top: 0; }
   .pchip-tag { font-size: .65rem; color: var(--muted); display: none; }
   .product-chip .pchip-del {
     position: absolute; top: .35rem; right: .4rem;
@@ -318,15 +317,15 @@
   .product-chip .pchip-del:hover { color: var(--danger); }
   .product-chip .pchip-log {
     background: var(--accent); color: #fff; border: none; border-radius: 7px;
-    font-size: .85rem; font-weight: 700; padding: .3rem .6rem; cursor: pointer; min-height: 32px;
+    font-size: .85rem; font-weight: 700; padding: .3rem .6rem; cursor: pointer; min-height: 44px; white-space: nowrap;
   }
   .product-chip .pchip-log:hover { opacity: .85; }
-  /* Detail popover — spans both columns, JS sets left/right per column */
+  /* Detail popover */
   .product-detail-pop {
     display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 560;
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
     box-shadow: 0 6px 24px rgba(0,0,0,.35); padding: .75rem 1rem;
-    width: calc(200% + .6rem); max-width: min(92vw, 340px); font-size: .8rem;
+    width: min(92vw, 360px); font-size: .8rem;
   }
   .product-chip.active .product-detail-pop { display: block; }
   .nutrient-row { display: flex; justify-content: space-between; font-size: .76rem; padding: .15rem 0; border-top: 1px solid var(--border); }
@@ -602,14 +601,11 @@
     /* Tighter card padding */
     .card { padding: .85rem .9rem; }
     #meal-box, #scanner-box { padding: 1rem; }
-    /* Food tab card tweaks */
-    .product-chip { padding: .55rem .6rem; }
-    .pchip-macro-labels { font-size: .72rem; }
-    .product-chip .pchip-kcal { font-size: .95rem; }
+    /* Food tab pad tweaks */
+    .product-chip { padding: .45rem .6rem; }
     .product-chip .pchip-log { min-height: 44px; padding: .25rem .5rem; }
   }
   @media (max-width: 359px) {
-    .product-group-grid { grid-template-columns: 1fr; }
     .product-detail-pop { width: min(92vw, 340px) !important; }
   }
   /* ---- Mobile bottom navigation ---- */
@@ -3811,11 +3807,8 @@ window.toggleProductCard = (id, e) => {
       const rect = card.getBoundingClientRect();
       const pop = card.querySelector('.product-detail-pop');
       if (pop) {
-        // Left/right: align to whichever column the card is in
-        const isRight = rect.left > window.innerWidth / 2;
-        pop.style.left = isRight ? 'auto' : '0';
-        pop.style.right = isRight ? '0' : 'auto';
-        // Up/down: open upward only if there's enough room above and more than below
+        pop.style.left = '0';
+        pop.style.right = 'auto';
         const spaceBelow = window.innerHeight - rect.bottom;
         const spaceAbove = rect.top;
         if (spaceAbove > 220 && spaceAbove > spaceBelow) {

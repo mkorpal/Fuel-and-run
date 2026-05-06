@@ -300,7 +300,7 @@
   .pchip-macro-bar-p { background: #52b788; }
   .pchip-macro-bar-c { background: #f4a261; }
   .pchip-macro-bar-f { background: #e76f51; }
-  .pchip-macro-labels { display: flex; gap: .4rem; font-size: .69rem; margin-bottom: .4rem; }
+  .pchip-macro-labels { display: flex; gap: .3rem; font-size: .69rem; margin-bottom: .4rem; justify-content: space-between; }
   .pchip-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: .3rem; }
   .pchip-tag { font-size: .65rem; color: var(--muted); }
   .product-chip .pchip-del {
@@ -594,6 +594,15 @@
     /* Tighter card padding */
     .card { padding: .85rem .9rem; }
     #meal-box, #scanner-box { padding: 1rem; }
+    /* Food tab card tweaks */
+    .product-chip { padding: .55rem .6rem; }
+    .pchip-macro-labels { font-size: .72rem; }
+    .product-chip .pchip-kcal { font-size: .95rem; }
+    .product-chip .pchip-log { min-height: 44px; padding: .25rem .5rem; }
+  }
+  @media (max-width: 359px) {
+    .product-list { grid-template-columns: 1fr; }
+    .product-detail-pop { width: min(92vw, 340px) !important; }
   }
   /* ---- Mobile bottom navigation ---- */
   #mobile-bottom-nav {
@@ -3764,9 +3773,20 @@ window.toggleProductCard = (id, e) => {
       const rect = card.getBoundingClientRect();
       const pop = card.querySelector('.product-detail-pop');
       if (pop) {
+        // Left/right: align to whichever column the card is in
         const isRight = rect.left > window.innerWidth / 2;
         pop.style.left = isRight ? 'auto' : '0';
         pop.style.right = isRight ? '0' : 'auto';
+        // Up/down: open upward only if there's enough room above and more than below
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        if (spaceAbove > 220 && spaceAbove > spaceBelow) {
+          pop.style.top = 'auto';
+          pop.style.bottom = 'calc(100% + 6px)';
+        } else {
+          pop.style.top = 'calc(100% + 6px)';
+          pop.style.bottom = 'auto';
+        }
       }
     }
   }

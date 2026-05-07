@@ -220,11 +220,18 @@ def sync_daily(api: Garmin, sb, days_back: int):
         projected_kcal = round(float(s.get('totalKilocalories') or 0))
         resting_hr     = s.get('restingHeartRate') or None
 
-        # Skip the upsert when Garmin returned empty/zero data (e.g. token expired or
-        # day not yet synced to Garmin servers) — avoids overwriting good existing data with zeros.
+        # Skip the upsert only when Garmin returned truly empty data (token expired or
+        # day not yet on Garmin servers at all). A row with only resting_kcal (bmr)
+        # and no steps/active/projected means the activity hadn't uploaded yet — we
+        # still write it so a later re-sync can overwrite with the full values.
         if not steps and not projected_kcal and not resting_kcal and not resting_hr:
             print(f"  [--] {date_str}: Garmin returned no data — skipping upsert")
             continue
+
+        # Warn when active/total kcal are missing but BMR is present — data likely
+        # incomplete (activity not yet uploaded). Will be corrected on next sync.
+        if resting_kcal > 0 and projected_kcal == 0 and active_kcal == 0:
+            print(f"  [!!] {date_str}: only BMR data available ({resting_kcal} kcal) — activity not yet uploaded to Garmin. Re-sync later.")
 
         sb.table(DAILY_TABLE).upsert(
             {

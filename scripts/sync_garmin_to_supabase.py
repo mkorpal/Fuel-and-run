@@ -220,18 +220,27 @@ def sync_daily(api: Garmin, sb, days_back: int):
         projected_kcal = round(float(s.get('totalKilocalories') or 0))
         resting_hr     = s.get('restingHeartRate') or None
 
-        # Skip the upsert only when Garmin returned truly empty data (token expired or
-        # day not yet on Garmin servers at all). A row with only resting_kcal (bmr)
-        # and no steps/active/projected means the activity hadn't uploaded yet — we
-        # still write it so a later re-sync can overwrite with the full values.
+        # Skip when Garmin returned truly empty data (token expired or day not on servers yet).
         if not steps and not projected_kcal and not resting_kcal and not resting_hr:
             print(f"  [--] {date_str}: Garmin returned no data — skipping upsert")
             continue
 
-        # Warn when active/total kcal are missing but BMR is present — data likely
-        # incomplete (activity not yet uploaded). Will be corrected on next sync.
+        # For completed past days, fetch existing Supabase row and skip if new data
+        # is LESS complete than what's already stored. Garmin API can lag by hours
+        # after watch sync and return lower values before it finishes processing.
+        # "Today" (i==0) is always written as it's still accumulating.
+        if i > 0 and projected_kcal > 0:
+            existing = sb.table(DAILY_TABLE).select('projected_kcal,steps').eq('date', date_str).maybe_single().execute()
+            ex = existing.data or {}
+            ex_proj  = ex.get('projected_kcal') or 0
+            ex_steps = ex.get('steps') or 0
+            if ex_proj >= projected_kcal and ex_steps >= steps:
+                print(f"  [==] {date_str}: Supabase already has better data ({ex_proj} kcal, {ex_steps:,} steps) — skipping")
+                continue
+
+        # Warn when active/total kcal are missing — data likely incomplete.
         if resting_kcal > 0 and projected_kcal == 0 and active_kcal == 0:
-            print(f"  [!!] {date_str}: only BMR data available ({resting_kcal} kcal) — activity not yet uploaded to Garmin. Re-sync later.")
+            print(f"  [!!] {date_str}: only BMR data ({resting_kcal} kcal) — activity not yet uploaded to Garmin")
 
         sb.table(DAILY_TABLE).upsert(
             {
@@ -245,7 +254,7 @@ def sync_daily(api: Garmin, sb, days_back: int):
             on_conflict='date',
         ).execute()
 
-        tag = 'OK' if steps or projected_kcal else '--'
+        tag = 'UP' if i > 0 else 'OK'
         print(
             f"  [{tag}] {date_str}: {steps:,} steps | "
             f"{resting_kcal} rest + {active_kcal} active = {projected_kcal} kcal | "

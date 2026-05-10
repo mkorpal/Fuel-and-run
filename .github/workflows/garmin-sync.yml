@@ -42,6 +42,18 @@ jobs:
           key: garmin-token-${{ github.run_id }}
           restore-keys: garmin-token-
 
+      # If no cached token, inject the one stored as a GitHub secret (base64-encoded).
+      # Generated locally via: python scripts/garmin_save_token.py michal
+      # Then stored as GARMIN_TOKEN secret at: Settings → Secrets → Actions
+      - name: Inject Garmin token from secret (if no cache)
+        env:
+          GARMIN_TOKEN_B64: ${{ secrets.GARMIN_TOKEN }}
+        run: |
+          if [ ! -f ~/.garminconnect_token.json ] && [ -n "$GARMIN_TOKEN_B64" ]; then
+            echo "$GARMIN_TOKEN_B64" | base64 -d > ~/.garminconnect_token.json
+            echo "Garmin token restored from secret"
+          fi
+
       - name: Run Garmin sync
         env:
           GARMIN_EMAIL: ${{ secrets.GARMIN_EMAIL }}

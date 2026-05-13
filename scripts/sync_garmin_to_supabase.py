@@ -230,8 +230,10 @@ def sync_daily(api: Garmin, sb, days_back: int):
         # after watch sync and return lower values before it finishes processing.
         # "Today" (i==0) is always written as it's still accumulating.
         if i > 0 and projected_kcal > 0:
-            existing = sb.table(DAILY_TABLE).select('projected_kcal,steps').eq('date', date_str).maybe_single().execute()
-            ex = existing.data or {}
+            # Use a plain .execute() — .maybe_single() returns None (not an APIResponse)
+            # when no row exists in supabase-py 2.x, which crashes the loop.
+            existing = sb.table(DAILY_TABLE).select('projected_kcal,steps').eq('date', date_str).execute()
+            ex = existing.data[0] if existing.data else {}
             ex_proj  = ex.get('projected_kcal') or 0
             ex_steps = ex.get('steps') or 0
             if ex_proj >= projected_kcal and ex_steps >= steps:

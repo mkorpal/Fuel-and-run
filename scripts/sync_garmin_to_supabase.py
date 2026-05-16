@@ -100,28 +100,31 @@ def _get(obj, *keys, default=None):
 def garmin_login() -> Garmin:
     """Login to Garmin Connect.
 
-    Uses login(tokenstore=TOKEN_FILE) which:
-      1. Loads the cached token if it exists (avoids credential login / MFA / 429).
-      2. Proactively refreshes the token if it is expiring soon.
-      3. Falls back to GARMIN_EMAIL + GARMIN_PASSWORD if the token is missing or invalid,
-         then saves the fresh token so the next run can reuse it.
-    MFA accounts must pre-generate a token locally via garmin_save_token.py and store
-    it as a GitHub secret — interactive MFA is not possible in GitHub Actions.
+    Tries login(tokenstore=TOKEN_FILE) to reuse a cached token.  If the token
+    file exists but is expired (garminconnect loads the JSON but the API returns
+    401 on the profile fetch), the stale file is deleted and we retry with
+    credentials alone so the fresh token is saved for the next run.
+    MFA accounts must pre-generate a token locally via garmin_save_token.py.
     """
-    api = Garmin(GARMIN_EMAIL, GARMIN_PASSWORD)
-    try:
-        api.login(tokenstore=str(TOKEN_FILE))
-        print(f"Garmin session ready (profile: {GARMIN_PROFILE}, user: {api.display_name})")
-        return api
-    except GarminConnectTooManyRequestsError:
-        print("WARNING: Garmin rate-limited (429) — skipping this run. Will retry next cron cycle.")
-        sys.exit(0)
-    except GarminConnectAuthenticationError as e:
-        print(f"ERROR: Garmin authentication failed: {e}")
-        if not GARMIN_EMAIL or not GARMIN_PASSWORD:
-            print(f"No credentials provided and token at {TOKEN_FILE} is missing/invalid.")
-            print("For MFA accounts: run scripts/garmin_save_token.py locally and store the result as a GitHub secret.")
-        sys.exit(1)
+    for attempt in range(2):
+        api = Garmin(GARMIN_EMAIL, GARMIN_PASSWORD)
+        try:
+            api.login(tokenstore=str(TOKEN_FILE))
+            print(f"Garmin session ready (profile: {GARMIN_PROFILE}, user: {api.display_name})")
+            return api
+        except GarminConnectTooManyRequestsError:
+            print("WARNING: Garmin rate-limited (429) — skipping this run. Will retry next cron cycle.")
+            sys.exit(0)
+        except GarminConnectAuthenticationError as e:
+            if attempt == 0 and TOKEN_FILE.exists():
+                print(f"Cached token expired or invalid ({e}) — deleting and retrying with credentials...")
+                TOKEN_FILE.unlink(missing_ok=True)
+                continue
+            print(f"ERROR: Garmin authentication failed: {e}")
+            if not GARMIN_EMAIL or not GARMIN_PASSWORD:
+                print(f"No credentials set and token at {TOKEN_FILE} is missing/invalid.")
+                print("For MFA accounts: run scripts/garmin_save_token.py locally and update the GitHub secret.")
+            sys.exit(1)
 
 
 # ── Garmin API fetchers ───────────────────────────────────────────────────────

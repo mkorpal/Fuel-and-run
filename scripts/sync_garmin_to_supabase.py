@@ -35,7 +35,11 @@ try:
 except ImportError:
     pass
 
-from garminconnect import Garmin, GarminConnectAuthenticationError
+from garminconnect import (
+    Garmin,
+    GarminConnectAuthenticationError,
+    GarminConnectTooManyRequestsError,
+)
 from supabase import create_client
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -96,66 +100,43 @@ def _get(obj, *keys, default=None):
 def garmin_login() -> Garmin:
     """Login to Garmin Connect.
 
-    Priority:
-    1. If a saved token file exists, load it (no network login needed — avoids 429/MFA).
-    2. Otherwise fall back to credential login (works for accounts without MFA).
-       Accounts with MFA must pre-generate a token locally and store it as a GitHub secret.
+    Uses login(tokenstore=TOKEN_FILE) which:
+      1. Loads the cached token if it exists (avoids credential login / MFA / 429).
+      2. Proactively refreshes the token if it is expiring soon.
+      3. Falls back to GARMIN_EMAIL + GARMIN_PASSWORD if the token is missing or invalid,
+         then saves the fresh token so the next run can reuse it.
+    MFA accounts must pre-generate a token locally via garmin_save_token.py and store
+    it as a GitHub secret — interactive MFA is not possible in GitHub Actions.
     """
-    if TOKEN_FILE.exists():
-        try:
-            api = Garmin()
-            api.client.load(str(TOKEN_FILE))
-            print(f"Reusing saved Garmin session from {TOKEN_FILE}")
-            # get_stats() requires display_name to be set; loading from token skips the
-            # normal login flow that populates it. Fetch the social profile to fill it in.
-            try:
-                social = api.client.connectapi('/userprofile-service/socialProfile')
-                api.display_name = social.get('displayName') or social.get('userName') or ''
-            except Exception as e:
-                print(f"  WARNING: Could not fetch display_name: {e}")
-            try:
-                api.client.dump(str(TOKEN_FILE))
-            except Exception:
-                pass
-            return api
-        except Exception:
-            print("Saved token invalid or expired, falling back to credential login...")
-
-    # Credential fallback (no MFA accounts only)
-    if not GARMIN_EMAIL or not GARMIN_PASSWORD:
-        print(f"ERROR: No token file at {TOKEN_FILE} and no credentials provided.")
-        print("For MFA accounts: run scripts/garmin_save_token.py locally and store the result as a GitHub secret.")
-        sys.exit(1)
-
-    print(f"Logging in to Garmin Connect as {GARMIN_EMAIL} ...")
     api = Garmin(GARMIN_EMAIL, GARMIN_PASSWORD)
     try:
-        api.login()
+        api.login(tokenstore=str(TOKEN_FILE))
+        print(f"Garmin session ready (profile: {GARMIN_PROFILE}, user: {api.display_name})")
+        return api
+    except GarminConnectTooManyRequestsError:
+        print("WARNING: Garmin rate-limited (429) — skipping this run. Will retry next cron cycle.")
+        sys.exit(0)
     except GarminConnectAuthenticationError as e:
-        print(f"Login failed: {e}")
+        print(f"ERROR: Garmin authentication failed: {e}")
+        if not GARMIN_EMAIL or not GARMIN_PASSWORD:
+            print(f"No credentials provided and token at {TOKEN_FILE} is missing/invalid.")
+            print("For MFA accounts: run scripts/garmin_save_token.py locally and store the result as a GitHub secret.")
         sys.exit(1)
-    except Exception as e:
-        msg = str(e)
-        if '429' in msg or 'rate' in msg.lower():
-            print("WARNING: Garmin rate-limited (429) — skipping this run. Will retry next cron cycle.")
-            sys.exit(0)
-        raise
-
-    try:
-        api.client.dump(str(TOKEN_FILE))
-    except Exception:
-        pass
-
-    print("Logged in to Garmin Connect")
-    return api
 
 
 # ── Garmin API fetchers ───────────────────────────────────────────────────────
+
+def _is_auth_error(e: Exception) -> bool:
+    return isinstance(e, (GarminConnectAuthenticationError, GarminConnectTooManyRequestsError)) \
+        or '401' in str(e)
+
 
 def fetch_daily_summary(api: Garmin, date_str: str) -> dict:
     try:
         return api.get_stats(date_str) or {}
     except Exception as e:
+        if _is_auth_error(e):
+            raise
         print(f"  WARNING: Daily summary failed for {date_str}: {e}")
         return {}
 
@@ -164,6 +145,8 @@ def fetch_activities(api: Garmin, start_date: str, end_date: str) -> list:
     try:
         return api.get_activities_by_date(start_date, end_date) or []
     except Exception as e:
+        if _is_auth_error(e):
+            raise
         print(f"  WARNING: Activity list failed: {e}")
         return []
 
@@ -175,6 +158,8 @@ def fetch_laps(api: Garmin, activity_id: int) -> list:
             return result.get('lapDTOs') or result.get('laps') or []
         return result or []
     except Exception as e:
+        if _is_auth_error(e):
+            raise
         print(f"  WARNING: Laps failed for activity {activity_id}: {e}")
         return []
 
@@ -339,8 +324,18 @@ def main():
     sb  = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     print(f"Profile: {GARMIN_PROFILE} → tables: {DAILY_TABLE}, {ACTIVITIES_TABLE}")
 
-    sync_daily(api, sb, days_back)
-    sync_activities(api, sb, days_back)
+    try:
+        sync_daily(api, sb, days_back)
+        sync_activities(api, sb, days_back)
+    except GarminConnectTooManyRequestsError:
+        print("\nFATAL: Garmin rate-limited (429) during sync — skipping this run.")
+        sys.exit(0)
+    except Exception as e:
+        if _is_auth_error(e):
+            print(f"\nFATAL: Garmin session expired mid-sync ({e})")
+            print("Re-run scripts/garmin_save_token.py and update the GARMIN_TOKEN GitHub secret.")
+            sys.exit(1)
+        raise
 
     print("\nSync complete!")
 

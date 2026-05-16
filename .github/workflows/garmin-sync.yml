@@ -11,7 +11,7 @@ on:
 
   # Runs every 2 hours to keep today's active_kcal current
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '0 */2 * * *'
 
 jobs:
   sync:

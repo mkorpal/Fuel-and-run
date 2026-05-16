@@ -46,13 +46,12 @@ print("\nLogging in to Garmin Connect...")
 api = Garmin(email, password, prompt_mfa=get_mfa if profile == 'marysia' else None)
 
 try:
-    api.login()
+    # tokenstore= saves the token automatically after login
+    api.login(tokenstore=str(token_file))
 except Exception as e:
     print(f"\n❌ Login failed: {e}")
     sys.exit(1)
 
-# Save token as JSON file locally
-api.client.dump(str(token_file))
 print(f"\n✅ Token saved locally to {token_file}")
 
 # Encode as base64 for GitHub secret

@@ -213,20 +213,35 @@ def sync_daily(api: Garmin, sb, days_back: int):
             print(f"  [--] {date_str}: Garmin returned no data — skipping upsert")
             continue
 
-        # For completed past days, fetch existing Supabase row and skip if new data
-        # is LESS complete than what's already stored. Garmin API can lag by hours
-        # after watch sync and return lower values before it finishes processing.
-        # "Today" (i==0) is always written as it's still accumulating.
-        if i > 0 and projected_kcal > 0:
+        # For completed past days, take the best available value for each field
+        # independently. Garmin can lag by hours and return lower calories while
+        # steps are already updated, or vice versa. Using max() per field means
+        # we never downgrade any metric for a past day regardless of which
+        # fields Garmin happens to have finished processing.
+        # "Today" (i==0) is always written as-is since it's still accumulating.
+        if i > 0:
             # Use a plain .execute() — .maybe_single() returns None (not an APIResponse)
             # when no row exists in supabase-py 2.x, which crashes the loop.
-            existing = sb.table(DAILY_TABLE).select('projected_kcal,steps').eq('date', date_str).execute()
+            existing = sb.table(DAILY_TABLE).select(
+                'projected_kcal,active_kcal,resting_kcal,steps'
+            ).eq('date', date_str).execute()
             ex = existing.data[0] if existing.data else {}
-            ex_proj  = ex.get('projected_kcal') or 0
-            ex_steps = ex.get('steps') or 0
-            if ex_proj >= projected_kcal and ex_steps >= steps:
-                print(f"  [==] {date_str}: Supabase already has better data ({ex_proj} kcal, {ex_steps:,} steps) — skipping")
-                continue
+            ex_proj    = ex.get('projected_kcal') or 0
+            ex_active  = ex.get('active_kcal') or 0
+            ex_resting = ex.get('resting_kcal') or 0
+            ex_steps   = ex.get('steps') or 0
+
+            if ex_proj > 0:
+                # Never downgrade a past day's calorie or step values.
+                projected_kcal = max(projected_kcal, ex_proj)
+                active_kcal    = max(active_kcal, ex_active)
+                resting_kcal   = max(resting_kcal, ex_resting)
+                steps          = max(steps, ex_steps)
+
+                if (projected_kcal == ex_proj and active_kcal == ex_active
+                        and resting_kcal == ex_resting and steps == ex_steps):
+                    print(f"  [==] {date_str}: no change ({ex_proj} kcal, {ex_steps:,} steps) — skipping")
+                    continue
 
         # Warn when active/total kcal are missing — data likely incomplete.
         if resting_kcal > 0 and projected_kcal == 0 and active_kcal == 0:
